@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover">
+<title>交通服務水準資料庫</title>
+<meta name="theme-color" content="#1d2733">
+<style>
+/* ── 設計語彙 ───────────────────────────────────────────────
+   主體採用瀝青灰階（道路的材質），資料區維持極高對比、低裝飾，
+   讓數字本身是主角。唯一的色彩重點放在 LOS A~F 分級——那是交通
+   工程既有的語言（HCM 慣例：A 順暢為綠、F 壅塞為紅），不是為了
+   好看而加的裝飾，而是使用者一眼就能讀懂的既有編碼。
+   數字全部使用等寬數字（tabular-nums），欄位才會對齊可比較。 */
+:root{
+  --ink:#12181f; --ink-2:#3c4854; --ink-3:#6b7885;
+  --line:#dde3ea; --line-2:#eef2f6;
+  --bg:#f5f7fa; --surface:#ffffff; --surface-2:#f0f3f7;
+  --accent:#1d5fa8; --accent-soft:#e8f0fa;
+  --danger:#b3261e; --danger-soft:#fdecea;
+  --ok:#1e7a4b;
+  --los-a:#1e7a4b; --los-b:#5a9e28; --los-c:#c9a227;
+  --los-d:#e07b1a; --los-e:#d9541f; --los-f:#b3261e;
+  --radius:8px;
+  --shadow:0 1px 2px rgba(16,24,32,.06),0 4px 14px rgba(16,24,32,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,-apple-system,sans-serif;
+  font-size:14px; line-height:1.55;
+  padding:calc(10px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+  -webkit-text-size-adjust:100%;
+}
+h1{font-size:1.15rem;margin:0;letter-spacing:.02em;font-weight:700}
+.sub{color:var(--ink-3);font-size:.8rem;margin:2px 0 0}
+.num{font-variant-numeric:tabular-nums}
+
+/* 版首 */
+.masthead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:2px solid var(--ink);margin-bottom:14px}
+.masthead .spacer{flex:1}
+.stat{font-size:.78rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.stat b{color:var(--ink);font-size:.95rem}
+
+/* 分頁 */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;background:var(--surface);
+  border-top:1px solid var(--line);box-shadow:0 -4px 14px rgba(16,24,32,.08);
+  padding:0 calc(4px + env(safe-area-inset-right)) env(safe-area-inset-bottom) calc(4px + env(safe-area-inset-left))}
+.tabbar button{flex:1;min-width:0;border:none;background:none;padding:8px 2px;cursor:pointer;
+  color:var(--ink-3);font:inherit;font-size:.68rem;display:flex;flex-direction:column;align-items:center;gap:3px;
+  border-top:2px solid transparent}
+.tabbar button .ic{font-size:1.05rem;line-height:1}
+.tabbar button[aria-selected=true]{color:var(--accent);border-top-color:var(--accent);font-weight:700}
+.panel[hidden]{display:none}
+
+/* 元件 */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.card h2{font-size:.9rem;margin:0 0 10px;display:flex;align-items:center;gap:7px;font-weight:700}
+.card h2 .tag{font-size:.68rem;font-weight:600;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);padding:1px 7px;border-radius:99px}
+.hint{color:var(--ink-3);font-size:.78rem;margin:0 0 10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label{font-size:.72rem;color:var(--ink-2);font-weight:600}
+input,select,button,textarea{font:inherit;font-family:inherit}
+input,select{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);min-width:0;font-size:16px}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+input[type=file]{padding:6px;font-size:.8rem}
+button{padding:7px 13px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);cursor:pointer;font-size:.82rem;font-weight:600}
+button:hover{background:var(--surface-2)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{filter:brightness(1.08)}
+button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* 表格 */
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);max-height:62vh}
+table{border-collapse:collapse;width:100%;font-size:.8rem}
+th,td{padding:6px 9px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line-2)}
+th{background:var(--surface-2);position:sticky;top:0;z-index:1;font-size:.72rem;color:var(--ink-2);font-weight:700;border-bottom:1px solid var(--line)}
+tbody tr:hover{background:var(--accent-soft)}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.empty{padding:26px 14px;text-align:center;color:var(--ink-3);font-size:.85rem}
+
+/* LOS 徽章：交通工程慣用的 A~F 分級色階 */
+.los{display:inline-block;min-width:20px;padding:1px 7px;border-radius:4px;color:#fff;font-weight:700;font-size:.75rem;text-align:center;letter-spacing:.03em}
+.los-A{background:var(--los-a)} .los-B{background:var(--los-b)} .los-C{background:var(--los-c)}
+.los-D{background:var(--los-d)} .los-E{background:var(--los-e)} .los-F{background:var(--los-f)}
+.los-none{background:var(--ink-3)}
+
+/* LOS 分佈條：直接把等級比例畫成一條，比長條圖更省空間也更好比較 */
+.dist{display:flex;height:22px;border-radius:5px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
+.dist span{display:flex;align-items:center;justify-content:center;color:#fff;font-size:.68rem;font-weight:700;min-width:0;overflow:hidden}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:7px;font-size:.72rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;font-style:normal}
+
+.msg{padding:9px 11px;border-radius:6px;font-size:.8rem;margin-bottom:10px;border:1px solid}
+.msg.ok{background:#eaf6ef;border-color:#bfe0cd;color:#14532d}
+.msg.err{background:var(--danger-soft);border-color:#f0c4c0;color:#7f1d1d}
+.msg.info{background:var(--accent-soft);border-color:#c3daf2;color:#14345c}
+.msg[hidden]{display:none}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:.8rem}
+.kv dt{color:var(--ink-3)} .kv dd{margin:0;font-variant-numeric:tabular-nums}
+
+@media(max-width:640px){
+  body{padding-left:10px;padding-right:10px}
+  .card{padding:11px}
+  .field{flex:1 1 132px}
+  .tablewrap{max-height:52vh}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div>
+    <h1>交通服務水準資料庫</h1>
+    <p class="sub">歷季路段服務水準　匯入・計算・查詢</p>
+  </div>
+  <div class="spacer"></div>
+  <div class="stat">歷史資料 <b id="statHist">0</b> 筆　尖峰明細 <b id="statPeak">0</b> 筆</div>
+</div>
+
+<!-- 匯入 -->
+<section class="panel" id="p-import">
+  <div class="card">
+    <h2>匯入現有資料庫 <span class="tag">.xlsm / .xlsx</span></h2>
+    <p class="hint">直接讀取原本 Excel 檔裡的「歷史資料」與「尖峰明細」工作表。標題列固定在第 4 列，資料從第 5 列開始，與原系統相同。</p>
+    <div class="row">
+      <div class="field" style="flex:1">
+        <label for="fileXlsx">選擇檔案</label>
+        <input type="file" id="fileXlsx" accept=".xlsx,.xlsm,.xls">
+      </div>
+      <button class="primary" id="btnImport">讀取並預覽</button>
+    </div>
+    <div class="msg" id="importMsg" hidden></div>
+    <div id="importPreview"></div>
+  </div>
+
+  <div class="card">
+    <h2>手動新增一筆歷史資料</h2>
+    <p class="hint">服務水準會依「系統設定」的速率門檻自動判定，不需自行填寫。</p>
+    <div class="row">
+      <div class="field"><label for="mProj">計畫編號</label><input id="mProj" placeholder="P001"></div>
+      <div class="field" style="flex:2"><label for="mProjName">計畫名稱</label><input id="mProjName" placeholder="○○路口改善"></div>
+      <div class="field"><label for="mYear">民國年</label><input id="mYear" type="number" inputmode="numeric" placeholder="114"></div>
+      <div class="field"><label for="mQ">季度</label><select id="mQ"><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:2"><label for="mRoad">路段名稱</label><input id="mRoad" placeholder="中正路(一段)"></div>
+      <div class="field"><label for="mDay">日別</label><select id="mDay"><option>平日</option><option>假日</option></select></div>
+      <div class="field"><label for="mTravel">平均總旅行速率</label><input id="mTravel" type="number" step="0.01" inputmode="decimal"></div>
+      <div class="field"><label for="mRun">平均總行駛速率</label><input id="mRun" type="number" step="0.01" inputmode="decimal"></div>
+      <div class="field"><label for="mDelay">總延滯(秒)</label><input id="mDelay" type="number" step="0.01" inputmode="decimal"></div>
+      <button class="primary" id="btnAddRec">新增</button>
+    </div>
+    <div class="msg" id="addMsg" hidden></div>
+  </div>
+</section>
+
+<!-- 歷史資料 -->
+<section class="panel" id="p-hist" hidden>
+  <div class="card">
+    <h2>歷史資料</h2>
+    <div class="row">
+      <div class="field"><label for="fProj">計畫</label><select id="fProj"></select></div>
+      <div class="field"><label for="fYear">民國年</label><select id="fYear"></select></div>
+      <div class="field"><label for="fRoad">路段</label><select id="fRoad"></select></div>
+      <div class="field"><label for="fDay">日別</label><select id="fDay"><option value="">全部</option><option>平日</option><option>假日</option></select></div>
+      <div class="field"><label for="fLos">服務水準</label><select id="fLos"><option value="">全部</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select></div>
+      <button id="btnClearFilter">清除篩選</button>
+      <button id="btnExportHist">匯出 Excel</button>
+      <button class="danger" id="btnDelFiltered">刪除篩選結果</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>服務水準分佈 <span class="tag" id="distCount">0 筆</span></h2>
+    <div class="dist" id="histDist"></div>
+    <div class="legend" id="histLegend"></div>
+  </div>
+  <div class="tablewrap"><table id="histTable"></table></div>
+</section>
+
+<!-- 區間查詢 -->
+<section class="panel" id="p-query" hidden>
+  <div class="card">
+    <h2>區間查詢</h2>
+    <p class="hint">指定起訖期間（民國年＋季），比較同一路段在這段期間的服務水準變化。</p>
+    <div class="row">
+      <div class="field"><label for="qProj">計畫</label><select id="qProj"></select></div>
+      <div class="field"><label for="qY1">起始年</label><input id="qY1" type="number" inputmode="numeric" placeholder="113"></div>
+      <div class="field"><label for="qQ1">起始季</label><select id="qQ1"><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
+      <div class="field"><label for="qY2">結束年</label><input id="qY2" type="number" inputmode="numeric" placeholder="114"></div>
+      <div class="field"><label for="qQ2">結束季</label><select id="qQ2"><option>1</option><option>2</option><option>3</option><option value="4" selected>4</option></select></div>
+      <div class="field"><label for="qDay">日別</label><select id="qDay"><option value="">全部</option><option>平日</option><option>假日</option></select></div>
+      <button class="primary" id="btnRunQuery">查詢</button>
+      <button id="btnExportQuery">匯出結果</button>
+    </div>
+    <div class="msg" id="queryMsg" hidden></div>
+  </div>
+  <div class="tablewrap"><table id="queryTable"></table></div>
+</section>
+
+<!-- 尖峰明細 -->
+<section class="panel" id="p-peak" hidden>
+  <div class="card">
+    <h2>尖峰方向明細</h2>
+    <p class="hint">尖峰 LOS 依「速率速限比」判定：≥0.8 為 A，≥0.6 為 B，≥0.5 為 C，≥0.4 為 D，≥0.2 為 E，其餘為 F。速限來自「路段速限」設定。</p>
+    <div class="row">
+      <div class="field"><label for="pkRoad">路段</label><select id="pkRoad"></select></div>
+      <div class="field"><label for="pkDir">方向</label><select id="pkDir"></select></div>
+      <div class="field"><label for="pkPeak">尖峰時段</label><select id="pkPeak"></select></div>
+      <button id="btnRecalcPeak">依速限重算 LOS</button>
+      <button id="btnExportPeak">匯出 Excel</button>
+    </div>
+    <div class="msg" id="peakMsg" hidden></div>
+  </div>
+  <div class="tablewrap"><table id="peakTable"></table></div>
+</section>
+
+<!-- 路段速限 -->
+<section class="panel" id="p-speed" hidden>
+  <div class="card">
+    <h2>路段公告速限</h2>
+    <p class="hint">系統預設 50 km/h。請查證各路段實際公告速限後修正——尖峰 LOS 直接由此換算，填錯會讓整段分析失準。</p>
+    <div class="row">
+      <div class="field" style="flex:2"><label for="slRoad">路段名稱</label><input id="slRoad"></div>
+      <div class="field"><label for="slDir">方向</label><input id="slDir" placeholder="方向1"></div>
+      <div class="field"><label for="slVal">公告速限(km/h)</label><input id="slVal" type="number" step="1" inputmode="numeric"></div>
+      <button class="primary" id="btnAddSpeed">新增／更新</button>
+      <button id="btnSeedSpeed">由現有資料補齊路段</button>
+    </div>
+    <div class="msg" id="speedMsg" hidden></div>
+  </div>
+  <div class="tablewrap"><table id="speedTable"></table></div>
+</section>
+
+<!-- 系統設定 -->
+<section class="panel" id="p-settings" hidden>
+  <div class="card">
+    <h2>服務水準判定門檻</h2>
+    <p class="hint">一般路段 LOS 依平均總旅行速率判定：速率大於等於該門檻即屬該等級，皆未達則為 F。與原系統「系統設定」工作表 B9~B13 相同。</p>
+    <div class="row">
+      <div class="field"><label for="sA">A 最低速率</label><input id="sA" type="number" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label for="sB">B 最低速率</label><input id="sB" type="number" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label for="sC">C 最低速率</label><input id="sC" type="number" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label for="sD">D 最低速率</label><input id="sD" type="number" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label for="sE">E 最低速率</label><input id="sE" type="number" step="0.1" inputmode="decimal"></div>
+      <button class="primary" id="btnSaveSettings">儲存並重算</button>
+    </div>
+    <div class="msg" id="setMsg" hidden></div>
+  </div>
+  <div class="card">
+    <h2>資料管理</h2>
+    <dl class="kv">
+      <dt>歷史資料</dt><dd id="dsHist">0 筆</dd>
+      <dt>尖峰明細</dt><dd id="dsPeak">0 筆</dd>
+      <dt>路段速限</dt><dd id="dsSpeed">0 筆</dd>
+      <dt>本機儲存用量</dt><dd id="dsSize">—</dd>
+    </dl>
+    <div class="row" style="margin-top:11px">
+      <button id="btnBackup">匯出完整備份 (JSON)</button>
+      <label class="field" style="flex:1">
+        <span style="font-size:.72rem;color:var(--ink-2);font-weight:600">還原備份</span>
+        <input type="file" id="fileBackup" accept=".json">
+      </label>
+      <button class="danger" id="btnWipe">清空所有資料</button>
+    </div>
+    <div class="msg" id="sysMsg" hidden></div>
+  </div>
+</section>
+
+<nav class="tabbar" id="tabbar" role="tablist">
+  <button role="tab" data-tab="import" aria-selected="true"><span class="ic">📥</span>匯入</button>
+  <button role="tab" data-tab="hist" aria-selected="false"><span class="ic">📚</span>歷史資料</button>
+  <button role="tab" data-tab="query" aria-selected="false"><span class="ic">🔍</span>區間查詢</button>
+  <button role="tab" data-tab="peak" aria-selected="false"><span class="ic">⏱</span>尖峰明細</button>
+  <button role="tab" data-tab="speed" aria-selected="false"><span class="ic">🚧</span>路段速限</button>
+  <button role="tab" data-tab="settings" aria-selected="false"><span class="ic">⚙️</span>設定</button>
+</nav>
+
+<script>
+'use strict';
+const APP_VERSION='2026.08.10-p1';
+
+/* ══ 儲存層 ══════════════════════════════════════════════════
+   沿用與原 Excel 相同的欄位語意，讓匯入／匯出能雙向對得上。   */
+const KEY='tlmWebData';
+const DEFAULT_SETTINGS={losA:50,losB:40,losC:30,losD:25,losE:20};
+
+function numOrNull(v){
+  // 0 是合法數值，不能用 || 之類的寫法當作「沒填」處理，
+  // 否則速率 0（完全壅塞）會被誤判成空值。
+  if(v===null||v===undefined||v==='')return null;
+  const n=Number(v);
+  return Number.isFinite(n)?n:null;
+}
+const S=v=>String(v??'').trim();
+
+let DB={history:[],peak:[],speed:[],settings:{...DEFAULT_SETTINGS}};
+
+function load(){
+  try{
+    const raw=localStorage.getItem(KEY);
+    if(!raw)return;
+    const d=JSON.parse(raw);
+    DB.history=Array.isArray(d.history)?d.history.map(sanitizeHist):[];
+    DB.peak=Array.isArray(d.peak)?d.peak.map(sanitizePeak):[];
+    DB.speed=Array.isArray(d.speed)?d.speed.map(sanitizeSpeed):[];
+    DB.settings={...DEFAULT_SETTINGS,...(d.settings&&typeof d.settings==='object'?d.settings:{})};
+    ['losA','losB','losC','losD','losE'].forEach(k=>{
+      const n=numOrNull(DB.settings[k]);
+      DB.settings[k]=n===null?DEFAULT_SETTINGS[k]:n;
+    });
+  }catch(e){ console.error('讀取本機資料失敗',e); }
+}
+let saveTimer=null;
+function save(){
+  if(saveTimer)clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    saveTimer=null;
+    try{ localStorage.setItem(KEY,JSON.stringify(DB)); }
+    catch(e){ alert('儲存失敗：本機空間可能已滿。請先匯出備份再清理資料。'); }
+  },250);
+}
+function sanitizeHist(r){return{
+  id:S(r.id)||uid(), projectId:S(r.projectId), projectName:S(r.projectName),
+  year:numOrNull(r.year), quarter:numOrNull(r.quarter), period:S(r.period),
+  road:S(r.road), dayType:S(r.dayType)||'平日',
+  travel:numOrNull(r.travel), run:numOrNull(r.run), delay:numOrNull(r.delay),
+  los:S(r.los), source:S(r.source), batch:S(r.batch), importedAt:S(r.importedAt), note:S(r.note)
+}}
+function sanitizePeak(r){return{
+  id:S(r.id)||uid(), projectId:S(r.projectId), projectName:S(r.projectName),
+  year:numOrNull(r.year), quarter:numOrNull(r.quarter), period:S(r.period),
+  road:S(r.road), dayType:S(r.dayType)||'平日', peak:S(r.peak), dir:S(r.dir),
+  travel:numOrNull(r.travel), run:numOrNull(r.run),
+  limit:numOrNull(r.limit), ratio:numOrNull(r.ratio), los:S(r.los),
+  source:S(r.source), batch:S(r.batch), importedAt:S(r.importedAt)
+}}
+function sanitizeSpeed(r){return{
+  road:S(r.road), dir:S(r.dir)||'方向1',
+  limit:(n=>n===null||n<=0?50:n)(numOrNull(r.limit)),
+  src:S(r.src)||'預設值，待人工查證', updatedAt:S(r.updatedAt)
+}}
+const uid=()=>'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const nowStamp=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`};
+
+/* ══ LOS 判定 ═══════════════════════════════════════════════ */
+function losFromSpeed(speed){
+  const v=numOrNull(speed);
+  if(v===null)return '';
+  const s=DB.settings;
+  if(v>=s.losA)return 'A';
+  if(v>=s.losB)return 'B';
+  if(v>=s.losC)return 'C';
+  if(v>=s.losD)return 'D';
+  if(v>=s.losE)return 'E';
+  return 'F';
+}
+function losFromRatio(ratio){
+  const v=numOrNull(ratio);
+  if(v===null)return '';
+  if(v>=0.8)return 'A';
+  if(v>=0.6)return 'B';
+  if(v>=0.5)return 'C';
+  if(v>=0.4)return 'D';
+  if(v>=0.2)return 'E';
+  return 'F';
+}
+const periodCode=(y,q)=>(y===null||q===null)?'':`${y}Q${q}`;
+const periodNo=(y,q)=>(y===null||q===null)?null:y*4+q;
+function speedLimitFor(road,dir){
+  const hit=DB.speed.find(s=>s.road===road&&s.dir===dir);
+  return hit?hit.limit:50;
+}
+
+/* ══ 小工具 ═════════════════════════════════════════════════ */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const losCell=l=>l?`<span class="los los-${esc(l)}">${esc(l)}</span>`:'<span class="los los-none">—</span>';
+const fmt=(v,d=1)=>v===null||v===undefined?'':Number(v).toFixed(d);
+function msg(el,text,kind){
+  const n=typeof el==='string'?$(el):el;
+  if(!n)return;
+  if(!text){n.hidden=true;return}
+  n.className='msg '+(kind||'info'); n.textContent=text; n.hidden=false;
+}
+function fillSelect(sel,values,allLabel){
+  const cur=sel.value;
+  sel.innerHTML=`<option value="">${allLabel}</option>`+
+    values.map(v=>`<option>${esc(v)}</option>`).join('');
+  if(values.includes(cur))sel.value=cur;
+}
+const uniq=a=>[...new Set(a.filter(v=>v!==''&&v!==null&&v!==undefined))];
+
+/* ══ XLSX 函式庫（延遲載入） ═════════════════════════════════ */
+let xlsxPromise=null;
+function ensureXLSX(){
+  if(window.XLSX)return Promise.resolve(true);
+  if(xlsxPromise)return xlsxPromise;
+  xlsxPromise=new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    // 先試同目錄的本地檔；沒有的話再退回 CDN。放本地的好處是離線也能用，
+    // 做法跟前一個專案相同：把 xlsx.full.min.js 放在本檔旁邊即可。
+    s.src='./xlsx.full.min.js';
+    let done=false;
+    const timer=setTimeout(()=>{ if(!done){done=true;xlsxPromise=null;reject(new Error('逾時'))} },20000);
+    const fallback=()=>{
+      const c=document.createElement('script');
+      c.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      c.onload=()=>{ if(done)return; done=true; clearTimeout(timer);
+        window.XLSX?resolve(true):(xlsxPromise=null,reject(new Error('載入後找不到 XLSX'))) };
+      c.onerror=()=>{ if(done)return; done=true; clearTimeout(timer); xlsxPromise=null; reject(new Error('載入失敗')) };
+      document.head.appendChild(c);
+    };
+    s.onload=()=>{ if(done)return;
+      if(window.XLSX){done=true;clearTimeout(timer);resolve(true)} else fallback() };
+    s.onerror=fallback;
+    document.head.appendChild(s);
+  });
+  return xlsxPromise;
+}
+
+/* ══ 匯入 ═══════════════════════════════════════════════════
+   直接對應原系統的工作表格式：標題在第 4 列、資料自第 5 列起。 */
+const H_COLS={'紀錄編號':'id','計畫編號':'projectId','計畫名稱':'projectName','民國年':'year','季度':'quarter',
+  '期間代碼':'period','路段名稱':'road','日別':'dayType','平均總旅行速率(km/h)':'travel',
+  '平均總行駛速率(km/h)':'run','總延滯(秒)':'delay','服務水準':'los','來源檔案':'source',
+  '匯入批次':'batch','匯入時間':'importedAt','備註':'note'};
+const P_COLS={'明細編號':'id','計畫編號':'projectId','計畫名稱':'projectName','民國年':'year','季度':'quarter',
+  '期間代碼':'period','路段名稱':'road','日別':'dayType','尖峰時段':'peak','方向':'dir',
+  '平均總旅行速率(km/h)':'travel','平均總行駛速率(km/h)':'run','公告速限(km/h)':'limit',
+  '速率速限比':'ratio','LOS':'los','來源檔案':'source','匯入批次':'batch','匯入時間':'importedAt'};
+
+function sheetToObjects(ws,colMap){
+  const grid=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
+  if(grid.length<5)return [];
+  const header=(grid[3]||[]).map(h=>S(h));
+  const idx={};
+  header.forEach((h,i)=>{ if(colMap[h])idx[colMap[h]]=i; });
+  if(idx.road===undefined)return [];
+  const out=[];
+  for(let r=4;r<grid.length;r++){
+    const row=grid[r]||[];
+    if(!row.some(v=>v!==null&&v!==undefined&&S(v)!==''))continue;
+    const o={};
+    Object.keys(idx).forEach(k=>{ o[k]=row[idx[k]]; });
+    if(!S(o.road))continue;
+    out.push(o);
+  }
+  return out;
+}
+
+let pendingImport=null;
+$('#btnImport').addEventListener('click',async()=>{
+  const f=$('#fileXlsx').files[0];
+  if(!f){ msg('#importMsg','請先選擇檔案。','err'); return }
+  msg('#importMsg','讀取中…','info');
+  $('#importPreview').innerHTML='';
+  try{
+    await ensureXLSX();
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const batch='B'+Date.now().toString(36);
+    let hist=[],peak=[];
+    if(wb.Sheets['歷史資料'])
+      hist=sheetToObjects(wb.Sheets['歷史資料'],H_COLS).map(o=>{
+        const rec=sanitizeHist({...o,source:S(o.source)||f.name,batch,importedAt:nowStamp()});
+        rec.id=uid();
+        rec.period=rec.period||periodCode(rec.year,rec.quarter);
+        rec.los=losFromSpeed(rec.travel);   // 一律以目前門檻重算，避免沿用舊設定
+        return rec;
+      });
+    if(wb.Sheets['尖峰明細'])
+      peak=sheetToObjects(wb.Sheets['尖峰明細'],P_COLS).map(o=>{
+        const rec=sanitizePeak({...o,source:S(o.source)||f.name,batch,importedAt:nowStamp()});
+        rec.id=uid();
+        rec.period=rec.period||periodCode(rec.year,rec.quarter);
+        if(rec.limit===null||rec.limit<=0)rec.limit=speedLimitFor(rec.road,rec.dir);
+        if(rec.ratio===null&&rec.travel!==null&&rec.limit>0)rec.ratio=rec.travel/rec.limit;
+        rec.los=losFromRatio(rec.ratio);
+        return rec;
+      });
+    if(!hist.length&&!peak.length){
+      msg('#importMsg','這個檔案裡找不到可讀的「歷史資料」或「尖峰明細」資料列。請確認工作表名稱與標題列（第 4 列）沒有被更動。','err');
+      return;
+    }
+    const dupH=countDuplicates(hist,DB.history,histKey);
+    pendingImport={hist,peak};
+    msg('#importMsg',`已讀取：歷史資料 ${hist.length} 筆、尖峰明細 ${peak.length} 筆。`,'ok');
+    $('#importPreview').innerHTML=`
+      <div class="msg info" style="margin-top:4px">
+        ${dupH?`其中 <b>${dupH}</b> 筆與現有資料重複（同計畫／年季／路段／日別）。`:'沒有與現有資料重複的紀錄。'}
+      </div>
+      <div class="row">
+        <button class="primary" id="btnCommitSkip">匯入，跳過重複</button>
+        <button id="btnCommitAll">全部匯入（保留重複）</button>
+        <button id="btnCommitCancel">取消</button>
+      </div>`;
+    $('#btnCommitSkip').onclick=()=>commitImport(true);
+    $('#btnCommitAll').onclick=()=>commitImport(false);
+    $('#btnCommitCancel').onclick=()=>{pendingImport=null;$('#importPreview').innerHTML='';msg('#importMsg','已取消匯入。','info')};
+  }catch(e){
+    console.error(e);
+    msg('#importMsg','讀取失敗：'+e.message+'。若是第一次使用且目前離線，請將 xlsx.full.min.js 放在本檔同一資料夾。','err');
+  }
+});
+const histKey=r=>[r.projectId,r.year,r.quarter,r.road,r.dayType].join('|');
+const peakKey=r=>[r.projectId,r.year,r.quarter,r.road,r.dayType,r.peak,r.dir].join('|');
+function countDuplicates(incoming,existing,keyFn){
+  const set=new Set(existing.map(keyFn));
+  return incoming.filter(r=>set.has(keyFn(r))).length;
+}
+function commitImport(skipDup){
+  if(!pendingImport)return;
+  const {hist,peak}=pendingImport;
+  let addedH=hist,addedP=peak;
+  if(skipDup){
+    const hs=new Set(DB.history.map(histKey));
+    addedH=hist.filter(r=>!hs.has(histKey(r)));
+    const ps=new Set(DB.peak.map(peakKey));
+    addedP=peak.filter(r=>!ps.has(peakKey(r)));
+  }
+  DB.history.push(...addedH);
+  DB.peak.push(...addedP);
+  seedSpeedFromData(false);
+  pendingImport=null;
+  save(); renderAll();
+  $('#importPreview').innerHTML='';
+  msg('#importMsg',`匯入完成：歷史資料 +${addedH.length} 筆、尖峰明細 +${addedP.length} 筆。`,'ok');
+}
+
+/* 手動新增 */
+$('#btnAddRec').addEventListener('click',()=>{
+  const road=S($('#mRoad').value);
+  if(!road){ msg('#addMsg','請填寫路段名稱。','err'); return }
+  const year=numOrNull($('#mYear').value);
+  const quarter=numOrNull($('#mQ').value);
+  const rec=sanitizeHist({
+    id:uid(), projectId:$('#mProj').value, projectName:$('#mProjName').value,
+    year, quarter, period:periodCode(year,quarter), road, dayType:$('#mDay').value,
+    travel:$('#mTravel').value, run:$('#mRun').value, delay:$('#mDelay').value,
+    source:'手動輸入', batch:'M'+Date.now().toString(36), importedAt:nowStamp()
+  });
+  rec.los=losFromSpeed(rec.travel);
+  DB.history.push(rec);
+  seedSpeedFromData(false);
+  save(); renderAll();
+  ['#mRoad','#mTravel','#mRun','#mDelay'].forEach(s=>$(s).value='');
+  msg('#addMsg',`已新增：${road}　服務水準 ${rec.los||'—'}`,'ok');
+});
+
+/* ══ 歷史資料 ═══════════════════════════════════════════════ */
+function filteredHistory(){
+  const p=$('#fProj').value,y=$('#fYear').value,r=$('#fRoad').value,d=$('#fDay').value,l=$('#fLos').value;
+  return DB.history.filter(h=>
+    (!p||h.projectId===p)&&(!y||String(h.year)===y)&&(!r||h.road===r)&&
+    (!d||h.dayType===d)&&(!l||h.los===l));
+}
+function renderHist(){
+  fillSelect($('#fProj'),uniq(DB.history.map(h=>h.projectId)),'全部計畫');
+  fillSelect($('#fYear'),uniq(DB.history.map(h=>h.year)).sort((a,b)=>a-b).map(String),'全部年度');
+  fillSelect($('#fRoad'),uniq(DB.history.map(h=>h.road)).sort(),'全部路段');
+  const rows=filteredHistory();
+  $('#distCount').textContent=rows.length+' 筆';
+  renderDist(rows);
+  $('#histTable').innerHTML=rows.length?`
+    <thead><tr><th>計畫</th><th>年/季</th><th>路段</th><th>日別</th>
+      <th>旅行速率</th><th>行駛速率</th><th>總延滯</th><th>LOS</th><th>來源</th><th></th></tr></thead>
+    <tbody>${rows.map(h=>`<tr>
+      <td>${esc(h.projectId||'—')}</td><td class="num">${esc(h.period||'')}</td>
+      <td>${esc(h.road)}</td><td>${esc(h.dayType)}</td>
+      <td class="n">${fmt(h.travel,2)}</td><td class="n">${fmt(h.run,2)}</td><td class="n">${fmt(h.delay,1)}</td>
+      <td>${losCell(h.los)}</td><td>${esc(h.source||'')}</td>
+      <td><button data-del="${esc(h.id)}" title="刪除這筆">✕</button></td></tr>`).join('')}</tbody>`
+    :'<tbody><tr><td class="empty">沒有符合條件的資料。先到「匯入」分頁讀取 Excel，或手動新增一筆。</td></tr></tbody>';
+  $('#histTable').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+    const id=b.dataset.del, rec=DB.history.find(x=>x.id===id);
+    if(!rec)return;
+    if(!confirm(`刪除「${rec.road}　${rec.period}　${rec.dayType}」這筆紀錄？`))return;
+    DB.history=DB.history.filter(x=>x.id!==id); save(); renderAll();
+  });
+}
+const LOS_ORDER=['A','B','C','D','E','F'];
+function renderDist(rows){
+  const total=rows.length;
+  const counts=LOS_ORDER.map(l=>rows.filter(r=>r.los===l).length);
+  if(!total){ $('#histDist').innerHTML=''; $('#histLegend').innerHTML=''; return }
+  $('#histDist').innerHTML=LOS_ORDER.map((l,i)=>{
+    const pct=counts[i]/total*100;
+    return pct>0?`<span class="los-${l}" style="width:${pct}%" title="${l}：${counts[i]} 筆">${pct>=9?l:''}</span>`:'';
+  }).join('');
+  $('#histLegend').innerHTML=LOS_ORDER.map((l,i)=>counts[i]
+    ?`<span><i class="los-${l}" style="background:var(--los-${l.toLowerCase()})"></i>${l}　${counts[i]} 筆（${(counts[i]/total*100).toFixed(1)}%）</span>`:'').join('');
+}
+['#fProj','#fYear','#fRoad','#fDay','#fLos'].forEach(s=>$(s).addEventListener('change',renderHist));
+$('#btnClearFilter').onclick=()=>{['#fProj','#fYear','#fRoad','#fDay','#fLos'].forEach(s=>$(s).value='');renderHist()};
+$('#btnDelFiltered').onclick=()=>{
+  const rows=filteredHistory();
+  if(!rows.length){ alert('目前沒有符合篩選條件的資料。'); return }
+  if(!confirm(`刪除目前篩選出的 ${rows.length} 筆歷史資料？此動作無法復原，建議先匯出備份。`))return;
+  const ids=new Set(rows.map(r=>r.id));
+  DB.history=DB.history.filter(r=>!ids.has(r.id));
+  save(); renderAll();
+};
+
+/* ══ 區間查詢 ═══════════════════════════════════════════════ */
+let queryRows=[];
+$('#btnRunQuery').onclick=()=>{
+  const y1=numOrNull($('#qY1').value),y2=numOrNull($('#qY2').value);
+  if(y1===null||y2===null){ msg('#queryMsg','請填寫起訖民國年。','err'); return }
+  const a=periodNo(y1,numOrNull($('#qQ1').value)), b=periodNo(y2,numOrNull($('#qQ2').value));
+  if(a===null||b===null||a>b){ msg('#queryMsg','起始期間必須早於或等於結束期間。','err'); return }
+  const proj=$('#qProj').value, day=$('#qDay').value;
+  const inRange=DB.history.filter(h=>{
+    const n=periodNo(h.year,h.quarter);
+    return n!==null&&n>=a&&n<=b&&(!proj||h.projectId===proj)&&(!day||h.dayType===day);
+  });
+  // 以路段為列、期間為欄整理成交叉表，這是比較「同一路段隨時間變化」最直觀的形式
+  const periods=uniq(inRange.map(h=>periodNo(h.year,h.quarter))).sort((x,y)=>x-y);
+  const roads=uniq(inRange.map(h=>h.road)).sort();
+  queryRows=roads.map(road=>{
+    const cells=periods.map(pn=>{
+      const hit=inRange.filter(h=>h.road===road&&periodNo(h.year,h.quarter)===pn);
+      if(!hit.length)return null;
+      const avg=hit.reduce((s,h)=>s+(h.travel??0),0)/hit.filter(h=>h.travel!==null).length;
+      return {avg:Number.isFinite(avg)?avg:null,los:losFromSpeed(avg),n:hit.length};
+    });
+    return {road,cells};
+  });
+  const label=pn=>`${Math.floor((pn-1)/4)}Q${((pn-1)%4)+1}`;
+  $('#queryTable').innerHTML=roads.length?`
+    <thead><tr><th>路段</th>${periods.map(p=>`<th>${esc(label(p))}</th>`).join('')}</tr></thead>
+    <tbody>${queryRows.map(r=>`<tr><td>${esc(r.road)}</td>${
+      r.cells.map(c=>c?`<td class="n">${losCell(c.los)} <span class="num">${fmt(c.avg,1)}</span></td>`:'<td class="n">—</td>').join('')
+    }</tr>`).join('')}</tbody>`
+    :'<tbody><tr><td class="empty">這段期間沒有資料。</td></tr></tbody>';
+  $('#queryTable').dataset.periods=JSON.stringify(periods);
+  msg('#queryMsg',`共 ${inRange.length} 筆原始紀錄，涵蓋 ${roads.length} 個路段、${periods.length} 個期間。表格中的數字為該期間平均旅行速率。`,'ok');
+};
+
+/* ══ 尖峰明細 ═══════════════════════════════════════════════ */
+function renderPeak(){
+  fillSelect($('#pkRoad'),uniq(DB.peak.map(p=>p.road)).sort(),'全部路段');
+  fillSelect($('#pkDir'),uniq(DB.peak.map(p=>p.dir)).sort(),'全部方向');
+  fillSelect($('#pkPeak'),uniq(DB.peak.map(p=>p.peak)).sort(),'全部時段');
+  const r=$('#pkRoad').value,d=$('#pkDir').value,pk=$('#pkPeak').value;
+  const rows=DB.peak.filter(p=>(!r||p.road===r)&&(!d||p.dir===d)&&(!pk||p.peak===pk));
+  $('#peakTable').innerHTML=rows.length?`
+    <thead><tr><th>年/季</th><th>路段</th><th>日別</th><th>尖峰</th><th>方向</th>
+      <th>旅行速率</th><th>速限</th><th>速率速限比</th><th>LOS</th></tr></thead>
+    <tbody>${rows.map(p=>`<tr>
+      <td class="num">${esc(p.period||'')}</td><td>${esc(p.road)}</td><td>${esc(p.dayType)}</td>
+      <td>${esc(p.peak||'')}</td><td>${esc(p.dir||'')}</td>
+      <td class="n">${fmt(p.travel,2)}</td><td class="n">${fmt(p.limit,0)}</td>
+      <td class="n">${p.ratio===null?'':(p.ratio*100).toFixed(1)+'%'}</td>
+      <td>${losCell(p.los)}</td></tr>`).join('')}</tbody>`
+    :'<tbody><tr><td class="empty">沒有尖峰明細資料。匯入含「尖峰明細」工作表的 Excel 後就會出現。</td></tr></tbody>';
+}
+['#pkRoad','#pkDir','#pkPeak'].forEach(s=>$(s).addEventListener('change',renderPeak));
+$('#btnRecalcPeak').onclick=()=>{
+  let n=0;
+  DB.peak.forEach(p=>{
+    const lim=speedLimitFor(p.road,p.dir);
+    if(p.travel!==null&&lim>0){
+      p.limit=lim; p.ratio=p.travel/lim;
+      const l=losFromRatio(p.ratio);
+      if(l!==p.los){p.los=l;n++}
+    }
+  });
+  save(); renderAll();
+  msg('#peakMsg',`已依目前速限重算，共 ${DB.peak.length} 筆，其中 ${n} 筆服務水準有變動。`,'ok');
+};
+
+/* ══ 路段速限 ═══════════════════════════════════════════════ */
+function seedSpeedFromData(notify){
+  const pairs=new Set(DB.speed.map(s=>s.road+'|'+s.dir));
+  let added=0;
+  DB.peak.forEach(p=>{
+    const key=p.road+'|'+(p.dir||'方向1');
+    if(p.road&&!pairs.has(key)){
+      pairs.add(key);
+      DB.speed.push(sanitizeSpeed({road:p.road,dir:p.dir||'方向1',limit:50,updatedAt:nowStamp()}));
+      added++;
+    }
+  });
+  DB.history.forEach(h=>{
+    ['方向1','方向2'].forEach(d=>{
+      const key=h.road+'|'+d;
+      if(h.road&&!pairs.has(key)){
+        pairs.add(key);
+        DB.speed.push(sanitizeSpeed({road:h.road,dir:d,limit:50,updatedAt:nowStamp()}));
+        added++;
+      }
+    });
+  });
+  if(added)save();
+  if(notify)msg('#speedMsg',added?`已補齊 ${added} 筆路段速限（一律先給預設值 50 km/h，請逐一查證修正）。`:'沒有需要補齊的路段。','ok');
+  return added;
+}
+$('#btnSeedSpeed').onclick=()=>{seedSpeedFromData(true);renderAll()};
+$('#btnAddSpeed').onclick=()=>{
+  const road=S($('#slRoad').value),dir=S($('#slDir').value)||'方向1',lim=numOrNull($('#slVal').value);
+  if(!road){ msg('#speedMsg','請填寫路段名稱。','err'); return }
+  if(lim===null||lim<=0){ msg('#speedMsg','公告速限必須大於 0。','err'); return }
+  const hit=DB.speed.find(s=>s.road===road&&s.dir===dir);
+  if(hit){ hit.limit=lim; hit.src='人工設定'; hit.updatedAt=nowStamp() }
+  else DB.speed.push(sanitizeSpeed({road,dir,limit:lim,src:'人工設定',updatedAt:nowStamp()}));
+  save(); renderAll();
+  msg('#speedMsg',`已設定「${road}　${dir}」為 ${lim} km/h。記得按「依速限重算 LOS」讓尖峰明細跟著更新。`,'ok');
+};
+function renderSpeed(){
+  const rows=[...DB.speed].sort((a,b)=>a.road.localeCompare(b.road,'zh-Hant')||a.dir.localeCompare(b.dir));
+  $('#speedTable').innerHTML=rows.length?`
+    <thead><tr><th>路段</th><th>方向</th><th>公告速限</th><th>來源</th><th>更新時間</th><th></th></tr></thead>
+    <tbody>${rows.map(s=>`<tr>
+      <td>${esc(s.road)}</td><td>${esc(s.dir)}</td>
+      <td class="n">${fmt(s.limit,0)}</td><td>${esc(s.src)}</td><td>${esc(s.updatedAt)}</td>
+      <td><button data-sl="${esc(s.road)}|${esc(s.dir)}">編輯</button></td></tr>`).join('')}</tbody>`
+    :'<tbody><tr><td class="empty">尚未設定任何路段速限。按「由現有資料補齊路段」可一次帶出所有路段。</td></tr></tbody>';
+  $('#speedTable').querySelectorAll('[data-sl]').forEach(b=>b.onclick=()=>{
+    const [road,dir]=b.dataset.sl.split('|');
+    $('#slRoad').value=road; $('#slDir').value=dir;
+    const hit=DB.speed.find(s=>s.road===road&&s.dir===dir);
+    $('#slVal').value=hit?hit.limit:'';
+    $('#slRoad').scrollIntoView({behavior:'smooth',block:'center'});
+  });
+}
+
+/* ══ 設定 ═══════════════════════════════════════════════════ */
+function renderSettings(){
+  const s=DB.settings;
+  $('#sA').value=s.losA; $('#sB').value=s.losB; $('#sC').value=s.losC;
+  $('#sD').value=s.losD; $('#sE').value=s.losE;
+  $('#dsHist').textContent=DB.history.length+' 筆';
+  $('#dsPeak').textContent=DB.peak.length+' 筆';
+  $('#dsSpeed').textContent=DB.speed.length+' 筆';
+  try{ $('#dsSize').textContent=((localStorage.getItem(KEY)||'').length/1024).toFixed(1)+' KB' }
+  catch(e){ $('#dsSize').textContent='—' }
+}
+$('#btnSaveSettings').onclick=()=>{
+  const vals=['#sA','#sB','#sC','#sD','#sE'].map(s=>numOrNull($(s).value));
+  if(vals.some(v=>v===null)){ msg('#setMsg','五個門檻都要填數字。','err'); return }
+  for(let i=1;i<vals.length;i++) if(vals[i]>=vals[i-1]){
+    msg('#setMsg','門檻必須由高到低遞減（A 最高、E 最低），請重新確認。','err'); return }
+  Object.assign(DB.settings,{losA:vals[0],losB:vals[1],losC:vals[2],losD:vals[3],losE:vals[4]});
+  let changed=0;
+  DB.history.forEach(h=>{ const l=losFromSpeed(h.travel); if(l!==h.los){h.los=l;changed++} });
+  save(); renderAll();
+  msg('#setMsg',`已儲存。重算後有 ${changed} 筆歷史資料的服務水準改變。`,'ok');
+};
+$('#btnBackup').onclick=()=>{
+  const blob=new Blob([JSON.stringify({app:'TLM-Web',version:APP_VERSION,exportedAt:nowStamp(),data:DB},null,2)],
+    {type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`交通服務水準備份_${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  msg('#sysMsg','備份已下載。','ok');
+};
+$('#fileBackup').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  if(!confirm('還原備份會覆蓋目前所有資料，確定要繼續嗎？')){ e.target.value=''; return }
+  try{
+    const d=JSON.parse(await f.text());
+    const src=d.data||d;
+    DB.history=(src.history||[]).map(sanitizeHist);
+    DB.peak=(src.peak||[]).map(sanitizePeak);
+    DB.speed=(src.speed||[]).map(sanitizeSpeed);
+    DB.settings={...DEFAULT_SETTINGS,...(src.settings||{})};
+    save(); renderAll();
+    msg('#sysMsg',`已還原：歷史資料 ${DB.history.length} 筆、尖峰明細 ${DB.peak.length} 筆。`,'ok');
+  }catch(err){ msg('#sysMsg','還原失敗：檔案格式不正確。','err') }
+  e.target.value='';
+});
+$('#btnWipe').onclick=()=>{
+  if(!confirm('清空所有資料？此動作無法復原。'))return;
+  if(!confirm('再次確認：歷史資料、尖峰明細、路段速限都會被刪除。建議先匯出備份。'))return;
+  DB={history:[],peak:[],speed:[],settings:{...DEFAULT_SETTINGS}};
+  save(); renderAll(); msg('#sysMsg','已清空。','ok');
+};
+
+/* ══ 匯出 ═══════════════════════════════════════════════════ */
+async function exportSheet(rows,header,keys,sheetName,fileName){
+  if(!rows.length){ alert('目前沒有可匯出的資料。'); return }
+  await ensureXLSX();
+  const aoa=[[sheetName],[],[],header,...rows.map(r=>keys.map(k=>r[k]??''))];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,sheetName);
+  XLSX.writeFile(wb,fileName);
+}
+$('#btnExportHist').onclick=()=>exportSheet(filteredHistory(),
+  Object.keys(H_COLS),Object.values(H_COLS),'歷史資料',
+  `歷史資料_${new Date().toISOString().slice(0,10)}.xlsx`);
+$('#btnExportPeak').onclick=()=>exportSheet(DB.peak,
+  Object.keys(P_COLS),Object.values(P_COLS),'尖峰明細',
+  `尖峰明細_${new Date().toISOString().slice(0,10)}.xlsx`);
+$('#btnExportQuery').onclick=async()=>{
+  if(!queryRows.length){ alert('請先執行查詢。'); return }
+  await ensureXLSX();
+  const periods=JSON.parse($('#queryTable').dataset.periods||'[]');
+  const label=pn=>`${Math.floor((pn-1)/4)}Q${((pn-1)%4)+1}`;
+  const aoa=[['區間查詢結果'],[],[],
+    ['路段',...periods.flatMap(p=>[label(p)+' 平均速率',label(p)+' LOS'])],
+    ...queryRows.map(r=>[r.road,...r.cells.flatMap(c=>c?[Number(c.avg.toFixed(2)),c.los]:['',''])])];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'區間查詢');
+  XLSX.writeFile(wb,`區間查詢_${new Date().toISOString().slice(0,10)}.xlsx`);
+};
+
+/* ══ 分頁與初始化 ═══════════════════════════════════════════ */
+const TABS=['import','hist','query','peak','speed','settings'];
+function setTab(t){
+  if(!TABS.includes(t))t='import';
+  TABS.forEach(x=>$('#p-'+x).hidden=(x!==t));
+  $('#tabbar').querySelectorAll('button').forEach(b=>
+    b.setAttribute('aria-selected',String(b.dataset.tab===t)));
+  try{ localStorage.setItem(KEY+':tab',t) }catch(e){}
+  window.scrollTo({top:0,behavior:'auto'});
+}
+$('#tabbar').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-tab]'); if(b)setTab(b.dataset.tab);
+});
+function renderAll(){
+  $('#statHist').textContent=DB.history.length;
+  $('#statPeak').textContent=DB.peak.length;
+  fillSelect($('#qProj'),uniq(DB.history.map(h=>h.projectId)),'全部計畫');
+  renderHist(); renderPeak(); renderSpeed(); renderSettings();
+}
+load();
+renderAll();
+setTab((()=>{ try{ return localStorage.getItem(KEY+':tab')||'import' }catch(e){ return 'import' } })());
+</script>
+</body>
+</html>
