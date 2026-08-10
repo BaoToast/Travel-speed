@@ -186,7 +186,7 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 <section class="panel" id="p-projects" hidden>
   <div class="card">
     <h2>計畫清冊</h2>
-    <p class="hint">單機共用同一份資料，不需要像原本 Manager／Database 分開的檔案那樣手動同步——這裡登記過的計畫編號，匯入資料時打字就會自動出現在建議清單裡。</p>
+    <p class="hint">單機共用同一份資料，不需要像原本 Manager／Database 分開的檔案那樣手動同步。匯入或手動新增資料時用到的計畫編號，會自動出現在下面清單裡（連同筆數統計）；這裡則是用來補齊業主、區域、負責人這些清單本身沒有的管理資訊，之後也能當作跨計畫篩選的依據。</p>
     <div class="row">
       <div class="field"><label for="prId">計畫編號</label><input id="prId" placeholder="P001"></div>
       <div class="field" style="flex:2"><label for="prName">計畫名稱</label><input id="prName" placeholder="○○路口改善"></div>
@@ -592,16 +592,36 @@ function parseFilenameRoadDay(filename){
 }
 
 // 解析一份原始報表，回傳一般歷史紀錄草稿＋尖峰明細草稿（皆可能為 null／空陣列，由呼叫端決定如何呈現）
+// 掃整份活頁簿，找同一列裡「數值最多」的那次符合（用來抓統計表那種一列四欄，
+// 分別是上午東-西／上午西-東／下午東-西／下午西-東的彙整列，而不是尖峰工作表
+// 裡那種一個標籤只帶一個數字的區塊）
+function findBestRowValues(wb,labelText,maxOffset){
+  maxOffset=maxOffset||10;
+  const want=normLabel(labelText);
+  let best=null;
+  for(const sn of wb.SheetNames){
+    const grid=rawSheetGrid(wb.Sheets[sn]);
+    for(let r=0;r<grid.length;r++){
+      const row=grid[r]||[];
+      for(let c=0;c<row.length;c++){
+        const cell=row[c];
+        if(cell==null||typeof cell!=='string'&&typeof cell!=='number')continue;
+        if(!normLabel(cell).includes(want))continue;
+        const values=[];
+        for(let k=c+1;k<=Math.min(c+maxOffset,row.length-1);k++){
+          if(isNumericCell(row[k]))values.push(Number(row[k]));
+        }
+        if(!best||values.length>best.values.length)best={sheet:sn,row:r,col:c,values};
+      }
+    }
+  }
+  return best;
+}
+
 function parseRawReport(wb,filename){
   const fn=parseFilenameRoadDay(filename);
-  const travel=findMetricInWorkbook(wb,'平均總旅行速率',true);
-  const running=findMetricInWorkbook(wb,'平均總行駛速率',true);
-  let total=findMetricInWorkbook(wb,'總延滯',false);
-  if(total===null){
-    const road=findMetricInWorkbook(wb,'路段延滯',false);
-    const junction=findMetricInWorkbook(wb,'交叉口延滯',false);
-    if(road!==null&&junction!==null)total=road+junction;
-  }
+
+  // 尖峰明細：上午/下午尖峰工作表，各抓方向1／方向2 兩組（與 TLM_PeakV2_ImportOne 對應）
   const peakRows=[];
   for(const[zh,label]of[['上午','上午尖峰'],['下午','下午尖峰']]){
     const ws=findPeakSheet(wb,zh);
@@ -613,10 +633,52 @@ function parseRawReport(wb,filename){
         error:(t===null||r===null)?'讀不到第 '+j+' 組速率資料':''});
     }
   }
+
+  // 一般歷史資料的代表值：4 組尖峰資料（上午×2方向、下午×2方向）裡，
+  // 旅行速率「最低」（服務水準最差）的那一組才是能代表當天服務水準的數字，
+  // 不能直接抓報表裡隨便找到的第一筆。
+  const validRows=peakRows.map((p,i)=>({...p,i})).filter(p=>p.travel!==null&&p.error==='');
+  let repIndex=-1,travel=null,running=null;
+  if(validRows.length){
+    const worst=validRows.reduce((a,b)=>b.travel<a.travel?b:a);
+    repIndex=worst.i; travel=worst.travel; running=worst.running;
+  }else{
+    // 找不到任何尖峰工作表資料時，退回整份活頁簿搜第一個符合的數值（相容舊格式）
+    travel=findMetricInWorkbook(wb,'平均總旅行速率',true);
+    running=findMetricInWorkbook(wb,'平均總行駛速率',true);
+  }
+
+  // 延滯：嘗試從統計表那種「一列四欄」的彙整列取代表值，欄位順序假設與尖峰
+  // 明細（上午方向1／方向2／下午方向1／方向2）一致，抓不到對應欄位時退回
+  // 整份活頁簿搜第一個「總延滯」或「路段延滯＋交叉口延滯」的數值。
+  let delay=null,delayNote='';
+  if(repIndex>=0){
+    const roadRow=findBestRowValues(wb,'路段延滯');
+    const juncRow=findBestRowValues(wb,'交叉口延滯');
+    const totalRow=findBestRowValues(wb,'總延滯');
+    if(totalRow&&totalRow.values.length>repIndex){
+      delay=totalRow.values[repIndex];
+    }else if(roadRow&&juncRow&&roadRow.values.length>repIndex&&juncRow.values.length>repIndex){
+      delay=roadRow.values[repIndex]+juncRow.values[repIndex];
+    }
+  }
+  if(delay===null){
+    let total=findMetricInWorkbook(wb,'總延滯',false);
+    if(total===null){
+      const road=findMetricInWorkbook(wb,'路段延滯',false);
+      const junction=findMetricInWorkbook(wb,'交叉口延滯',false);
+      if(road!==null&&junction!==null){ total=road+junction; delayNote='（找不到與代表方向對應的延滯欄，改用報表中第一組延滯資料，建議手動核對）'; }
+    }else{
+      delayNote='（找不到與代表方向對應的延滯欄，改用報表中第一組延滯資料，建議手動核對）';
+    }
+    delay=total;
+  }
+
   return{
     filename, road:fn.road, dayType:fn.dayType,
-    travel, running, delay:total,
-    generalError:(travel===null?'找不到「平均總旅行速率」':running===null?'找不到「平均總行駛速率」':total===null?'找不到延滯資料':''),
+    travel, running, delay, delayNote,
+    repLabel:repIndex>=0?`${peakRows[repIndex].peak} ${peakRows[repIndex].dir}（旅行速率最低）`:'',
+    generalError:(travel===null?'找不到「平均總旅行速率」':running===null?'找不到「平均總行駛速率」':delay===null?'找不到延滯資料':''),
     peakRows
   };
 }
@@ -694,6 +756,7 @@ function commitImport(skipDup){
   DB.history.push(...addedH);
   DB.peak.push(...addedP);
   seedSpeedFromData(false);
+  [...addedH,...addedP].forEach(r=>ensureProjectRegistered(r.projectId,r.projectName));
   pendingImport=null;
   save(); renderAll();
   $('#importPreview').innerHTML='';
@@ -735,26 +798,27 @@ $('#btnBatchParse').addEventListener('click',async()=>{
 function renderBatchPreview(){
   if(!batchParsed.length){ $('#batchPreview').innerHTML=''; return }
   const okCount=batchParsed.filter(b=>!b.generalError).length;
-  msg('#batchMsg',`已解析 ${batchParsed.length} 個檔案，其中 ${okCount} 個成功抓到一般歷史資料。路段／日別看起來不對的話可以直接在下面欄位修改，確認後再按「確認匯入」。`,'info');
+  msg('#batchMsg',`已解析 ${batchParsed.length} 個檔案，其中 ${okCount} 個成功抓到一般歷史資料（取 4 組尖峰資料中旅行速率最低的一組代表當天）。路段／日別／數值看起來不對的話可以直接在下面欄位修改，確認後再按「確認匯入」。`,'info');
   const rows=batchParsed.map((b,i)=>{
     const peakOk=b.peakRows.filter(p=>!p.error).length;
     const peakInfo=b.peakRows.length?`${peakOk}/${b.peakRows.length} 組尖峰`:'—';
+    const numInput=(field,val,step)=>`<input data-i="${i}" data-f="${field}" type="number" step="${step||0.01}" value="${val===null||val===undefined?'':val}" style="width:6em">`;
     return `<tr>
-      <td>${esc(b.filename)}</td>
+      <td>${esc(b.filename)}${b.repLabel?`<div class="hint" style="margin:2px 0 0">代表：${esc(b.repLabel)}</div>`:''}</td>
       <td><input data-i="${i}" data-f="road" value="${esc(b.road)}" style="width:11em"></td>
       <td><select data-i="${i}" data-f="dayType" style="width:5.5em">
             <option value="平日" ${b.dayType==='平日'?'selected':''}>平日</option>
             <option value="假日" ${b.dayType==='假日'?'selected':''}>假日</option>
           </select></td>
-      <td class="n">${b.travel!==null&&b.travel!==undefined?fmt(b.travel,2):'—'}</td>
-      <td class="n">${b.running!==null&&b.running!==undefined?fmt(b.running,2):'—'}</td>
-      <td class="n">${b.delay!==null&&b.delay!==undefined?fmt(b.delay,1):'—'}</td>
+      <td>${numInput('travel',b.travel)}</td>
+      <td>${numInput('running',b.running)}</td>
+      <td>${numInput('delay',b.delay,1)}${b.delayNote?`<div class="hint" style="margin:2px 0 0">${esc(b.delayNote)}</div>`:''}</td>
       <td>${peakInfo}</td>
       <td>${b.generalError?`<span class="msg err" style="margin:0;padding:2px 6px;display:inline-block">${esc(b.generalError)}</span>`:'<span class="los los-A">OK</span>'}</td>
     </tr>`;
   }).join('');
   $('#batchPreview').innerHTML=`
-    <div class="tablewrap" style="max-height:40vh">
+    <div class="tablewrap" style="max-height:44vh">
       <table><thead><tr><th>檔案</th><th>路段</th><th>日別</th><th>旅行速率</th><th>行駛速率</th><th>延滯(秒)</th><th>尖峰</th><th>狀態</th></tr></thead>
       <tbody>${rows}</tbody></table>
     </div>
@@ -765,7 +829,8 @@ function renderBatchPreview(){
   $('#batchPreview').querySelectorAll('input[data-f],select[data-f]').forEach(el=>{
     el.addEventListener('change',()=>{
       const i=Number(el.dataset.i),f=el.dataset.f;
-      batchParsed[i][f]=el.value;
+      batchParsed[i][f]=(f==='travel'||f==='running'||f==='delay')?numOrNull(el.value):el.value;
+      if(f==='travel'||f==='running'||f==='delay')batchParsed[i].generalError='';
     });
   });
   $('#btnBatchCommit').onclick=commitBatchImport;
@@ -776,7 +841,7 @@ function commitBatchImport(){
   const newHist=[],newPeak=[];
   batchParsed.forEach(b=>{
     if(!b.road){ return } // 路段是空的沒辦法建檔，直接跳過
-    if(!b.generalError){
+    if(b.travel!==null&&b.running!==null){
       const rec=sanitizeHist({
         id:uid(),projectId:b.projectId,projectName:b.projectName,year:b.year,quarter:b.quarter,
         period:periodCode(b.year,b.quarter),road:b.road,dayType:b.dayType,
@@ -804,6 +869,7 @@ function commitBatchImport(){
   const addH=newHist.filter(r=>!hs.has(histKey(r))), addP=newPeak.filter(r=>!ps.has(peakKey(r)));
   DB.history.push(...addH); DB.peak.push(...addP);
   seedSpeedFromData(false);
+  ensureProjectRegistered(batchParsed[0]&&batchParsed[0].projectId,batchParsed[0]&&batchParsed[0].projectName);
   batchParsed=[];
   save(); renderAll();
   $('#batchPreview').innerHTML='';
@@ -827,6 +893,7 @@ $('#btnAddRec').addEventListener('click',()=>{
   rec.los=losFromSpeed(rec.travel);
   DB.history.push(rec);
   seedSpeedFromData(false);
+  ensureProjectRegistered(rec.projectId,rec.projectName);
   save(); renderAll();
   ['#mRoad','#mTravel','#mRun','#mDelay'].forEach(s=>$(s).value='');
   msg('#addMsg',`已新增：${road}　服務水準 ${rec.los||'—'}`,'ok');
@@ -1010,6 +1077,19 @@ function renderSpeed(){
 }
 
 /* ══ 計畫清冊 ═══════════════════════════════════════════════ */
+// 只要匯入或手動新增資料時用到某個計畫編號，若清冊裡還沒有這筆，
+// 就自動補一筆最簡單的登記，避免「匯入完資料，清冊卻是空的」這種脫節。
+// 已存在的計畫不會被覆蓋，人工填的業主/區域/負責人等資訊不會被洗掉。
+function ensureProjectRegistered(projectId,projectName){
+  const id=S(projectId);
+  if(!id)return;
+  if(DB.projects.some(p=>p.id===id))return;
+  DB.projects.push(sanitizeProject({
+    id,name:S(projectName)||id,status:'進行中',
+    note:'（自動建立，由匯入/新增資料產生，可補齊業主／區域／負責人等資訊）',
+    updatedAt:nowStamp()
+  }));
+}
 $('#btnAddProject').onclick=()=>{
   const id=S($('#prId').value);
   if(!id){ msg('#projectMsg','請填寫計畫編號。','err'); return }
@@ -1026,12 +1106,17 @@ $('#btnAddProject').onclick=()=>{
 function renderProjects(){
   const rows=[...DB.projects].sort((a,b)=>a.id.localeCompare(b.id,'zh-Hant'));
   $('#projectTable').innerHTML=rows.length?`
-    <thead><tr><th>編號</th><th>名稱</th><th>業主</th><th>區域</th><th>開始日期</th><th>狀態</th><th>負責人</th><th>備註</th><th></th></tr></thead>
-    <tbody>${rows.map(p=>`<tr>
+    <thead><tr><th>編號</th><th>名稱</th><th>業主</th><th>區域</th><th>開始日期</th><th>狀態</th><th>負責人</th><th>歷史資料</th><th>尖峰明細</th><th>備註</th><th></th></tr></thead>
+    <tbody>${rows.map(p=>{
+      const hCount=DB.history.filter(h=>h.projectId===p.id).length;
+      const pCount=DB.peak.filter(h=>h.projectId===p.id).length;
+      return `<tr>
       <td>${esc(p.id)}</td><td>${esc(p.name)}</td><td>${esc(p.owner)}</td><td>${esc(p.area)}</td>
-      <td>${esc(p.startDate)}</td><td>${esc(p.status)}</td><td>${esc(p.manager)}</td><td>${esc(p.note)}</td>
-      <td><button data-pid="${esc(p.id)}">編輯</button> <button class="danger" data-pdel="${esc(p.id)}">刪除</button></td></tr>`).join('')}</tbody>`
-    :'<tbody><tr><td class="empty">尚未登記任何計畫。新增後，匯入資料時打計畫編號會自動出現建議。</td></tr></tbody>';
+      <td>${esc(p.startDate)}</td><td>${esc(p.status)}</td><td>${esc(p.manager)}</td>
+      <td class="n">${hCount}</td><td class="n">${pCount}</td><td>${esc(p.note)}</td>
+      <td><button data-pid="${esc(p.id)}">編輯</button> <button class="danger" data-pdel="${esc(p.id)}">刪除</button></td></tr>`;
+    }).join('')}</tbody>`
+    :'<tbody><tr><td class="empty">尚未登記任何計畫。匯入或手動新增資料時用到的計畫編號會自動出現在這裡，也可以先手動建立。</td></tr></tbody>';
   $('#projectTable').querySelectorAll('[data-pid]').forEach(b=>b.onclick=()=>{
     const p=DB.projects.find(x=>x.id===b.dataset.pid); if(!p)return;
     $('#prId').value=p.id; $('#prName').value=p.name; $('#prOwner').value=p.owner;
