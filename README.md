@@ -1,5 +1,17 @@
 # 交通服務水準分析系統－GitHub Pages 發布說明
 
+## v2.7 更新
+
+### 修正：匯出的 Excel 圖表會讓 Excel 要求「修復」，修復後圖表全部消失
+
+- 「LOS 圖表」頁下載的可編輯圖表檔（旅行速率趨勢圖、LOS 趨勢圖），內部的圖表 XML 有四處欄位順序不符合 ECMA-376（Excel 的檔案規格）：
+  1. 數值軸把 `<c:majorGridlines>`（格線）排在 `<c:numFmt>` 之後，規格要求它必須排在 `<c:axPos>` 之後、`<c:title>` 之前。
+  2. LOS 圖把 `<c:majorUnit>`（刻度單位）插在 `<c:majorGridlines>` 前面，規格要求它排在 `<c:crossBetween>` 之後，結果整個數值軸的順序連鎖出錯。
+  3. LOS 圖的座標軸範圍寫成 `<c:min>` 在前、`<c:max>` 在後，規格要求 max 在前。
+  4. LOS 圖由折線圖改成長條圖時，`<c:gapWidth>` 被接在結尾（`<c:axId>` 之後），規格要求它排在 `<c:axId>` 之前。
+- Excel 開檔時會逐一驗證這些 part，任一處不合規就判定檔案毀損、跳出「我們發現…部分內容有問題。您要我們盡可能嘗試復原嗎？」；按「是」之後 Excel 會直接丟掉整張圖表，因此使用者看到的是「只有數字、沒有圖」。LibreOffice 較寬鬆，能開起來不代表 Excel 能開。
+- 四處全部修正，並新增自動檢查（`ooxml-check.mjs`），往後每次改版都會驗證匯出檔的結構、`[Content_Types].xml` 覆蓋率與 relationship 對應是否完整。修正後圖表可直接開啟並保持可編輯。
+
 ## v2.6 更新
 
 ### 新增功能

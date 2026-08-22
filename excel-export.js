@@ -106,7 +106,7 @@
       ax2 = ax1 + 1;
     const series = (order, name, column, values, color) =>
       `<c:ser><c:idx val="${order}"/><c:order val="${order}"/><c:tx><c:v>${name}</c:v></c:tx><c:spPr><a:ln w="28575"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="6"/></c:marker><c:cat><c:strRef><c:f>${sheet}!$C$${block.start}:$C$${block.end}</c:f><c:strCache><c:ptCount val="${cats.length}"/>${cache(cats, true)}</c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>${sheet}!$${column}$${block.start}:$${column}$${block.end}</c:f><c:numCache><c:formatCode>0.0</c:formatCode><c:ptCount val="${values.length}"/>${cache(values, false)}</c:numCache></c:numRef></c:val><c:smooth val="0"/></c:ser>`;
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:date1904 val="0"/><c:lang val="zh-TW"/><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-TW" sz="1200" b="1"/><a:t>${xml(block.road)}－旅行速率</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="0"/></c:title><c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${series(0, "平日", "D", week, "247DB4")}${series(1, "假日", "E", holiday, "E88943")}<c:marker val="1"/><c:smooth val="0"/><c:axId val="${ax1}"/><c:axId val="${ax2}"/></c:lineChart><c:catAx><c:axId val="${ax1}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>季度</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="0"/></c:title><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${ax2}"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx><c:valAx><c:axId val="${ax2}"/><c:scaling><c:orientation val="minMax"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>旅行速率（km/h）</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="0"/></c:title><c:numFmt formatCode="0.0" sourceLinked="0"/><c:majorGridlines/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${ax1}"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx></c:plotArea><c:legend><c:legendPos val="b"/><c:layout/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/><c:showDLblsOverMax val="0"/></c:chart><c:printSettings><c:headerFooter/><c:pageMargins b="0.75" l="0.7" r="0.7" t="0.75" header="0.3" footer="0.3"/><c:pageSetup/></c:printSettings></c:chartSpace>`;
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:date1904 val="0"/><c:lang val="zh-TW"/><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-TW" sz="1200" b="1"/><a:t>${xml(block.road)}－旅行速率</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="0"/></c:title><c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${series(0, "平日", "D", week, "247DB4")}${series(1, "假日", "E", holiday, "E88943")}<c:marker val="1"/><c:smooth val="0"/><c:axId val="${ax1}"/><c:axId val="${ax2}"/></c:lineChart><c:catAx><c:axId val="${ax1}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>季度</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="0"/></c:title><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${ax2}"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx><c:valAx><c:axId val="${ax2}"/><c:scaling><c:orientation val="minMax"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>旅行速率（km/h）</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="0"/></c:title><c:numFmt formatCode="0.0" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${ax1}"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx></c:plotArea><c:legend><c:legendPos val="b"/><c:layout/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/><c:showDLblsOverMax val="0"/></c:chart><c:printSettings><c:headerFooter/><c:pageMargins b="0.75" l="0.7" r="0.7" t="0.75" header="0.3" footer="0.3"/><c:pageSetup/></c:printSettings></c:chartSpace>`;
   }
 
   const baseChartXml = chartXml;
@@ -267,8 +267,15 @@
         .replaceAll("假日旅行速率（km/h）", "假日LOS級數（6=A、1=F）")
         .replaceAll("－旅行速率", "－LOS變化趨勢")
         .replaceAll("平均總旅行速率（km/h）", "LOS等級（6=A、1=F）")
-        .replace('<c:min val="0"/>', '<c:min val="1"/><c:max val="6"/>')
-        .replace("<c:majorGridlines/>", '<c:majorUnit val="1"/><c:majorGridlines/>');
+        // CT_Scaling 的順序是 logBase → orientation → max → min，
+        // max 必須排在 min 前面，否則 Excel 會要求修復檔案。
+        .replace('<c:min val="0"/>', '<c:max val="6"/><c:min val="1"/>')
+        // c:majorUnit 在 CT_ValAx 裡的位置是 crossBetween 之後，
+        // 插在 majorGridlines 前面會讓整個 valAx 的順序全錯。
+        .replace(
+          '<c:crossBetween val="between"/>',
+          '<c:crossBetween val="between"/><c:majorUnit val="1"/>',
+        );
       if (name.startsWith("xl/charts/chart"))
         source = source
           .replace(
@@ -278,7 +285,10 @@
           .replaceAll(/<c:marker>[\s\S]*?<\/c:marker>/g, "")
           .replaceAll('<c:marker val="1"/>', "")
           .replaceAll('<c:smooth val="0"/>', "")
-          .replace("</c:lineChart>", '<c:gapWidth val="80"/></c:barChart>');
+          // CT_BarChart 的順序是 …ser → dLbls → gapWidth → overlap → axId，
+          // 因此 gapWidth 要插在第一個 axId 之前，不能接在結尾。
+          .replace(/<c:axId /, '<c:gapWidth val="80"/><c:axId ')
+          .replace("</c:lineChart>", "</c:barChart>");
       zip.file(name, source);
     }
     return zip.generateAsync({
