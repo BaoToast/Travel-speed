@@ -1,4 +1,5 @@
-/* Traffic LOS quality and delivery extension v2.5.
+/* Traffic LOS quality and delivery extension.
+   版本字樣一律由 app.js 統一設定，本檔不得再寫入。
    This module does not change the representative-record or LOS formulas. */
 (function () {
   "use strict";
@@ -28,7 +29,9 @@
     state.version = Math.max(Number(state.version) || 0, 10);
   }
   ensureState();
-  document.querySelector(".brand small").textContent = "正式版 v2.6";
+  // 版本字樣一律由 app.js 設定，這裡不要再寫一次。
+  // 這支檔案在 index.html 裡排在 app.js 後面，先前這行把 app.js 剛寫上的
+  // 版本又覆蓋成舊的，導致網站明明已更新、畫面卻永遠顯示上一版。
 
   function injectUI() {
     const importPanel = document.createElement("article");
@@ -88,7 +91,7 @@
     const guide = document.createElement("article");
     guide.className = "panel extension-panel";
     guide.innerHTML =
-      "<h3>十一、資料品質與成果交付（v2.5）</h3><ol><li><b>匯入前：</b>在辨識預覽下方檢查與前一季的路段、平假日及4筆資料差異，再核對預計代表紀錄。</li><li><b>來源追溯：</b>到「尖峰彙總」下方搜尋原始檔名、工作表、標籤位置、批次及檔案驗證碼。</li><li><b>速限變更：</b>到「路段速限」新增有效期間、資料來源、查證日期與人員；系統只重算有效季度。</li><li><b>異常分析：</b>到「資料維護」設定提醒門檻並查看重點路段；提醒不會改變服務水準。</li><li><b>成果交付：</b>到「成果交付」選擇季度、路段及日別，下載 ZIP 或可編輯 Excel 圖表。自動文字僅為草稿，正式使用前必須人工核對。</li><li><b>操作復原：</b>到「備份與淨空」查看最近操作；匯入錯誤仍優先從「匯入紀錄」復原。</li></ol>";
+      "<h3>十一、資料品質與成果交付</h3><ol><li><b>匯入前：</b>在辨識預覽下方檢查與前一季的路段、平假日及4筆資料差異，再核對預計代表紀錄。</li><li><b>來源追溯：</b>到「尖峰彙總」下方搜尋原始檔名、工作表、標籤位置、批次及檔案驗證碼。</li><li><b>速限變更：</b>到「路段速限」新增有效期間、資料來源、查證日期與人員；系統只重算有效季度。</li><li><b>異常分析：</b>到「資料維護」設定提醒門檻並查看重點路段；提醒不會改變服務水準。</li><li><b>成果交付：</b>到「成果交付」選擇季度、路段及日別，下載 ZIP 或可編輯 Excel 圖表。自動文字僅為草稿，正式使用前必須人工核對。</li><li><b>操作復原：</b>到「備份與淨空」查看最近操作；匯入錯誤仍優先從「匯入紀錄」復原。</li></ol>";
     document.querySelector("#guide .warning").before(guide);
   }
   injectUI();
