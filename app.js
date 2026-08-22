@@ -584,7 +584,11 @@ function parsePeakSheet(m, peak) {
   // 一張尖峰工作表應該剛好有兩個方向。多出來（例如另有一個雙向平均區塊）
   // 或少於兩個時，寧可讓這份檔案在預覽時報錯，也不要用位置去猜哪兩個是方向1、2——
   // 猜錯會把「雙向平均」當成方向1，真正最差的那個方向反而整個不見。
-  if (travels.length !== 2) return [];
+  if (travels.length !== 2) {
+    // 讓呼叫端能說清楚是哪一種問題，而不是只丟一句「無法辨識完整4筆」。
+    parsePeakSheet.lastIssue = `「${peak}」工作表找到 ${travels.length} 個「平均總旅行速率」區塊（應為 2 個：方向1、方向2），系統不會猜測哪兩個才是調查方向`;
+    return [];
+  }
   return travels.map((p, i) => {
     // 這個方向的區塊：從上一個速率標籤的下一列開始，到下一個速率標籤為止。
     const previous = travels[i - 1];
@@ -618,7 +622,9 @@ async function parseFile(file, year, q, defSpeed) {
     day = dayFromFile(file.name),
     morning = matrix(wb, ["上午尖峰", "上午", "AM尖峰", "AM"]),
     afternoon = matrix(wb, ["下午尖峰", "下午", "PM尖峰", "PM"]);
+  parsePeakSheet.lastIssue = "";
   const rows = [...parsePeakSheet(morning, "上午尖峰"), ...parsePeakSheet(afternoon, "下午尖峰")];
+  const blockIssue = parsePeakSheet.lastIssue;
   for (const r of rows) {
     const k = `${p.code}|${road}|${r.direction}`,
       limit = Number(state.limits[k] || defSpeed || 50);
@@ -653,6 +659,7 @@ async function parseFile(file, year, q, defSpeed) {
     error: ok
       ? ""
       : sheetError ||
+        blockIssue ||
         (rows.length !== 4 ? "無法辨識完整4筆尖峰方向資料" : "速率或延滯欄位缺少數值"),
   };
 }
