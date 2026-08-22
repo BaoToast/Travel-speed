@@ -139,7 +139,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.8";
+document.querySelector(".brand small").textContent = "正式版 v2.9";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -150,8 +150,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.8.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.8.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.9.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.9.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -521,7 +521,9 @@ function metricAt(m, r, c) {
   // 舊版取整格文字的第一串數字，遇到「方向1平均總旅行速率：」「平均總旅行速率（07:30~08:30）」
   // 這類寫法會把標籤裡的 1 或 7 當成速率讀進來，整份資料的 LOS 全部變成 F。
   const label = String(m[r]?.[c] ?? "");
-  const inline = label.match(/[：:]\s*(-?\d+(?:\.\d+)?)\s*[^\d]*$/);
+  // 冒號前面不能是數字，否則「（07:30~08:30）」這種時段字樣會被當成
+  // 「冒號後面就是數字」，把 30 讀成速率——這一格明明只是標題，沒有數值。
+  const inline = label.match(/(?:^|[^\d])[：:]\s*(-?\d+(?:\.\d+)?)\s*[^\d]*$/);
   if (inline) return +inline[1];
   for (let dc = 1; dc <= 5; dc++) {
     const n = num(m[r]?.[c + dc]);
@@ -541,9 +543,31 @@ function findLabels(m, text) {
       if (normalize(m[r][c]).includes(text)) a.push({ r, c });
   return a;
 }
-function nearestMetric(m, row, text) {
+/**
+ * 判斷某一列的標籤屬於哪一個方向。
+ *
+ * 規則是「離哪個『平均總旅行速率』標籤最近就屬於誰」，這樣不論檔案是把
+ * 延滯表放在速率標籤上面或下面都判得對。之前只用「上一個速率標籤的下一列」
+ * 當區塊起點，方向1的延滯表（在方向1標籤下方）剛好落在方向2的區塊裡，
+ * 方向2就整組沿用方向1的數字，兩個方向的延滯一模一樣卻沒有任何提示。
+ */
+function ownsRow(travelRows, row, candidateRow) {
+  let owner = row;
+  let bestDist = Math.abs(candidateRow - row);
+  for (const other of travelRows) {
+    const dist = Math.abs(candidateRow - other);
+    // 距離相同時歸給上面那一個，避免兩個方向都宣稱擁有同一列。
+    if (dist < bestDist || (dist === bestDist && other < owner)) {
+      owner = other;
+      bestDist = dist;
+    }
+  }
+  return owner === row;
+}
+function nearestMetric(m, row, text, travelRows = []) {
   let best = null;
   for (const p of findLabels(m, text)) {
+    if (travelRows.length && !ownsRow(travelRows, row, p.r)) continue;
     const dist = Math.abs(p.r - row);
     // 距離相同時要挑「在下方」的那個標籤。findLabels 由上往下掃，
     // 舊版嚴格小於的比較會讓上一個方向的行駛速率被誤讀成這個方向的。
@@ -562,9 +586,13 @@ function nearestMetric(m, row, text) {
 function delayPart(m, row, text, bounds) {
   const from = bounds?.from ?? 0;
   const to = bounds?.to ?? m.length;
+  const travelRows = bounds?.travelRows || [];
   let best = null;
   for (const p of findLabels(m, text)) {
     if (p.r < from || p.r >= to) continue;
+    // 區塊界線只擋得住一半：方向1的延滯表若排在它的速率標籤下面，同樣落在
+    // 方向2的區塊內。再用「離誰最近就屬於誰」確認這一列真的屬於這個方向。
+    if (travelRows.length && !ownsRow(travelRows, row, p.r)) continue;
     // 優先取「在速率標籤上方、且最靠近」的那一個；區塊內沒有才往下找。
     if (p.r <= row) {
       if (!best || best.r > row || p.r > best.r) best = p;
@@ -593,12 +621,14 @@ function parsePeakSheet(m, peak) {
     // 這個方向的區塊：從上一個速率標籤的下一列開始，到下一個速率標籤為止。
     const previous = travels[i - 1];
     const next = travels[i + 1];
+    const travelRows = travels.map((item) => item.r);
     const bounds = {
       from: previous ? previous.r + 1 : 0,
       to: next ? next.r : m.length,
+      travelRows,
     };
     const travel = metricAt(m, p.r, p.c),
-      running = nearestMetric(m, p.r, "平均總行駛速率");
+      running = nearestMetric(m, p.r, "平均總行駛速率", travelRows);
     const roadDelay = delayPart(m, p.r, "路段延滯", bounds),
       junctionDelay = delayPart(m, p.r, "交叉口延滯", bounds);
     return {
@@ -626,8 +656,25 @@ async function parseFile(file, year, q, defSpeed) {
   const rows = [...parsePeakSheet(morning, "上午尖峰"), ...parsePeakSheet(afternoon, "下午尖峰")];
   const blockIssue = parsePeakSheet.lastIssue;
   for (const r of rows) {
-    const k = `${p.code}|${road}|${r.direction}`,
-      limit = Number(state.limits[k] || defSpeed || 50);
+    const k = `${p.code}|${road}|${r.direction}`;
+    // 匯入預覽也要走「速限版本」那一套。舊版只看 state.limits，於是設過
+    // 速限版本的路段，預覽 LOS 是用預設速限算的，按下確認寫入之後 rebuild()
+    // 才換成版本速限，同一批資料在預覽與匯入結果顯示成兩種服務水準。
+    const context = {
+      projectCode: p.code,
+      road,
+      direction: r.direction,
+      period: `${year}Q${q}`,
+    };
+    const version = globalThis.speedVersionFor?.(context) || null;
+    const base = Number(state.limits[k]);
+    const limit = version
+      ? Number(version.speed)
+      : Number.isFinite(base) && base > 0
+        ? base
+        : Number(defSpeed) > 0
+          ? Number(defSpeed)
+          : 50;
     Object.assign(r, {
       id: `${p.code}|${year}|Q${q}|${road}|${day}|${r.peak}|${r.direction}`,
       projectCode: p.code,
@@ -638,6 +685,8 @@ async function parseFile(file, year, q, defSpeed) {
       road,
       day,
       limit,
+      limitSource: version ? version.source || "" : "",
+      limitVersionStart: version ? version.start : "",
       ratio: r.travel == null ? null : r.travel / limit,
       los: r.travel == null ? "?" : losOf(r.travel / limit),
       source: file.name,
@@ -1293,10 +1342,22 @@ function renderLimits() {
     : '<tr><td colspan="4" class="empty">目前計畫匯入資料後會自動建立路段方向</td></tr>';
 }
 $("applySpeed").onclick = async () => {
+  // 速限一定是正數。`Number(i.value) || 50` 只擋得掉 0、空白與非數字：
+  // 打成 -50 會照樣存進去，之後 travel / limit 變成負的比值，整條路段的
+  // 服務水準無聲變成 F，而且畫面上也看不出哪裡不對。
+  const rejected = [];
   document.querySelectorAll("[data-limit]").forEach((i) => {
-    state.limits[i.dataset.limit] = Number(i.value) || 50;
+    const parsed = Number(i.value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      rejected.push(i.dataset.limit.split("|").slice(1).join(" "));
+      i.value = state.limits[i.dataset.limit] || 50;
+      return;
+    }
+    state.limits[i.dataset.limit] = parsed;
     state.limitConfirmed[i.dataset.limit] = true;
   });
+  if (rejected.length)
+    return toast(`速限必須大於 0，以下未儲存：${rejected.join("、")}`);
   state.details
     .filter((d) => d.projectCode === state.activeCode)
     .forEach((d) => {
@@ -1521,7 +1582,14 @@ $("restoreFile").onchange = async (e) => {
       else delete state.losRules[x.project.code];
     } else if (x.kind === "TLM_PORTFOLIO_PACKAGE") {
       state = { ...emptyState(), ...x, activeCode: x.projects?.[0]?.code || "", manager };
-    } else state = { ...emptyState(), ...x, manager };
+    } else if (Array.isArray(x.projects) && Array.isArray(x.details)) {
+      // 舊版備份沒有 kind 標記，只能靠形狀認。但「形狀」必須嚴格檢查：
+      // 舊版是把整個 state 直接存成 JSON，一定同時帶著 projects 與 details
+      // 兩個陣列。之前這裡是無條件 else，於是隨便一個 JSON（例如從別的系統
+      // 匯出的設定檔）都會被當成備份，展開後 projects 變成 emptyState() 的空
+      // 陣列，完整性檢查因此通過，接著 save() 就把使用者全部的計畫洗掉。
+      state = { ...emptyState(), ...x, manager };
+    } else throw new Error("缺少備份檔標記");
     if (!Array.isArray(state.projects) || !Array.isArray(state.details))
       throw new Error("內容不完整");
     state.summaries = Array.isArray(state.summaries) ? state.summaries : [];

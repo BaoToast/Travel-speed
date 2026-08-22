@@ -49,9 +49,20 @@
     return [...groups.values()]
       .map((g) => ({
         ...g,
-        periods: [...g.periods.values()].sort((a, b) => a.period.localeCompare(b.period)),
+        periods: [...g.periods.values()].sort(
+          (a, b) => periodOrder(a.period) - periodOrder(b.period),
+        ),
       }))
       .sort((a, b) => (a.projectCode + a.road).localeCompare(b.projectCode + b.road, "zh-Hant"));
+  }
+  /**
+   * 季度排序用的序號。
+   * 直接用字串比大小的話，"100Q1".localeCompare("99Q4") 是負的，
+   * 民國 99 年跨到 100 年的資料在 Excel 表與圖表上會整段排到最前面。
+   */
+  function periodOrder(value) {
+    const m = String(value || "").match(/^(\d{2,3})Q([1-4])$/);
+    return m ? Number(m[1]) * 4 + Number(m[2]) : -1;
   }
   function dataSheet(groups) {
     let row = 1,
@@ -336,6 +347,17 @@
     const xmlLabels = `<c:dLbls>${labels.map((x) => `<c:dLbl><c:idx val="${x.index}"/><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-TW" sz="900" b="1"/><a:t>${x.letter}</a:t></a:r></a:p></c:rich></c:tx><c:dLblPos val="outEnd"/><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbl>`).join("")}</c:dLbls>`;
     return series.replace("<c:cat>", `${xmlLabels}<c:cat>`);
   }
+  /**
+   * 做字串取代，但比對不到就丟錯。
+   * 這一整套 Excel 圖表是靠對產出的 XML 做字串置換來微調的，只要上游的
+   * XML 改了一個字，置換就會悄悄變成空操作——檔案照樣匯得出來、Excel 也
+   * 開得起來，只是圖表是錯的，沒有人會發現。
+   */
+  function mustReplace(source, from, to, what) {
+    if (!source.includes(from))
+      throw new Error(`圖表樣式套用失敗（${what}）：找不到預期的 XML 片段`);
+    return source.split(from).join(to);
+  }
   const baseLabeledLos = buildLos;
   buildLos = async function (rows) {
     const first = await baseLabeledLos(rows),
@@ -348,13 +370,25 @@
       let source = await file.async("string");
       source = source
         .replaceAll("－LOS變化趨勢", "－服務水準變化趨勢")
-        .replaceAll("LOS等級（6=A、1=F）", "服務水準")
-        .replace('<c:min val="1"/><c:max val="6"/>', '<c:min val="0"/><c:max val="6"/>')
-        .replace(
-          '<c:majorUnit val="1"/><c:majorGridlines/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>',
-          '<c:majorUnit val="1"/><c:majorGridlines/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="none"/>',
-        )
-        .replace(/<c:ser>[\s\S]*?<\/c:ser>/g, losDataLabels);
+        .replaceAll("LOS等級（6=A、1=F）", "服務水準");
+      // 這兩段改寫原本比對的字串跟實際產出的 XML 對不上，等於整段沒有執行：
+      //   1. 座標軸最小值仍停在 1，服務水準 F（值＝1）的長條高度變成 0，
+      //      畫面上看起來像「這一季沒有資料」。
+      //   2. 數值刻度沒被關掉，於是軸上同時出現 1~6 的數字和 A~F 的標籤。
+      // 改用實際存在的字串，並在比對不到時直接丟錯，避免以後又默默失效。
+      source = mustReplace(
+        source,
+        '<c:max val="6"/><c:min val="1"/>',
+        '<c:max val="6"/><c:min val="0"/>',
+        "服務水準座標軸最小值",
+      );
+      source = mustReplace(
+        source,
+        '<c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>',
+        '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="none"/>',
+        "服務水準座標軸刻度標籤",
+      );
+      source = source.replace(/<c:ser>[\s\S]*?<\/c:ser>/g, losDataLabels);
       zip.file(name, source);
     }
     return zip.generateAsync({

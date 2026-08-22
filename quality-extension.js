@@ -79,7 +79,7 @@
     delivery.id = "delivery";
     delivery.className = "view";
     delivery.innerHTML =
-      '<div class="title"><div><span class="eyebrow">DELIVERY CENTER</span><h2>季度成果交付</h2><p>選擇季度與範圍，下載可追溯、可編輯的成果資料包。</p></div></div><div class="two"><article class="panel form"><h3>成果範圍</h3><p class="muted">可以只交付單一季度，也可以選擇一段期間（例如 114Q1～114Q4）一次交付。</p><div class="row"><label>起始季度<select id="deliveryPeriodStart"></select></label><label>結束季度<select id="deliveryPeriodEnd"></select></label></div><div class="note" id="deliveryRangeNote">尚無資料</div><label>路段<select id="deliveryRoad"><option value="">全部路段</option></select></label><label>日別<select id="deliveryDay"><option value="">平日與假日</option><option>平日</option><option>假日</option></select></label><label>Excel 圖表內容<select id="deliveryMetric"><option value="travel">旅行速率（km/h）</option><option value="los">服務水準（A～F）</option></select></label><div class="check-grid"><label><input type="checkbox" id="packDetail" checked>尖峰明細</label><label><input type="checkbox" id="packSummary" checked>尖峰彙總</label><label><input type="checkbox" id="packQuality" checked>品質檢查</label><label><input type="checkbox" id="packNarrative" checked>分析文字草稿</label></div><button class="primary full" id="downloadQuarterPack">下載季度成果包 ZIP</button><button class="outline full" id="downloadFilteredCharts">匯出篩選後可編輯 Excel 圖表</button></article><article class="panel form"><h3>報告文字草稿</h3><p class="muted">由現有彙總自動產生，必須由使用者確認後再放入正式報告。</p><textarea id="reportDraft" rows="18"></textarea><div class="row"><button class="outline" id="generateDraft">重新產生</button><button class="primary" id="saveDraft">儲存修改</button></div></article></div>';
+      '<div class="title"><div><span class="eyebrow">DELIVERY CENTER</span><h2>季度成果交付</h2><p>選擇季度與範圍，下載可追溯、可編輯的成果資料包。</p></div></div><div class="two"><article class="panel form"><h3>成果範圍</h3><p class="muted">可以只交付單一季度，也可以選擇一段期間（例如 114Q1～114Q4）一次交付。</p><div class="row"><label>起始季度<select id="deliveryPeriodStart"></select></label><label>結束季度<select id="deliveryPeriodEnd"></select></label></div><div class="note" id="deliveryRangeNote">尚無資料</div><label>路段<select id="deliveryRoad"><option value="">全部路段</option></select></label><label>日別<select id="deliveryDay"><option value="">平日與假日</option><option>平日</option><option>假日</option></select></label><label>Excel 圖表內容<select id="deliveryMetric"><option value="travel">旅行速率（km/h）</option><option value="los">服務水準（A～F）</option></select></label><div class="check-grid"><label><input type="checkbox" id="packDetail" checked>尖峰明細</label><label><input type="checkbox" id="packSummary" checked>尖峰彙總</label><label><input type="checkbox" id="packQuality" checked>品質檢查</label><label><input type="checkbox" id="packNarrative" checked>分析文字草稿</label></div><button class="primary full" id="downloadQuarterPack">下載季度成果包 ZIP</button><button class="outline full" id="downloadFilteredCharts">匯出篩選後可編輯 Excel 圖表</button></article><article class="panel form"><h3>報告文字草稿</h3><p class="muted">由現有彙總自動產生，必須由使用者確認後再放入正式報告。</p><textarea id="reportDraft" rows="18"></textarea><div class="note" id="draftRecoverNote" hidden></div><div class="row"><button class="outline" id="generateDraft">重新產生</button><button class="primary" id="saveDraft">儲存修改</button></div></article></div>';
     q("backup").before(delivery);
 
     const undo = document.createElement("article");
@@ -232,6 +232,8 @@
         )[0];
     return hit || null;
   }
+  // 匯入預覽（app.js）也要算得出版本速限，否則預覽與寫入後的 LOS 會不一致。
+  globalThis.speedVersionFor = speedFor;
   const baseRebuild = rebuild;
   rebuild = function () {
     ensureState();
@@ -321,6 +323,10 @@
       speed = Number(q("versionSpeed").value);
     if (!key || !validPeriod(start) || !start || !validPeriod(end) || !speed)
       return toast("請輸入路段、有效速限及正確季度");
+    // `!speed` 只擋掉 0 與空白，負數會通過；速限版本一旦存成負值，
+    // 套用到的每一季旅行速率比都會變成負數，服務水準全部掉到 F。
+    if (!Number.isFinite(speed) || speed <= 0)
+      return toast("速限必須大於 0");
     if (end && periodKey(start) > periodKey(end)) return toast("結束季度不可早於開始季度");
     const existing = state.speedVersions[key] || [],
       overlap = existing.some(
@@ -699,7 +705,37 @@
     if (!force && key === lastDraftKey && draftDirty) return;
     lastDraftKey = key;
     draftDirty = false;
-    q("reportDraft").value = state.reportDrafts[key] || narrative();
+    const saved = state.reportDrafts[key];
+    q("reportDraft").value = saved || narrative();
+    // 草稿是以「計畫｜交付範圍」為鍵存的。切換計畫再切回來時，交付範圍常常
+    // 會回到預設值，鍵值跟著不一樣，於是文字框顯示的是重新產生的草稿，使用
+    // 者以為自己寫的內容被弄丟了——其實還在，只是掛在別的範圍底下。
+    const note = q("draftRecoverNote");
+    if (!note) return;
+    const others = Object.keys(state.reportDrafts || {}).filter(
+      (k) => k.startsWith(`${state.activeCode}|`) && k !== key && state.reportDrafts[k],
+    );
+    if (saved || !others.length) {
+      note.hidden = true;
+      note.innerHTML = "";
+      return;
+    }
+    note.hidden = false;
+    note.innerHTML =
+      `這個範圍還沒有存過草稿；本計畫另有 ${others.length} 份已儲存的草稿：` +
+      others
+        .map(
+          (k) =>
+            `<button class="link-button" data-load-draft="${esc(k)}">${esc(k.split("|").slice(1).join("｜"))}</button>`,
+        )
+        .join("　");
+    note.querySelectorAll("[data-load-draft]").forEach((b) => {
+      b.onclick = () => {
+        q("reportDraft").value = state.reportDrafts[b.dataset.loadDraft] || "";
+        draftDirty = true;
+        toast("已載入該範圍的草稿；按「儲存修改」才會存到目前範圍");
+      };
+    });
   }
   const onRangeChange = () => {
     deliveryRangeTouched = true;
