@@ -1,158 +1,2153 @@
-const DB='TrafficLOSWebV2',STORE='app',KEY='state';
-document.head.insertAdjacentHTML('beforeend','<style>.project-switch{margin-left:auto;margin-right:10px;max-width:310px;border:1px solid #dce5ea;border-radius:7px;background:#fff;padding:8px 10px;font:inherit;color:#17354d}@media(max-width:650px){.project-switch{max-width:145px}.blank-badge{display:none}}</style>');
-const DEFAULT_LOS_RULE={A:.8,B:.6,C:.5,D:.4,E:.2};
-const emptyState=()=>({version:10,projects:[],activeCode:'',details:[],summaries:[],limits:{},limitConfirmed:{},aliases:{},roadMeta:{},speedVersions:{},anomalyRules:{},reportDrafts:{},operations:[],losRules:{},imports:[],last:{year:'',quarter:'2',time:''},manager:[]});
-let state=emptyState(),pending=[],healthIssues=[];
-const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const num=v=>{if(v==null||String(v).trim()==='')return null;const n=Number(v);return Number.isFinite(n)?n:null}, fmt=(v,d=2)=>v==null?'—':Number(v).toFixed(d).replace(/\.00$/,'');
-const activeProject=()=>state.projects.find(p=>p.code===state.activeCode)||null;
-function openDB(){return new Promise((ok,no)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE);r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)})}
-function isLegacyLosRule(x){return x&&x.A===.9&&x.B===.7&&x.C===.5&&x.D===.4&&x.E===.3}
-function migrateLosRules(){state.losRules=state.losRules||{};state.roadMeta=state.roadMeta||{};state.limitConfirmed=state.limitConfirmed||{};state.speedVersions=state.speedVersions||{};state.anomalyRules=state.anomalyRules||{};state.reportDrafts=state.reportDrafts||{};state.operations=state.operations||[];for(const [code,rule] of Object.entries(state.losRules))if(isLegacyLosRule(rule))delete state.losRules[code];state.version=10}
-async function load(){try{const db=await openDB();state=await new Promise((ok,no)=>{const r=db.transaction(STORE).objectStore(STORE).get(KEY);r.onsuccess=()=>ok(r.result||emptyState());r.onerror=()=>no(r.error)});if(state.project&&!state.projects){state.projects=state.project.code?[state.project]:[];state.activeCode=state.project.code;delete state.project}state={...emptyState(),...state};migrateLosRules();rebuild()}catch{state=emptyState()} renderAll()}
-async function save(){const db=await openDB();await new Promise((ok,no)=>{const r=db.transaction(STORE,'readwrite').objectStore(STORE).put(state,KEY);r.onsuccess=()=>ok();r.onerror=()=>no(r.error)});renderAll()}
-function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
-const titles={home:'操作首頁',setup:'計畫設定',import:'尖峰批次匯入',detail:'尖峰明細',summary:'尖峰彙總',roadadmin:'路段管理',speed:'路段速限',charts:'LOS 圖表',manager:'Manager 比較',importlog:'匯入紀錄',maintenance:'資料維護',backup:'備份與淨空',guide:'新手說明'};
-function go(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===id));$('headTitle').textContent=titles[id]||id;document.querySelector('aside').classList.remove('open');scrollTo(0,0);if(id==='charts')renderCharts()}
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(b.dataset.view));document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));$('menu').onclick=()=>document.querySelector('aside').classList.toggle('open');
-document.querySelector('.brand small').textContent='最終版 v2.5';document.querySelector('.blank-badge').textContent='瀏覽器本機資料庫';
-const printGuide=document.createElement('button');printGuide.className='outline';printGuide.textContent='列印／另存 PDF';document.querySelector('#guide .title').append(printGuide);printGuide.onclick=()=>window.print();
-const manual=document.createElement('div');manual.className='manual';manual.innerHTML=`<article class="panel manual-intro"><span class="eyebrow">完整工作流程</span><h2>Project 建置 → 資料檢查 → Manager 比較</h2><p>Project 是每位同事各自管理的計畫資料；Manager 只接收確認完成的 Project 專案包。兩者分開可避免尚未確認的資料被拿去跨計畫比較。</p></article><div class="manual-grid"><article class="panel"><h3>一、第一次建立 Project</h3><ol><li>進入「計畫設定」，輸入公司計畫編號與完整名稱。</li><li>按「儲存計畫設定」，並確認頁面上方中央顯示正確計畫。</li><li>同一位使用者可建立任意數量計畫，之後從上方選單切換。</li></ol></article><article class="panel"><h3>二、每一季度匯入</h3><ol><li>進入「尖峰批次匯入」，輸入民國年與季度。</li><li>一次選取同一季度的平日、假日 Excel。</li><li>按「讀取並預覽」；每份正常檔案應有4筆。</li><li>確認沒有錯誤或未確認新路段，再按「確認寫入尖峰明細」。</li></ol></article><article class="panel"><h3>三、速限與 LOS</h3><ol><li>進入「路段速限」，核對方向1、方向2的公告速限。</li><li>預設為50 km/h；快慢車道速限不同時，依實際調查車流所使用的道路／車道設定。</li><li>按「套用並重算 LOS」。</li><li>代表值先比較4筆LOS與速限比，再將同一筆紀錄的旅行速率、行駛速率及總延滯一起帶入。</li></ol></article><article class="panel"><h3>四、檢查與圖表判讀</h3><ul><li><b>尖峰明細：</b>查看每路段、日別、上午／下午及兩方向的原始4筆結果。</li><li><b>尖峰彙總：</b>查看每路段日別的最差代表紀錄。</li><li><b>LOS圖表：</b>每路段一張圖，比較歷季平日與假日變化。</li><li><b>資料維護：</b>檢查名稱、4筆資料組、平假日及數值完整性。</li></ul></article><article class="panel"><h3>五、資料錯誤時</h3><ul><li>剛完成的錯誤匯入：到「匯入紀錄」按復原。</li><li>整季需重做：到「資料維護」選擇季度，備份後刪除，再重新匯入。</li><li>路段名稱不一致：到「路段速限」使用「路段名稱修改／合併」。</li><li>疑似新路段：預覽時先判斷是新路段或名稱差異，不確定時不要寫入。</li></ul></article><article class="panel"><h3>六、同步到 Manager</h3><ol><li>確認Project健康檢查通過。</li><li>進入「備份與淨空」，下載目前Project專案包。</li><li>進入「Manager比較」，匯入該JSON專案包。</li><li>相同計畫編號會更新，不會重複新增。</li><li>選擇計畫、季度、日別或LOS，查看表格與全路段趨勢圖。</li></ol></article><article class="panel"><h3>七、多人協作方式</h3><p>每位同事在自己的瀏覽器管理任意數量Project，定期交付Project專案包。管理者把各同事的專案包匯入Manager，即可統一比較；彼此的Project原始資料不會互相覆蓋。</p></article><article class="panel"><h3>八、備份與安全</h3><ul><li>每完成一季，下載一次Project專案包。</li><li>換電腦、清除瀏覽器資料或瀏覽器重設前，一定要先備份。</li><li>資料儲存在目前瀏覽器；同一網址在另一台電腦開啟，不會自動看到本機資料。</li><li>專案包支援還原，也可交給Manager使用。</li></ul></article><article class="panel"><h3>九、舊版 Excel 相容</h3><p>支援 .xls、.xlsx、.xlsm，以及「上午尖峰／下午尖峰」、「上午／下午」、AM／PM與名稱前後空白。若顯示欄位缺值，先用Excel開啟原始檔、重新計算並儲存，再回網頁預覽。</p></article><article class="panel"><h3>十、每季完成檢核</h3><ol><li>每份檔案4筆且失敗0。</li><li>路段速限已核對並重算。</li><li>健康檢查三項為0。</li><li>彙總代表值三項數值來自同一筆。</li><li>圖表路段數正確。</li><li>已下載Project專案包並更新Manager。</li></ol></article></div>`;document.querySelector('#guide .warning').before(manual);
+const DB = "TrafficLOSWebV2",
+  STORE = "app",
+  KEY = "state";
+document.head.insertAdjacentHTML(
+  "beforeend",
+  "<style>.project-switch{margin-left:auto;margin-right:10px;max-width:310px;border:1px solid #dce5ea;border-radius:7px;background:#fff;padding:8px 10px;font:inherit;color:#17354d}@media(max-width:650px){.project-switch{max-width:145px}.blank-badge{display:none}}</style>",
+);
+const DEFAULT_LOS_RULE = { A: 0.8, B: 0.6, C: 0.5, D: 0.4, E: 0.2 };
+const emptyState = () => ({
+  version: 10,
+  projects: [],
+  activeCode: "",
+  details: [],
+  summaries: [],
+  limits: {},
+  limitConfirmed: {},
+  aliases: {},
+  roadMeta: {},
+  speedVersions: {},
+  anomalyRules: {},
+  reportDrafts: {},
+  operations: [],
+  losRules: {},
+  imports: [],
+  last: { year: "", quarter: "2", time: "" },
+  manager: [],
+});
+let state = emptyState(),
+  pending = [],
+  /** 預覽當下的民國年／季度／計畫，確認寫入時一律以這一份為準 */
+  pendingContext = null,
+  healthIssues = [];
+const $ = (id) => document.getElementById(id),
+  esc = (s) =>
+    String(s ?? "").replace(
+      /[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+    );
+const num = (v) => {
+    if (v == null || String(v).trim() === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  },
+  fmt = (v, d = 2) => (v == null ? "—" : Number(v).toFixed(d).replace(/\.00$/, ""));
+const activeProject = () => state.projects.find((p) => p.code === state.activeCode) || null;
+function openDB() {
+  return new Promise((ok, no) => {
+    const r = indexedDB.open(DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => no(r.error);
+  });
+}
+function isLegacyLosRule(x) {
+  return x && x.A === 0.9 && x.B === 0.7 && x.C === 0.5 && x.D === 0.4 && x.E === 0.3;
+}
+function migrateLosRules() {
+  state.losRules = state.losRules || {};
+  state.roadMeta = state.roadMeta || {};
+  state.limitConfirmed = state.limitConfirmed || {};
+  state.speedVersions = state.speedVersions || {};
+  state.anomalyRules = state.anomalyRules || {};
+  state.reportDrafts = state.reportDrafts || {};
+  state.operations = state.operations || [];
+  // 只在「從舊版本升上來」時清掉那組舊預設值。舊版是看數值判斷，
+  // 使用者若真的想用 A.9/B.7/C.5/D.4/E.3（這是實務上存在的門檻表），
+  // 每次載入都會被當成舊資料清掉，整個計畫的服務水準悄悄變樣。
+  if ((Number(state.version) || 0) < 10)
+    for (const [code, rule] of Object.entries(state.losRules))
+      if (isLegacyLosRule(rule)) delete state.losRules[code];
+  state.version = 10;
+}
+async function load() {
+  try {
+    const db = await openDB();
+    state = await new Promise((ok, no) => {
+      const r = db.transaction(STORE).objectStore(STORE).get(KEY);
+      r.onsuccess = () => ok(r.result || emptyState());
+      r.onerror = () => no(r.error);
+    });
+    if (state.project && !state.projects) {
+      state.projects = state.project.code ? [state.project] : [];
+      state.activeCode = state.project.code;
+      delete state.project;
+    }
+    state = { ...emptyState(), ...state };
+    migrateLosRules();
+    rebuild();
+  } catch {
+    state = emptyState();
+  }
+  renderAll();
+}
+// 存檔失敗（無痕模式、容量已滿、磁碟已滿）若無聲無息，
+// 畫面看起來一切正常，實際上什麼都沒寫進去。這裡統一攔下來提醒使用者。
+addEventListener("unhandledrejection", (event) => {
+  const message = event.reason?.message || String(event.reason || "");
+  toast(`儲存失敗，這次的變更沒有寫入：${message || "請確認瀏覽器儲存空間"}`);
+});
+async function save() {
+  const db = await openDB();
+  await new Promise((ok, no) => {
+    const r = db.transaction(STORE, "readwrite").objectStore(STORE).put(state, KEY);
+    r.onsuccess = () => ok();
+    r.onerror = () => no(r.error);
+  });
+  renderAll();
+}
+function toast(t) {
+  $("toast").textContent = t;
+  $("toast").classList.add("show");
+  setTimeout(() => $("toast").classList.remove("show"), 2600);
+}
+const titles = {
+  home: "操作首頁",
+  setup: "計畫設定",
+  import: "尖峰批次匯入",
+  detail: "尖峰明細",
+  summary: "尖峰彙總",
+  roadadmin: "路段管理",
+  speed: "路段速限",
+  charts: "LOS 圖表",
+  manager: "Manager 比較",
+  importlog: "匯入紀錄",
+  maintenance: "資料維護",
+  backup: "備份與淨空",
+  guide: "新手說明",
+};
+function go(id) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === id));
+  document
+    .querySelectorAll("nav button")
+    .forEach((b) => b.classList.toggle("active", b.dataset.view === id));
+  $("headTitle").textContent = titles[id] || id;
+  document.querySelector("aside").classList.remove("open");
+  scrollTo(0, 0);
+  if (id === "charts") renderCharts();
+}
+document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
+document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
+$("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
+document.querySelector(".brand small").textContent = "正式版 v2.6";
+document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
+const printGuide = document.createElement("button");
+printGuide.className = "outline";
+printGuide.textContent = "列印／另存 PDF";
+document.querySelector("#guide .title").append(printGuide);
+printGuide.onclick = () => window.print();
+// 完整版新手使用手冊（PDF 與可編輯 Word），與網站一起發佈。
+const manualLinks = document.createElement("div");
+manualLinks.className = "manual-download";
+manualLinks.innerHTML =
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.6.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.6.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+document.querySelector("#guide .title").append(manualLinks);
+const manual = document.createElement("div");
+manual.className = "manual";
+manual.innerHTML = `<article class="panel manual-intro"><span class="eyebrow">完整工作流程</span><h2>Project 建置 → 資料檢查 → Manager 比較</h2><p>Project 是每位同事各自管理的計畫資料；Manager 只接收確認完成的 Project 專案包。兩者分開可避免尚未確認的資料被拿去跨計畫比較。</p></article><div class="manual-grid"><article class="panel"><h3>一、第一次建立 Project</h3><ol><li>進入「計畫設定」，輸入公司計畫編號與完整名稱。</li><li>按「儲存計畫設定」，並確認頁面上方中央顯示正確計畫。</li><li>同一位使用者可建立任意數量計畫，之後從上方選單切換。</li></ol></article><article class="panel"><h3>二、每一季度匯入</h3><ol><li>進入「尖峰批次匯入」，輸入民國年與季度。</li><li>一次選取同一季度的平日、假日 Excel。</li><li>按「讀取並預覽」；每份正常檔案應有4筆。</li><li>確認沒有錯誤或未確認新路段，再按「確認寫入尖峰明細」。</li></ol></article><article class="panel"><h3>三、速限與 LOS</h3><ol><li>進入「路段速限」，核對方向1、方向2的公告速限。</li><li>預設為50 km/h；快慢車道速限不同時，依實際調查車流所使用的道路／車道設定。</li><li>按「套用並重算 LOS」。</li><li>代表值先比較4筆LOS與速限比，再將同一筆紀錄的旅行速率、行駛速率及總延滯一起帶入。</li></ol></article><article class="panel"><h3>四、檢查與圖表判讀</h3><ul><li><b>尖峰明細：</b>查看每路段、日別、上午／下午及兩方向的原始4筆結果。</li><li><b>尖峰彙總：</b>查看每路段日別的最差代表紀錄。</li><li><b>LOS圖表：</b>每路段一張圖，比較歷季平日與假日變化。</li><li><b>資料維護：</b>檢查名稱、4筆資料組、平假日及數值完整性。</li></ul></article><article class="panel"><h3>五、資料錯誤時</h3><ul><li>剛完成的錯誤匯入：到「匯入紀錄」按復原。</li><li>整季需重做：到「資料維護」選擇季度，備份後刪除，再重新匯入。</li><li>路段名稱不一致：到「路段速限」使用「路段名稱修改／合併」。</li><li>疑似新路段：預覽時先判斷是新路段或名稱差異，不確定時不要寫入。</li></ul></article><article class="panel"><h3>六、同步到 Manager</h3><ol><li>確認Project健康檢查通過。</li><li>進入「備份與淨空」，下載目前Project專案包。</li><li>進入「Manager比較」，匯入該JSON專案包。</li><li>相同計畫編號會更新，不會重複新增。</li><li>選擇計畫、季度、日別或LOS，查看表格與全路段趨勢圖。</li></ol></article><article class="panel"><h3>七、多人協作方式</h3><p>每位同事在自己的瀏覽器管理任意數量Project，定期交付Project專案包。管理者把各同事的專案包匯入Manager，即可統一比較；彼此的Project原始資料不會互相覆蓋。</p></article><article class="panel"><h3>八、備份與安全</h3><ul><li>每完成一季，下載一次Project專案包。</li><li>換電腦、清除瀏覽器資料或瀏覽器重設前，一定要先備份。</li><li>資料儲存在目前瀏覽器；同一網址在另一台電腦開啟，不會自動看到本機資料。</li><li>專案包支援還原，也可交給Manager使用。</li></ul></article><article class="panel"><h3>九、舊版 Excel 相容</h3><p>支援 .xls、.xlsx、.xlsm，以及「上午尖峰／下午尖峰」、「上午／下午」、AM／PM與名稱前後空白。若顯示欄位缺值，先用Excel開啟原始檔、重新計算並儲存，再回網頁預覽。</p></article><article class="panel"><h3>十、每季完成檢核</h3><ol><li>每份檔案4筆且失敗0。</li><li>路段速限已核對並重算。</li><li>健康檢查三項為0。</li><li>彙總代表值三項數值來自同一筆。</li><li>圖表路段數正確。</li><li>已下載Project專案包並更新Manager。</li></ol></article></div>`;
+document.querySelector("#guide .warning").before(manual);
 
 // Manager is a separate local workspace. Project packages are imported explicitly.
-const managerButton=document.createElement('button');managerButton.dataset.view='manager';managerButton.textContent='Manager 比較';document.querySelector('nav button[data-view="charts"]').after(managerButton);managerButton.onclick=()=>go('manager');
-const managerSection=document.createElement('section');managerSection.id='manager';managerSection.className='view';managerSection.innerHTML=`<div class="title"><div><span class="eyebrow">MANAGER EDITION</span><h2>跨計畫比較</h2><p>由各同事匯出 Project 專案包，再由管理者匯入；相同計畫編號會更新，不會重複累加。</p></div><label class="primary upload">匯入 Project 專案包<input id="managerFiles" type="file" multiple accept=".json"></label></div><div class="metrics"><article><span>已載入計畫</span><b id="managerProjects">0</b><small>專案包</small></article><article><span>篩選後資料</span><b id="managerRecords">0</b><small>路段日別彙總</small></article><article><span>篩選後路段</span><b id="managerRoads">0</b><small>計畫內去除重複</small></article><article><span>資料期間</span><b id="managerPeriod">—</b><small>篩選結果</small></article></div><div class="panel"><div class="panel-head"><div><h3>已匯入 Project 專案包</h3><small>可個別移除，不影響同事原始 Project</small></div><button class="outline" id="clearManager">全部清除</button></div><div class="table-wrap"><table><thead><tr><th>計畫編號</th><th>計畫名稱</th><th>彙總筆數</th><th>匯入／更新時間</th><th>操作</th></tr></thead><tbody id="managerPackageRows"></tbody></table></div></div><div class="panel manager-data"><div class="manager-filters"><select id="managerProjectFilter"><option value="">全部計畫</option></select><select id="managerPeriodFilter"><option value="">全部季度</option></select><select id="managerDayFilter"><option value="">全部日別</option><option>平日</option><option>假日</option></select><select id="managerLosFilter"><option value="">全部 LOS</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select><input id="managerSearch" placeholder="搜尋路段或計畫"><button class="outline" id="resetManagerFilters">清除篩選</button><button class="primary" id="exportManager">匯出篩選結果</button></div><div class="table-wrap"><table><thead><tr><th>計畫</th><th>期間</th><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>總延滯</th><th>LOS</th></tr></thead><tbody id="managerRows"></tbody></table></div></div><div class="title manager-chart-title"><div><span class="eyebrow">MANAGER CHARTS</span><h2>計畫全路段 LOS 趨勢</h2><p>先於上方選擇一個計畫，再依目前季度、日別及 LOS 篩選產生每路段一張圖。</p></div></div><div id="managerChartHint" class="panel empty-block">請先選擇一個計畫，避免一次載入過多圖表。</div><div id="managerChartGrid" class="chart-grid"></div>`;document.querySelector('#backup').before(managerSection);
-const projectSpeedTitle=document.createElement('div');projectSpeedTitle.className='title speed-chart-title';projectSpeedTitle.innerHTML='<div><span class="eyebrow">TRAVEL SPEED</span><h2>各路段歷季旅行速率</h2><p>每路段一張圖，平日與假日分色，數值單位為 km/h。</p></div><button class="primary" id="exportProjectCharts">匯出可編輯Excel圖表</button>';const projectSpeedGrid=document.createElement('div');projectSpeedGrid.id='speedTrendGrid';projectSpeedGrid.className='chart-grid';$('chartGrid').after(projectSpeedTitle,projectSpeedGrid);
-const managerSpeedTitle=document.createElement('div');managerSpeedTitle.className='title speed-chart-title';managerSpeedTitle.innerHTML='<div><span class="eyebrow">TRAVEL SPEED</span><h2>計畫全路段旅行速率趨勢</h2><p>依上方Manager篩選條件，顯示各路段歷季旅行速率（km/h）。</p></div><button class="primary" id="exportManagerCharts">匯出篩選後Excel圖表</button>';const managerSpeedGrid=document.createElement('div');managerSpeedGrid.id='managerSpeedTrendGrid';managerSpeedGrid.className='chart-grid';$('managerChartGrid').after(managerSpeedTitle,managerSpeedGrid);
-document.querySelector('#charts>.title').insertAdjacentHTML('beforeend','<button class="primary" id="exportProjectLos">匯出可編輯LOS Excel圖表</button>');document.querySelector('.manager-chart-title').insertAdjacentHTML('beforeend','<button class="primary" id="exportManagerLos">匯出篩選後LOS Excel圖表</button>');
-function setHeaders(selector,labels){document.querySelectorAll(`${selector} thead th`).forEach((th,i)=>{if(labels[i])th.textContent=labels[i]})}
-setHeaders('#detail',['期間','路段','日別','尖峰','方向','旅行速率（km/h）','行駛速率（km/h）','總延滯（秒）','速限（km/h）','LOS']);setHeaders('#summary',['期間','路段','日別','代表尖峰','代表方向','旅行速率（km/h）','行駛速率（km/h）','總延滯（秒）','速限比','LOS']);setHeaders('#manager .manager-data',['計畫','期間','路段','日別','代表尖峰','方向','旅行速率（km/h）','總延滯（秒）','LOS']);
-$('exportProjectCharts').onclick=async()=>{const p=activeProject(),rows=state.summaries.filter(x=>x.projectCode===state.activeCode);if(!p||!rows.length)return toast('目前計畫沒有可匯出的旅行速率資料');try{await exportTravelWorkbook(rows,`${p.code}_${p.name}_旅行速率趨勢圖.xlsx`);toast('可編輯Excel圖表已下載')}catch(e){toast(e.message||'Excel匯出失敗')}};
-$('exportManagerCharts').onclick=async()=>{const project=$('managerProjectFilter').value,rows=managerFilteredRows();if(!project)return toast('請先選擇一個計畫');if(!rows.length)return toast('目前篩選條件沒有可匯出資料');try{await exportTravelWorkbook(rows,`Manager_${project}_旅行速率趨勢圖.xlsx`);toast('Manager Excel圖表已下載')}catch(e){toast(e.message||'Excel匯出失敗')}};
-$('exportProjectLos').onclick=async()=>{const p=activeProject(),rows=state.summaries.filter(x=>x.projectCode===state.activeCode);if(!p||!rows.length)return toast('目前計畫沒有可匯出的LOS資料');try{await exportLosWorkbook(rows,`${p.code}_${p.name}_LOS趨勢圖.xlsx`);toast('可編輯LOS Excel圖表已下載')}catch(e){toast(e.message||'LOS Excel匯出失敗')}};$('exportManagerLos').onclick=async()=>{const project=$('managerProjectFilter').value,rows=managerFilteredRows();if(!project)return toast('請先選擇一個計畫');if(!rows.length)return toast('目前篩選條件沒有可匯出資料');try{await exportLosWorkbook(rows,`Manager_${project}_LOS趨勢圖.xlsx`);toast('Manager LOS Excel圖表已下載')}catch(e){toast(e.message||'LOS Excel匯出失敗')}};
-const logButton=document.createElement('button');logButton.dataset.view='importlog';logButton.textContent='匯入紀錄';document.querySelector('nav button[data-view="manager"]').after(logButton);logButton.onclick=()=>go('importlog');
-const logSection=document.createElement('section');logSection.id='importlog';logSection.className='view';logSection.innerHTML=`<div class="title"><div><span class="eyebrow">AUDIT & ROLLBACK</span><h2>匯入批次紀錄</h2><p>每次正式寫入都保留新增、更新、略過與復原資訊。</p></div></div><div class="panel"><div class="filters"><span id="importLogCount">0 個批次</span></div><div class="table-wrap"><table><thead><tr><th>匯入時間</th><th>計畫</th><th>期間</th><th>檔案</th><th>新增</th><th>更新</th><th>略過</th><th>狀態</th><th>操作</th></tr></thead><tbody id="importLogRows"></tbody></table></div></div>`;document.querySelector('#backup').before(logSection);
-const maintenanceButton=document.createElement('button');maintenanceButton.dataset.view='maintenance';maintenanceButton.textContent='資料維護';document.querySelector('nav button[data-view="backup"]').before(maintenanceButton);maintenanceButton.onclick=()=>go('maintenance');
-const maintenanceSection=document.createElement('section');maintenanceSection.id='maintenance';maintenanceSection.className='view';maintenanceSection.innerHTML=`<div class="title"><div><span class="eyebrow">MAINTENANCE</span><h2>資料維護與健康檢查</h2><p>匯錯季度可整季刪除重匯；健康檢查只列出需要注意的資料。</p></div><button class="primary" id="runHealth">執行健康檢查</button></div><div class="two"><article class="panel form"><h3>刪除單一季度</h3><p class="muted">執行前會先下載目前 Project 專案包，刪除後可從匯入紀錄還原。</p><label>選擇季度<select id="deletePeriod"></select></label><div class="note" id="deleteImpact">目前沒有可刪除的季度</div><button class="danger-button full" id="deleteQuarter" disabled>備份後刪除此季度</button></article><article class="panel"><h3>健康檢查摘要</h3><div class="metrics compact"><article><span>異常名稱</span><b id="healthNames">0</b></article><article><span>資料組不完整</span><b id="healthGroups">0</b></article><article><span>數值異常</span><b id="healthValues">0</b></article></div><button class="outline full" id="cleanSuffix" disabled>備份後修正明顯日期尾碼</button></article></div><div class="panel health-panel"><div class="filters"><b>檢查結果</b><span id="healthCount">尚未檢查</span></div><div class="table-wrap"><table><thead><tr><th>類型</th><th>期間</th><th>路段／項目</th><th>說明</th></tr></thead><tbody id="healthRows"><tr><td colspan="4" class="empty">按「執行健康檢查」開始</td></tr></tbody></table></div></div>`;document.querySelector('#backup').before(maintenanceSection);
-const policyBox=document.createElement('label');policyBox.style.display='block';policyBox.style.margin='14px 0';policyBox.innerHTML='重複資料處理<select id="duplicatePolicy" style="width:100%;margin-top:6px;padding:10px;border:1px solid #cbd7dd;border-radius:6px"><option value="update">更新既有資料（建議）</option><option value="skip">略過既有資料</option></select>';document.querySelector('#commit').before(policyBox);
-const projectSwitch=document.createElement('select');projectSwitch.id='projectSwitch';projectSwitch.className='project-switch';document.querySelector('header .blank-badge').before(projectSwitch);projectSwitch.onchange=async()=>{state.activeCode=projectSwitch.value;await save();toast('已切換計畫')};
-const projectPicker=document.createElement('label');projectPicker.innerHTML='目前計畫<select id="projectPicker"></select>';document.querySelector('#setup .form').prepend(projectPicker);$('projectPicker').onchange=()=>{const p=state.projects.find(x=>x.code===$('projectPicker').value);$('projectCode').value=p?.code||'';$('projectName').value=p?.name||''};
-const previewHead=document.querySelector('#previewRows').closest('table').querySelector('thead tr');previewHead.insertAdjacentHTML('beforeend','<th>路段判定</th>');
-const roadAlert=document.createElement('div');roadAlert.id='roadAlert';roadAlert.className='warning';roadAlert.style.display='none';document.querySelector('#previewRows').closest('.table-wrap').before(roadAlert);
-const renameBtn=document.createElement('button');renameBtn.className='outline';renameBtn.textContent='路段名稱修改／合併';document.querySelector('#speed .title').append(renameBtn);
+const managerButton = document.createElement("button");
+managerButton.dataset.view = "manager";
+managerButton.textContent = "Manager 比較";
+document.querySelector('nav button[data-view="charts"]').after(managerButton);
+managerButton.onclick = () => go("manager");
+const managerSection = document.createElement("section");
+managerSection.id = "manager";
+managerSection.className = "view";
+managerSection.innerHTML = `<div class="title"><div><span class="eyebrow">MANAGER EDITION</span><h2>跨計畫比較</h2><p>由各同事匯出 Project 專案包，再由管理者匯入；相同計畫編號會更新，不會重複累加。</p></div><label class="primary upload">匯入 Project 專案包<input id="managerFiles" type="file" multiple accept=".json"></label></div><div class="metrics"><article><span>已載入計畫</span><b id="managerProjects">0</b><small>專案包</small></article><article><span>篩選後資料</span><b id="managerRecords">0</b><small>路段日別彙總</small></article><article><span>篩選後路段</span><b id="managerRoads">0</b><small>計畫內去除重複</small></article><article><span>資料期間</span><b id="managerPeriod">—</b><small>篩選結果</small></article></div><div class="panel"><div class="panel-head"><div><h3>已匯入 Project 專案包</h3><small>可個別移除，不影響同事原始 Project</small></div><button class="outline" id="clearManager">全部清除</button></div><div class="table-wrap"><table><thead><tr><th>計畫編號</th><th>計畫名稱</th><th>彙總筆數</th><th>匯入／更新時間</th><th>操作</th></tr></thead><tbody id="managerPackageRows"></tbody></table></div></div><div class="panel manager-data"><div class="manager-filters"><select id="managerProjectFilter"><option value="">全部計畫</option></select><select id="managerPeriodFilter"><option value="">全部季度</option></select><select id="managerDayFilter"><option value="">全部日別</option><option>平日</option><option>假日</option></select><select id="managerLosFilter"><option value="">全部 LOS</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select><input id="managerSearch" placeholder="搜尋路段或計畫"><button class="outline" id="resetManagerFilters">清除篩選</button><button class="primary" id="exportManager">匯出篩選結果</button></div><div class="table-wrap"><table><thead><tr><th>計畫</th><th>期間</th><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>總延滯</th><th>LOS</th></tr></thead><tbody id="managerRows"></tbody></table></div></div><div class="title manager-chart-title"><div><span class="eyebrow">MANAGER CHARTS</span><h2>計畫全路段 LOS 趨勢</h2><p>先於上方選擇一個計畫，再依目前季度、日別及 LOS 篩選產生每路段一張圖。</p></div></div><div id="managerChartHint" class="panel empty-block">請先選擇一個計畫，避免一次載入過多圖表。</div><div id="managerChartGrid" class="chart-grid"></div>`;
+document.querySelector("#backup").before(managerSection);
+const projectSpeedTitle = document.createElement("div");
+projectSpeedTitle.className = "title speed-chart-title";
+projectSpeedTitle.innerHTML =
+  '<div><span class="eyebrow">TRAVEL SPEED</span><h2>各路段歷季旅行速率</h2><p>每路段一張圖，平日與假日分色，數值單位為 km/h。</p></div><button class="primary" id="exportProjectCharts">匯出可編輯Excel圖表</button>';
+const projectSpeedGrid = document.createElement("div");
+projectSpeedGrid.id = "speedTrendGrid";
+projectSpeedGrid.className = "chart-grid";
+$("chartGrid").after(projectSpeedTitle, projectSpeedGrid);
+const managerSpeedTitle = document.createElement("div");
+managerSpeedTitle.className = "title speed-chart-title";
+managerSpeedTitle.innerHTML =
+  '<div><span class="eyebrow">TRAVEL SPEED</span><h2>計畫全路段旅行速率趨勢</h2><p>依上方Manager篩選條件，顯示各路段歷季旅行速率（km/h）。</p></div><button class="primary" id="exportManagerCharts">匯出篩選後Excel圖表</button>';
+const managerSpeedGrid = document.createElement("div");
+managerSpeedGrid.id = "managerSpeedTrendGrid";
+managerSpeedGrid.className = "chart-grid";
+$("managerChartGrid").after(managerSpeedTitle, managerSpeedGrid);
+document
+  .querySelector("#charts>.title")
+  .insertAdjacentHTML(
+    "beforeend",
+    '<button class="primary" id="exportProjectLos">匯出可編輯LOS Excel圖表</button>',
+  );
+document
+  .querySelector(".manager-chart-title")
+  .insertAdjacentHTML(
+    "beforeend",
+    '<button class="primary" id="exportManagerLos">匯出篩選後LOS Excel圖表</button>',
+  );
+function setHeaders(selector, labels) {
+  document.querySelectorAll(`${selector} thead th`).forEach((th, i) => {
+    if (labels[i]) th.textContent = labels[i];
+  });
+}
+setHeaders("#detail", [
+  "期間",
+  "路段",
+  "日別",
+  "尖峰",
+  "方向",
+  "旅行速率（km/h）",
+  "行駛速率（km/h）",
+  "總延滯（秒）",
+  "速限（km/h）",
+  "LOS",
+]);
+setHeaders("#summary", [
+  "期間",
+  "路段",
+  "日別",
+  "代表尖峰",
+  "代表方向",
+  "旅行速率（km/h）",
+  "行駛速率（km/h）",
+  "總延滯（秒）",
+  "速限比",
+  "LOS",
+]);
+setHeaders("#manager .manager-data", [
+  "計畫",
+  "期間",
+  "路段",
+  "日別",
+  "代表尖峰",
+  "方向",
+  "旅行速率（km/h）",
+  "總延滯（秒）",
+  "LOS",
+]);
+$("exportProjectCharts").onclick = async () => {
+  const p = activeProject(),
+    rows = state.summaries.filter((x) => x.projectCode === state.activeCode);
+  if (!p || !rows.length) return toast("目前計畫沒有可匯出的旅行速率資料");
+  try {
+    await exportTravelWorkbook(rows, `${p.code}_${p.name}_旅行速率趨勢圖.xlsx`);
+    toast("可編輯Excel圖表已下載");
+  } catch (e) {
+    toast(e.message || "Excel匯出失敗");
+  }
+};
+$("exportManagerCharts").onclick = async () => {
+  const project = $("managerProjectFilter").value,
+    rows = managerFilteredRows();
+  if (!project) return toast("請先選擇一個計畫");
+  if (!rows.length) return toast("目前篩選條件沒有可匯出資料");
+  try {
+    await exportTravelWorkbook(rows, `Manager_${project}_旅行速率趨勢圖.xlsx`);
+    toast("Manager Excel圖表已下載");
+  } catch (e) {
+    toast(e.message || "Excel匯出失敗");
+  }
+};
+$("exportProjectLos").onclick = async () => {
+  const p = activeProject(),
+    rows = state.summaries.filter((x) => x.projectCode === state.activeCode);
+  if (!p || !rows.length) return toast("目前計畫沒有可匯出的LOS資料");
+  try {
+    await exportLosWorkbook(rows, `${p.code}_${p.name}_LOS趨勢圖.xlsx`);
+    toast("可編輯LOS Excel圖表已下載");
+  } catch (e) {
+    toast(e.message || "LOS Excel匯出失敗");
+  }
+};
+$("exportManagerLos").onclick = async () => {
+  const project = $("managerProjectFilter").value,
+    rows = managerFilteredRows();
+  if (!project) return toast("請先選擇一個計畫");
+  if (!rows.length) return toast("目前篩選條件沒有可匯出資料");
+  try {
+    await exportLosWorkbook(rows, `Manager_${project}_LOS趨勢圖.xlsx`);
+    toast("Manager LOS Excel圖表已下載");
+  } catch (e) {
+    toast(e.message || "LOS Excel匯出失敗");
+  }
+};
+const logButton = document.createElement("button");
+logButton.dataset.view = "importlog";
+logButton.textContent = "匯入紀錄";
+document.querySelector('nav button[data-view="manager"]').after(logButton);
+logButton.onclick = () => go("importlog");
+const logSection = document.createElement("section");
+logSection.id = "importlog";
+logSection.className = "view";
+logSection.innerHTML = `<div class="title"><div><span class="eyebrow">AUDIT & ROLLBACK</span><h2>匯入批次紀錄</h2><p>每次正式寫入都保留新增、更新、略過與復原資訊。</p></div></div><div class="panel"><div class="filters"><span id="importLogCount">0 個批次</span></div><div class="table-wrap"><table><thead><tr><th>匯入時間</th><th>計畫</th><th>期間</th><th>檔案</th><th>新增</th><th>更新</th><th>略過</th><th>狀態</th><th>操作</th></tr></thead><tbody id="importLogRows"></tbody></table></div></div>`;
+document.querySelector("#backup").before(logSection);
+const maintenanceButton = document.createElement("button");
+maintenanceButton.dataset.view = "maintenance";
+maintenanceButton.textContent = "資料維護";
+document.querySelector('nav button[data-view="backup"]').before(maintenanceButton);
+maintenanceButton.onclick = () => go("maintenance");
+const maintenanceSection = document.createElement("section");
+maintenanceSection.id = "maintenance";
+maintenanceSection.className = "view";
+maintenanceSection.innerHTML = `<div class="title"><div><span class="eyebrow">MAINTENANCE</span><h2>資料維護與健康檢查</h2><p>匯錯季度可整季刪除重匯；健康檢查只列出需要注意的資料。</p></div><button class="primary" id="runHealth">執行健康檢查</button></div><div class="two"><article class="panel form"><h3>刪除單一季度</h3><p class="muted">執行前會先下載目前 Project 專案包，刪除後可從匯入紀錄還原。</p><label>選擇季度<select id="deletePeriod"></select></label><div class="note" id="deleteImpact">目前沒有可刪除的季度</div><button class="danger-button full" id="deleteQuarter" disabled>備份後刪除此季度</button></article><article class="panel"><h3>健康檢查摘要</h3><div class="metrics compact"><article><span>異常名稱</span><b id="healthNames">0</b></article><article><span>資料組不完整</span><b id="healthGroups">0</b></article><article><span>數值異常</span><b id="healthValues">0</b></article></div><button class="outline full" id="cleanSuffix" disabled>備份後修正明顯日期尾碼</button></article></div><div class="panel health-panel"><div class="filters"><b>檢查結果</b><span id="healthCount">尚未檢查</span></div><div class="table-wrap"><table><thead><tr><th>類型</th><th>期間</th><th>路段／項目</th><th>說明</th></tr></thead><tbody id="healthRows"><tr><td colspan="4" class="empty">按「執行健康檢查」開始</td></tr></tbody></table></div></div>`;
+document.querySelector("#backup").before(maintenanceSection);
+const policyBox = document.createElement("label");
+policyBox.style.display = "block";
+policyBox.style.margin = "14px 0";
+policyBox.innerHTML =
+  '重複資料處理<select id="duplicatePolicy" style="width:100%;margin-top:6px;padding:10px;border:1px solid #cbd7dd;border-radius:6px"><option value="update">更新既有資料（建議）</option><option value="skip">略過既有資料</option></select>';
+document.querySelector("#commit").before(policyBox);
+const projectSwitch = document.createElement("select");
+projectSwitch.id = "projectSwitch";
+projectSwitch.className = "project-switch";
+document.querySelector("header .blank-badge").before(projectSwitch);
+function clearPendingPreview() {
+  // 預覽結果只對「預覽當下的那個計畫」有效。切換計畫、刪除計畫或全部清除之後
+  // 若還留著，按下確認寫入會把資料寫到別的計畫，甚至寫進已經不存在的計畫。
+  pending = [];
+  pendingContext = null;
+  healthIssues = [];
+  if (typeof roadAlert !== "undefined") roadAlert.style.display = "none";
+  if ($("commit")) $("commit").disabled = true;
+}
+projectSwitch.onchange = async () => {
+  state.activeCode = projectSwitch.value;
+  clearPendingPreview();
+  await save();
+  toast("已切換計畫");
+};
+const projectPicker = document.createElement("label");
+projectPicker.innerHTML = '目前計畫<select id="projectPicker"></select>';
+document.querySelector("#setup .form").prepend(projectPicker);
+$("projectPicker").onchange = () => {
+  const p = state.projects.find((x) => x.code === $("projectPicker").value);
+  $("projectCode").value = p?.code || "";
+  $("projectName").value = p?.name || "";
+  renderProjectSetupActions();
+};
+// 刪除計畫的入口放在「計畫設定」，使用者要刪計畫時第一個就會找這裡。
+const deleteProjectBtn = document.createElement("button");
+deleteProjectBtn.id = "deleteProject";
+deleteProjectBtn.className = "danger-button full";
+deleteProjectBtn.style.marginTop = "10px";
+deleteProjectBtn.textContent = "刪除這個計畫";
+$("saveProject").after(deleteProjectBtn);
+const deleteProjectHint = document.createElement("p");
+deleteProjectHint.className = "muted";
+deleteProjectHint.style.margin = "8px 0 0";
+deleteProjectHint.textContent =
+  "刪除會一併移除此計畫的所有季度資料、彙總、速限與別名；刪除前會自動下載一份專案包備份。";
+deleteProjectBtn.after(deleteProjectHint);
+function renderProjectSetupActions() {
+  const code = ($("projectCode").value || "").trim();
+  const exists = state.projects.some((x) => x.code === code);
+  deleteProjectBtn.disabled = !exists;
+  deleteProjectBtn.textContent = exists ? `刪除計畫「${code}」` : "刪除這個計畫";
+  deleteProjectHint.style.display = exists ? "" : "none";
+}
+deleteProjectBtn.onclick = () => {
+  const code = ($("projectCode").value || "").trim();
+  if (!state.projects.some((x) => x.code === code)) return toast("這個計畫尚未建立，沒有東西可刪除");
+  return deleteProjectFlow(code, { fromSetup: true });
+};
+$("projectCode").addEventListener("input", renderProjectSetupActions);
+const previewHead = document
+  .querySelector("#previewRows")
+  .closest("table")
+  .querySelector("thead tr");
+previewHead.insertAdjacentHTML("beforeend", "<th>路段判定</th>");
+const roadAlert = document.createElement("div");
+roadAlert.id = "roadAlert";
+roadAlert.className = "warning";
+roadAlert.style.display = "none";
+document.querySelector("#previewRows").closest(".table-wrap").before(roadAlert);
+const renameBtn = document.createElement("button");
+renameBtn.className = "outline";
+renameBtn.textContent = "路段名稱修改／合併";
+document.querySelector("#speed .title").append(renameBtn);
 
-const roadAdminButton=document.createElement('button');roadAdminButton.dataset.view='roadadmin';roadAdminButton.textContent='路段管理';document.querySelector('nav button[data-view="speed"]').before(roadAdminButton);roadAdminButton.onclick=()=>go('roadadmin');
-const roadAdminSection=document.createElement('section');roadAdminSection.id='roadadmin';roadAdminSection.className='view';roadAdminSection.innerHTML=`<div class="title"><div><span class="eyebrow">ROAD DIRECTORY</span><h2>路段管理</h2><p>集中管理正式名稱、方向名稱、檔名別名與重複路段。合併前會先顯示影響範圍。</p></div><button class="outline" id="roadAdminBackup">下載合併前備份</button></div><div class="metrics compact road-metrics"><article><span>正式路段</span><b id="roadCount">0</b></article><article><span>檔名別名</span><b id="aliasCount">0</b></article><article><span>涵蓋季度</span><b id="roadPeriodCount">0</b></article></div><div class="road-admin-grid"><article class="panel form"><h3>修改正式名稱</h3><label>目前路段<select id="renameRoad"></select></label><label>新的正式名稱<input id="formalRoadName" placeholder="例如：中正一路（民族路～民權路）"></label><button class="primary full" id="previewRename">預覽修改影響</button></article><article class="panel form"><h3>方向顯示名稱</h3><label>路段<select id="directionRoad"></select></label><div class="row"><label>方向A名稱<input id="directionA" placeholder="例如：東→西"></label><label>方向B名稱<input id="directionB" placeholder="例如：西→東"></label></div><button class="primary full" id="saveDirections">儲存方向名稱</button></article><article class="panel form"><h3>設定檔名別名</h3><label>檔名中可能出現的名稱<input id="aliasName" placeholder="例如：中正路"></label><label>自動對應正式路段<select id="aliasTarget"></select></label><button class="primary full" id="addAlias">新增或更新別名</button></article><article class="panel form"><h3>合併重複路段</h3><label>來源路段<select id="mergeSource"></select></label><label>合併至<select id="mergeTarget"></select></label><button class="outline full" id="previewMerge">顯示合併影響</button></article></div><div id="roadImpact" class="panel impact-panel"><b>尚未預覽修改</b><p>請先選擇路段並按「預覽」，系統不會立即改動資料。</p><button class="danger-button" id="confirmRoadChange" disabled>備份後確認執行</button></div><div class="panel"><div class="panel-head"><div><h3>正式路段清冊</h3><small>方向名稱只改變顯示，不改變原始方向鍵值。</small></div></div><div class="table-wrap"><table><thead><tr><th>正式路段</th><th>方向A</th><th>方向B</th><th>季度</th><th>明細筆數</th><th>別名數</th></tr></thead><tbody id="roadAdminRows"></tbody></table></div></div><div class="panel"><div class="panel-head"><div><h3>檔名別名清冊</h3><small>匯入時若檔名符合別名，會自動併入指定正式路段。</small></div></div><div class="table-wrap"><table><thead><tr><th>檔名別名</th><th>對應正式路段</th><th>操作</th></tr></thead><tbody id="aliasRows"></tbody></table></div></div>`;document.querySelector('#speed').before(roadAdminSection);
-const roadPeriodPanel=document.createElement('article');roadPeriodPanel.className='panel form road-period-panel';roadPeriodPanel.innerHTML=`<h3>路段有效期間</h3><p class="muted">開始季度空白時採第一次出現的季度；停止季度空白代表持續調查至目前最新季度。</p><div class="three"><label>路段<select id="periodRoad"></select></label><label>開始季度<input id="roadStartPeriod" placeholder="例如：114Q1"></label><label>停止季度<input id="roadEndPeriod" placeholder="例如：115Q4；持續調查可留白"></label></div><button class="primary" id="saveRoadPeriod">儲存有效期間</button>`;document.querySelector('#roadadmin .road-admin-grid').after(roadPeriodPanel);
-const qualityPanel=document.createElement('div');qualityPanel.className='panel quality-panel';qualityPanel.innerHTML=`<div class="panel-head"><div><h3>計畫資料品質總覽</h3><small>依路段有效期間檢查平假日、四筆尖峰方向、速限確認及相鄰季度異常變化。</small></div></div><div class="metrics compact quality-metrics"><article><span>缺少平假日</span><b id="qualityDay">0</b></article><article><span>缺少方向／尖峰</span><b id="qualityGroup">0</b></article><article><span>速限未確認</span><b id="qualitySpeed">0</b></article><article><span>異常變化</span><b id="qualityChange">0</b></article></div><div class="table-wrap"><table><thead><tr><th>類型</th><th>期間</th><th>路段／項目</th><th>說明</th></tr></thead><tbody id="qualityRows"><tr><td colspan="4" class="empty">按「執行健康檢查」產生品質總覽</td></tr></tbody></table></div>`;document.querySelector('#maintenance .health-panel').before(qualityPanel);
-renameBtn.onclick=()=>go('roadadmin');
+const roadAdminButton = document.createElement("button");
+roadAdminButton.dataset.view = "roadadmin";
+roadAdminButton.textContent = "路段管理";
+document.querySelector('nav button[data-view="speed"]').before(roadAdminButton);
+roadAdminButton.onclick = () => go("roadadmin");
+const roadAdminSection = document.createElement("section");
+roadAdminSection.id = "roadadmin";
+roadAdminSection.className = "view";
+roadAdminSection.innerHTML = `<div class="title"><div><span class="eyebrow">ROAD DIRECTORY</span><h2>路段管理</h2><p>集中管理正式名稱、方向名稱、檔名別名與重複路段。合併前會先顯示影響範圍。</p></div><button class="outline" id="roadAdminBackup">下載合併前備份</button></div><div class="metrics compact road-metrics"><article><span>正式路段</span><b id="roadCount">0</b></article><article><span>檔名別名</span><b id="aliasCount">0</b></article><article><span>涵蓋季度</span><b id="roadPeriodCount">0</b></article></div><div class="road-admin-grid"><article class="panel form"><h3>修改正式名稱</h3><label>目前路段<select id="renameRoad"></select></label><label>新的正式名稱<input id="formalRoadName" placeholder="例如：中正一路（民族路～民權路）"></label><button class="primary full" id="previewRename">預覽修改影響</button></article><article class="panel form"><h3>方向顯示名稱</h3><label>路段<select id="directionRoad"></select></label><div class="row"><label>方向A名稱<input id="directionA" placeholder="例如：東→西"></label><label>方向B名稱<input id="directionB" placeholder="例如：西→東"></label></div><button class="primary full" id="saveDirections">儲存方向名稱</button></article><article class="panel form"><h3>設定檔名別名</h3><label>檔名中可能出現的名稱<input id="aliasName" placeholder="例如：中正路"></label><label>自動對應正式路段<select id="aliasTarget"></select></label><button class="primary full" id="addAlias">新增或更新別名</button></article><article class="panel form"><h3>合併重複路段</h3><label>來源路段<select id="mergeSource"></select></label><label>合併至<select id="mergeTarget"></select></label><button class="outline full" id="previewMerge">顯示合併影響</button></article></div><div id="roadImpact" class="panel impact-panel"><b>尚未預覽修改</b><p>請先選擇路段並按「預覽」，系統不會立即改動資料。</p><button class="danger-button" id="confirmRoadChange" disabled>備份後確認執行</button></div><div class="panel"><div class="panel-head"><div><h3>正式路段清冊</h3><small>方向名稱只改變顯示，不改變原始方向鍵值。</small></div></div><div class="table-wrap"><table><thead><tr><th>正式路段</th><th>方向A</th><th>方向B</th><th>季度</th><th>明細筆數</th><th>別名數</th></tr></thead><tbody id="roadAdminRows"></tbody></table></div></div><div class="panel"><div class="panel-head"><div><h3>檔名別名清冊</h3><small>匯入時若檔名符合別名，會自動併入指定正式路段。</small></div></div><div class="table-wrap"><table><thead><tr><th>檔名別名</th><th>對應正式路段</th><th>操作</th></tr></thead><tbody id="aliasRows"></tbody></table></div></div>`;
+document.querySelector("#speed").before(roadAdminSection);
+const roadPeriodPanel = document.createElement("article");
+roadPeriodPanel.className = "panel form road-period-panel";
+roadPeriodPanel.innerHTML = `<h3>路段有效期間</h3><p class="muted">開始季度空白時採第一次出現的季度；停止季度空白代表持續調查至目前最新季度。</p><div class="three"><label>路段<select id="periodRoad"></select></label><label>開始季度<input id="roadStartPeriod" placeholder="例如：114Q1"></label><label>停止季度<input id="roadEndPeriod" placeholder="例如：115Q4；持續調查可留白"></label></div><button class="primary" id="saveRoadPeriod">儲存有效期間</button>`;
+document.querySelector("#roadadmin .road-admin-grid").after(roadPeriodPanel);
+const qualityPanel = document.createElement("div");
+qualityPanel.className = "panel quality-panel";
+qualityPanel.innerHTML = `<div class="panel-head"><div><h3>計畫資料品質總覽</h3><small>依路段有效期間檢查平假日、四筆尖峰方向、速限確認及相鄰季度異常變化。</small></div></div><div class="metrics compact quality-metrics"><article><span>缺少平假日</span><b id="qualityDay">0</b></article><article><span>缺少方向／尖峰</span><b id="qualityGroup">0</b></article><article><span>速限未確認</span><b id="qualitySpeed">0</b></article><article><span>異常變化</span><b id="qualityChange">0</b></article></div><div class="table-wrap"><table><thead><tr><th>類型</th><th>期間</th><th>路段／項目</th><th>說明</th></tr></thead><tbody id="qualityRows"><tr><td colspan="4" class="empty">按「執行健康檢查」產生品質總覽</td></tr></tbody></table></div>`;
+document.querySelector("#maintenance .health-panel").before(qualityPanel);
+renameBtn.onclick = () => go("roadadmin");
 
-function normalize(s){return String(s??'').normalize('NFKC').replace(/[\s　]/g,'').replace(/[﹙（]/g,'(').replace(/[﹚）]/g,')').replace(/[~〜∼]/g,'～').replace(/[‐‑‒–—―－]/g,'-').replace(/[，､]/g,',').replace(/[。．]/g,'.').replace(/[：]/g,':').replace(/[；]/g,';').replace(/[／]/g,'/')}
-function stripRoadSuffix(s){return normalize(s).replace(/[-－]?\(?\s*(平日|假日)\s*\)?(?:[-－]?(?:\d{2,3}(?:[.\-]\d{1,4}){1,2}|\d{4,8}))?$/,'')}
-function roadFromFile(name){let s=name.replace(/\.(xlsx?|xlsm)$/i,'');s=s.replace(/^\d+TS\d+-?\d+[-－]?/i,'');return stripRoadSuffix(s)}
-function dayFromFile(name){return name.includes('假日')?'假日':'平日'}
-function editDistance(a,b){a=normalize(a);b=normalize(b);const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
-function closestRoad(road,roads){let best=null;for(const x of roads){const score=1-editDistance(road,x)/Math.max(normalize(road).length,normalize(x).length,1);if(!best||score>best.score)best={road:x,score}}return best}
-function existingRoads(){return[...new Set(state.details.filter(d=>d.projectCode===state.activeCode).map(d=>d.road))]}
-function analyzeRoads(){const known=existingRoads(),seen=[...new Set(pending.filter(x=>x.ok).map(x=>x.road))],signatureMap={};for(const road of known)(signatureMap[roadSignature(road)]??=[]).push(road);for(const item of pending){item.roadChoice='';item.originalRoad=item.road;item.matchType='新路段';if(!item.ok)continue;if(known.includes(item.road)){item.matchType='完全相符';continue}if(!known.length)continue;const alias=state.aliases[`${state.activeCode}|${normalize(item.road)}`];if(alias&&known.includes(alias)){item.roadChoice=alias;item.matchType='別名相符';continue}const sameSignature=signatureMap[roadSignature(item.road)]||[];if(sameSignature.length===1){item.roadChoice=sameSignature[0];item.matchType='完全相符';continue}const near=closestRoad(item.road,known);item.matchType='疑似相符';item.roadAlert={near:near?.road||'',score:near?.score||0}}
- const hasNew=pending.some(x=>x.ok&&x.roadAlert);const missing=known.filter(x=>!seen.includes(x)&&!pending.some(p=>p.roadChoice===x));roadAlert.style.display=hasNew&&missing.length?'block':'none';roadAlert.innerHTML=hasNew&&missing.length?`<b>本次有疑似新路段；另有 ${missing.length} 個既有路段未出現</b><p>${missing.map(esc).join('、')}</p><small>請先確認疑似新路段是否為名稱差異；若確為新增路段，仍可繼續。</small>`:''}
-function rulesFor(code=state.activeCode){return{...DEFAULT_LOS_RULE,...(state.losRules?.[code]||{})}}
-function losOf(r,code=state.activeCode){const x=rulesFor(code);return r>=x.A?'A':r>=x.B?'B':r>=x.C?'C':r>=x.D?'D':r>=x.E?'E':'F'}
-const losRank={A:6,B:5,C:4,D:3,E:2,F:1};
-function matrix(wb,names){const targets=(Array.isArray(names)?names:[names]).map(normalize);let found=null;for(const target of targets){found=wb.SheetNames.find(n=>normalize(n)===target)||wb.SheetNames.find(n=>normalize(n).includes(target));if(found)break}return found?XLSX.utils.sheet_to_json(wb.Sheets[found],{header:1,raw:true,defval:null}):null}
-function metricAt(m,r,c){const own=String(m[r]?.[c]??'').match(/-?\d+(?:\.\d+)?/);if(own&&/[：:]/.test(String(m[r][c])))return +own[0];for(let dc=1;dc<=5;dc++){const n=num(m[r]?.[c+dc]);if(n!=null)return n}for(let dr=1;dr<=3;dr++)for(let dc=0;dc<=3;dc++){const n=num(m[r+dr]?.[c+dc]);if(n!=null)return n}return null}
-function findLabels(m,text){const a=[];for(let r=0;r<m.length;r++)for(let c=0;c<(m[r]?.length||0);c++)if(normalize(m[r][c]).includes(text))a.push({r,c});return a}
-function nearestMetric(m,row,text){let best=null;for(const p of findLabels(m,text)){const dist=Math.abs(p.r-row);if(dist<=3&&(!best||dist<best.dist))best={...p,dist}}return best?metricAt(m,best.r,best.c):null}
-function delayPart(m,row,text){let best=null;for(const p of findLabels(m,text)){if(p.r<=row&&(!best||p.r>best.r))best=p}if(!best)return null;for(let dr=1;dr<=Math.min(20,row-best.r);dr++){const n=num(m[best.r+dr]?.[best.c]);if(n!=null)return n}return null}
-function parsePeakSheet(m,peak){if(!m)return[];const travels=findLabels(m,'平均總旅行速率');return travels.slice(0,2).map((p,i)=>{const travel=metricAt(m,p.r,p.c),running=nearestMetric(m,p.r,'平均總行駛速率');const roadDelay=delayPart(m,p.r,'路段延滯'),junctionDelay=delayPart(m,p.r,'交叉口延滯');return{peak,direction:`方向${i+1}`,travel,running,roadDelay,junctionDelay,totalDelay:roadDelay==null&&junctionDelay==null?null:(roadDelay||0)+(junctionDelay||0)}})}
-async function parseFile(file,year,q,defSpeed){const p=activeProject();const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellFormula:false});const road=roadFromFile(file.name),day=dayFromFile(file.name),morning=matrix(wb,['上午尖峰','上午','AM尖峰','AM']),afternoon=matrix(wb,['下午尖峰','下午','PM尖峰','PM']);const rows=[...parsePeakSheet(morning,'上午尖峰'),...parsePeakSheet(afternoon,'下午尖峰')];for(const r of rows){const k=`${p.code}|${road}|${r.direction}`,limit=Number(state.limits[k]||defSpeed||50);Object.assign(r,{id:`${p.code}|${year}|Q${q}|${road}|${day}|${r.peak}|${r.direction}`,projectCode:p.code,projectName:p.name,year:+year,quarter:+q,period:`${year}Q${q}`,road,day,limit,ratio:r.travel==null?null:r.travel/limit,los:r.travel==null?'?':losOf(r.travel/limit),source:file.name})}const ok=rows.length===4&&rows.every(r=>r.travel!=null&&r.running!=null&&r.totalDelay!=null);const sheetError=!morning||!afternoon?'找不到上午／下午工作表（支援名稱：上午尖峰、下午尖峰、上午、下午、AM、PM）':'';return{file:file.name,road,day,rows,ok,error:ok?'':sheetError||(rows.length!==4?'無法辨識完整4筆尖峰方向資料':'速率或延滯欄位缺少數值')}}
-function rebuild(){const groups={};for(const d of state.details){d.los=d.ratio==null?'?':losOf(d.ratio,d.projectCode);const k=[d.projectCode,d.year,d.quarter,d.road,d.day].join('|');(groups[k]??=[]).push(d)}state.summaries=Object.values(groups).map(rows=>{const sorted=[...rows].sort((a,b)=>(losRank[a.los]||9)-(losRank[b.los]||9)||(a.ratio??9)-(b.ratio??9)||(a.travel??999)-(b.travel??999));const w=sorted[0];return{...w,detailCount:rows.length}})}
-function upsert(rows){const map=new Map(state.details.map(x=>[x.id,x]));rows.forEach(x=>map.set(x.id,x));state.details=[...map.values()];for(const d of rows){const k=`${d.projectCode}|${d.road}|${d.direction}`;if(!state.limits[k])state.limits[k]=d.limit}rebuild()}
+function normalize(s) {
+  return String(s ?? "")
+    .normalize("NFKC")
+    .replace(/[\s　]/g, "")
+    .replace(/[﹙（]/g, "(")
+    .replace(/[﹚）]/g, ")")
+    .replace(/[~〜∼]/g, "～")
+    .replace(/[‐‑‒–—―－]/g, "-")
+    .replace(/[，､]/g, ",")
+    .replace(/[。．]/g, ".")
+    .replace(/[：]/g, ":")
+    .replace(/[；]/g, ";")
+    .replace(/[／]/g, "/");
+}
+function stripRoadSuffix(s) {
+  return normalize(s).replace(
+    /[-－]?\(?\s*(平日|假日)\s*\)?(?:[-－]?(?:\d{2,3}(?:[.\-]\d{1,4}){1,2}|\d{4,8}))?$/,
+    "",
+  );
+}
+function roadFromFile(name) {
+  let s = name.replace(/\.(xlsx?|xlsm)$/i, "");
+  s = s.replace(/^\d+TS\d+-?\d+[-－]?/i, "");
+  return stripRoadSuffix(s);
+}
+function dayFromFile(name) {
+  return name.includes("假日") ? "假日" : "平日";
+}
+function editDistance(a, b) {
+  a = normalize(a);
+  b = normalize(b);
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+  return d[a.length][b.length];
+}
+function closestRoad(road, roads) {
+  let best = null;
+  for (const x of roads) {
+    const score =
+      1 - editDistance(road, x) / Math.max(normalize(road).length, normalize(x).length, 1);
+    if (!best || score > best.score) best = { road: x, score };
+  }
+  return best;
+}
+function existingRoads() {
+  return [
+    ...new Set(state.details.filter((d) => d.projectCode === state.activeCode).map((d) => d.road)),
+  ];
+}
+function analyzeRoads() {
+  const known = existingRoads(),
+    seen = [...new Set(pending.filter((x) => x.ok).map((x) => x.road))],
+    signatureMap = {};
+  for (const road of known) (signatureMap[roadSignature(road)] ??= []).push(road);
+  for (const item of pending) {
+    item.roadChoice = "";
+    item.originalRoad = item.road;
+    item.matchType = "新路段";
+    if (!item.ok) continue;
+    if (known.includes(item.road)) {
+      item.matchType = "完全相符";
+      continue;
+    }
+    if (!known.length) continue;
+    const alias = state.aliases[`${state.activeCode}|${normalize(item.road)}`];
+    if (alias && known.includes(alias)) {
+      item.roadChoice = alias;
+      item.matchType = "別名相符";
+      continue;
+    }
+    const sameSignature = signatureMap[roadSignature(item.road)] || [];
+    if (sameSignature.length === 1) {
+      item.roadChoice = sameSignature[0];
+      item.matchType = "完全相符";
+      continue;
+    }
+    const near = closestRoad(item.road, known);
+    item.matchType = "疑似相符";
+    item.roadAlert = { near: near?.road || "", score: near?.score || 0 };
+  }
+  const hasNew = pending.some((x) => x.ok && x.roadAlert);
+  const missing = known.filter(
+    (x) => !seen.includes(x) && !pending.some((p) => p.roadChoice === x),
+  );
+  roadAlert.style.display = hasNew && missing.length ? "block" : "none";
+  roadAlert.innerHTML =
+    hasNew && missing.length
+      ? `<b>本次有疑似新路段；另有 ${missing.length} 個既有路段未出現</b><p>${missing.map(esc).join("、")}</p><small>請先確認疑似新路段是否為名稱差異；若確為新增路段，仍可繼續。</small>`
+      : "";
+}
+function rulesFor(code = state.activeCode) {
+  return { ...DEFAULT_LOS_RULE, ...(state.losRules?.[code] || {}) };
+}
+function losOf(r, code = state.activeCode) {
+  const x = rulesFor(code);
+  return r >= x.A ? "A" : r >= x.B ? "B" : r >= x.C ? "C" : r >= x.D ? "D" : r >= x.E ? "E" : "F";
+}
+const losRank = { A: 6, B: 5, C: 4, D: 3, E: 2, F: 1 };
+function matrix(wb, names) {
+  const targets = (Array.isArray(names) ? names : [names]).map(normalize);
+  let found = null;
+  for (const target of targets) {
+    found =
+      wb.SheetNames.find((n) => normalize(n) === target) ||
+      wb.SheetNames.find((n) => normalize(n).includes(target));
+    if (found) break;
+  }
+  return found
+    ? XLSX.utils.sheet_to_json(wb.Sheets[found], { header: 1, raw: true, defval: null })
+    : null;
+}
+function metricAt(m, r, c) {
+  // 只有「冒號後面就是數字」才算標籤自帶數值。
+  // 舊版取整格文字的第一串數字，遇到「方向1平均總旅行速率：」「平均總旅行速率（07:30~08:30）」
+  // 這類寫法會把標籤裡的 1 或 7 當成速率讀進來，整份資料的 LOS 全部變成 F。
+  const label = String(m[r]?.[c] ?? "");
+  const inline = label.match(/[：:]\s*(-?\d+(?:\.\d+)?)\s*[^\d]*$/);
+  if (inline) return +inline[1];
+  for (let dc = 1; dc <= 5; dc++) {
+    const n = num(m[r]?.[c + dc]);
+    if (n != null) return n;
+  }
+  for (let dr = 1; dr <= 3; dr++)
+    for (let dc = 0; dc <= 3; dc++) {
+      const n = num(m[r + dr]?.[c + dc]);
+      if (n != null) return n;
+    }
+  return null;
+}
+function findLabels(m, text) {
+  const a = [];
+  for (let r = 0; r < m.length; r++)
+    for (let c = 0; c < (m[r]?.length || 0); c++)
+      if (normalize(m[r][c]).includes(text)) a.push({ r, c });
+  return a;
+}
+function nearestMetric(m, row, text) {
+  let best = null;
+  for (const p of findLabels(m, text)) {
+    const dist = Math.abs(p.r - row);
+    // 距離相同時要挑「在下方」的那個標籤。findLabels 由上往下掃，
+    // 舊版嚴格小於的比較會讓上一個方向的行駛速率被誤讀成這個方向的。
+    const better = !best || dist < best.dist || (dist === best.dist && p.r >= row);
+    if (dist <= 3 && better) best = { ...p, dist };
+  }
+  return best ? metricAt(m, best.r, best.c) : null;
+}
+/**
+ * 讀取某一個方向的延滯數值。
+ *
+ * 只在「這個方向自己的區塊」裡找標籤（區塊界線＝相鄰兩個平均總旅行速率標籤），
+ * 否則第二個方向會抓到第一個方向的延滯表，兩個方向拿到一模一樣的數字卻毫無警告。
+ * 區塊內找不到就回傳 null，讓這份檔案在預覽時明確報錯，而不是匯入錯的數值。
+ */
+function delayPart(m, row, text, bounds) {
+  const from = bounds?.from ?? 0;
+  const to = bounds?.to ?? m.length;
+  let best = null;
+  for (const p of findLabels(m, text)) {
+    if (p.r < from || p.r >= to) continue;
+    // 優先取「在速率標籤上方、且最靠近」的那一個；區塊內沒有才往下找。
+    if (p.r <= row) {
+      if (!best || best.r > row || p.r > best.r) best = p;
+    } else if (!best) best = p;
+  }
+  if (!best) return null;
+  const limit = Math.min(to - 1, best.r + 20);
+  for (let r = best.r + 1; r <= limit; r++) {
+    const n = num(m[r]?.[best.c]);
+    if (n != null) return n;
+  }
+  return null;
+}
+function parsePeakSheet(m, peak) {
+  if (!m) return [];
+  const travels = findLabels(m, "平均總旅行速率");
+  // 一張尖峰工作表應該剛好有兩個方向。多出來（例如另有一個雙向平均區塊）
+  // 或少於兩個時，寧可讓這份檔案在預覽時報錯，也不要用位置去猜哪兩個是方向1、2——
+  // 猜錯會把「雙向平均」當成方向1，真正最差的那個方向反而整個不見。
+  if (travels.length !== 2) return [];
+  return travels.map((p, i) => {
+    // 這個方向的區塊：從上一個速率標籤的下一列開始，到下一個速率標籤為止。
+    const previous = travels[i - 1];
+    const next = travels[i + 1];
+    const bounds = {
+      from: previous ? previous.r + 1 : 0,
+      to: next ? next.r : m.length,
+    };
+    const travel = metricAt(m, p.r, p.c),
+      running = nearestMetric(m, p.r, "平均總行駛速率");
+    const roadDelay = delayPart(m, p.r, "路段延滯", bounds),
+      junctionDelay = delayPart(m, p.r, "交叉口延滯", bounds);
+    return {
+      peak,
+      direction: `方向${i + 1}`,
+      travel,
+      running,
+      roadDelay,
+      junctionDelay,
+      // 路段延滯與交叉口延滯都是總延滯的必要組成，缺一不可。
+      // 舊版把讀不到的那一項當成 0，會讓總延滯嚴重低估卻照樣通過檢核。
+      totalDelay:
+        roadDelay == null || junctionDelay == null ? null : roadDelay + junctionDelay,
+    };
+  });
+}
+async function parseFile(file, year, q, defSpeed) {
+  const p = activeProject();
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellFormula: false });
+  const road = roadFromFile(file.name),
+    day = dayFromFile(file.name),
+    morning = matrix(wb, ["上午尖峰", "上午", "AM尖峰", "AM"]),
+    afternoon = matrix(wb, ["下午尖峰", "下午", "PM尖峰", "PM"]);
+  const rows = [...parsePeakSheet(morning, "上午尖峰"), ...parsePeakSheet(afternoon, "下午尖峰")];
+  for (const r of rows) {
+    const k = `${p.code}|${road}|${r.direction}`,
+      limit = Number(state.limits[k] || defSpeed || 50);
+    Object.assign(r, {
+      id: `${p.code}|${year}|Q${q}|${road}|${day}|${r.peak}|${r.direction}`,
+      projectCode: p.code,
+      projectName: p.name,
+      year: +year,
+      quarter: +q,
+      period: `${year}Q${q}`,
+      road,
+      day,
+      limit,
+      ratio: r.travel == null ? null : r.travel / limit,
+      los: r.travel == null ? "?" : losOf(r.travel / limit),
+      source: file.name,
+    });
+  }
+  const ok =
+    rows.length === 4 &&
+    rows.every((r) => r.travel != null && r.running != null && r.totalDelay != null);
+  const sheetError =
+    !morning || !afternoon
+      ? "找不到上午／下午工作表（支援名稱：上午尖峰、下午尖峰、上午、下午、AM、PM）"
+      : "";
+  return {
+    file: file.name,
+    road,
+    day,
+    rows,
+    ok,
+    error: ok
+      ? ""
+      : sheetError ||
+        (rows.length !== 4 ? "無法辨識完整4筆尖峰方向資料" : "速率或延滯欄位缺少數值"),
+  };
+}
+function rebuild() {
+  const groups = {};
+  for (const d of state.details) {
+    d.los = d.ratio == null ? "?" : losOf(d.ratio, d.projectCode);
+    const k = [d.projectCode, d.year, d.quarter, d.road, d.day].join("|");
+    (groups[k] ??= []).push(d);
+  }
+  state.summaries = Object.values(groups).map((rows) => {
+    const sorted = [...rows].sort(
+      (a, b) =>
+        (losRank[a.los] || 9) - (losRank[b.los] || 9) ||
+        (a.ratio ?? 9) - (b.ratio ?? 9) ||
+        (a.travel ?? 999) - (b.travel ?? 999),
+    );
+    const w = sorted[0];
+    return { ...w, detailCount: rows.length };
+  });
+}
+function upsert(rows) {
+  const map = new Map(state.details.map((x) => [x.id, x]));
+  rows.forEach((x) => map.set(x.id, x));
+  state.details = [...map.values()];
+  for (const d of rows) {
+    const k = `${d.projectCode}|${d.road}|${d.direction}`;
+    if (!state.limits[k]) state.limits[k] = d.limit;
+  }
+  rebuild();
+}
 
-$('saveProject').onclick=async()=>{const code=$('projectCode').value.trim(),name=$('projectName').value.trim();if(!code||!name)return toast('請完整輸入計畫編號與名稱');const i=state.projects.findIndex(p=>p.code===code);if(i>=0)state.projects[i]={code,name};else state.projects.push({code,name});state.activeCode=code;await save();toast(i>=0?'計畫設定已更新':'新計畫已建立');go('import')};
-$('files').onchange=()=>{$('fileInfo').textContent=$('files').files.length?`已選取 ${$('files').files.length} 份檔案`:'尚未選取檔案'};
-$('preview').onclick=async()=>{if(!activeProject())return toast('請先完成計畫設定');const files=[...$('files').files],year=$('rocYear').value,q=$('quarter').value;if(!files.length||!year)return toast('請輸入民國年並選取檔案');if(!window.XLSX)return toast('Excel 讀取元件尚未載入，請確認網路後重新整理');$('preview').disabled=true;$('previewStatus').textContent='讀取中…';pending=[];for(const f of files){try{pending.push(await parseFile(f,year,q,$('defaultSpeed').value))}catch(e){pending.push({file:f.name,rows:[],ok:false,error:'檔案無法開啟或格式不支援'})}}analyzeRoads();$('preview').disabled=false;renderPreview();};
-function matchBadge(type){const cls={'完全相符':'exact','別名相符':'alias','疑似相符':'possible','新路段':'new'}[type]||'new';return`<span class="match-badge match-${cls}">${esc(type||'新路段')}</span>`}
-function roadDecision(x,i){if(!x.ok)return'—';const badge=matchBadge(x.matchType);if(!x.roadAlert)return`${badge}<br>${x.roadChoice?`自動對應：${esc(x.roadChoice)}`:'使用目前正式名稱'}`;const known=existingRoads(),hint=x.roadAlert.score>=.55?`（疑似：${esc(x.roadAlert.near)}）`:'';return`${badge}<br><select class="road-choice" data-pending="${i}"><option value="" ${!x.roadChoice?'selected':''}>請確認${hint}</option><option value="__NEW__" ${x.roadChoice==='__NEW__'?'selected':''}>確認為新路段</option>${known.map(r=>`<option value="${esc(r)}" ${x.roadChoice===r?'selected':''}>合併至：${esc(r)}</option>`).join('')}</select>`}
-function projectedId(item,r){const target=item.roadChoice&&item.roadChoice!=='__NEW__'?item.roadChoice:r.road;return[r.projectCode,r.year,`Q${r.quarter}`,target,r.day,r.peak,r.direction].join('|')}
-function duplicateStats(){const ids=new Set(state.details.map(x=>x.id));let added=0,updated=0;for(const item of pending.filter(x=>x.ok))for(const r of item.rows)ids.has(projectedId(item,r))?updated++:added++;return{added,updated}}
-function renderPreview(){const errors=pending.filter(x=>!x.ok).length,unchecked=pending.filter(x=>x.ok&&x.roadAlert&&!x.roadChoice).length,dup=duplicateStats();$('errorBadge').textContent=unchecked?`${unchecked} 路段待確認`:`${errors} 錯誤`;$('errorBadge').style.color=errors||unchecked?'#bd463d':'#168466';$('previewStatus').textContent=`成功 ${pending.length-errors}，失敗 ${errors}｜新增 ${dup.added}，重複 ${dup.updated}`;$('previewRows').innerHTML=pending.map((x,i)=>`<tr><td>${esc(x.file)}</td><td>${esc(x.day||'—')}</td><td>${x.ok?'辨識成功':`<span style="color:#bd463d">${esc(x.error)}</span>`}</td><td>${x.rows.length}</td><td>${roadDecision(x,i)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">沒有可預覽資料</td></tr>';document.querySelectorAll('[data-pending]').forEach(s=>s.onchange=()=>{const item=pending[+s.dataset.pending];item.roadChoice=s.value;item.matchType=s.value==='__NEW__'?'新路段':'疑似相符';renderPreview()});$('commit').disabled=!pending.some(x=>x.ok)||unchecked>0}
-function remapPending(item,target){if(!target||target==='__NEW__')return;state.aliases[`${state.activeCode}|${item.originalRoad}`]=target;for(const r of item.rows){r.road=target;r.id=[r.projectCode,r.year,`Q${r.quarter}`,target,r.day,r.peak,r.direction].join('|');const k=`${r.projectCode}|${target}|${r.direction}`;r.limit=state.limits[k]||r.limit;r.ratio=r.travel/r.limit;r.los=losOf(r.ratio)}item.road=target}
-$('commit').onclick=async()=>{const unchecked=pending.filter(x=>x.ok&&x.roadAlert&&!x.roadChoice);if(unchecked.length)return toast('請先確認所有疑似新路段');const good=pending.filter(x=>x.ok);good.forEach(x=>remapPending(x,x.roadChoice));const all=good.flatMap(x=>x.rows),before=new Map(state.details.map(x=>[x.id,x])),policy=$('duplicatePolicy').value,batchId=`B${Date.now()}`,previous=[],addedIds=[],write=[];let skipped=0;for(const row of all){const old=before.get(row.id);if(old&&policy==='skip'){skipped++;continue}if(old)previous.push(structuredClone(old));else addedIds.push(row.id);write.push({...row,importBatch:batchId})}upsert(write);const now=new Date(),batch={id:batchId,projectCode:state.activeCode,projectName:activeProject()?.name||'',period:`${$('rocYear').value}Q${$('quarter').value}`,time:now.toLocaleString('zh-TW'),timestamp:now.toISOString(),files:good.map(x=>x.file),addedIds,previous,writtenIds:write.map(x=>x.id),added:addedIds.length,updated:previous.length,skipped,status:'有效'};state.imports.unshift(batch);state.last={year:$('rocYear').value,quarter:$('quarter').value,time:batch.time};await save();toast(`寫入完成：新增 ${batch.added}、更新 ${batch.updated}、略過 ${batch.skipped}`);pending=[];roadAlert.style.display='none';renderPreview();go('importlog')};
+$("saveProject").onclick = async () => {
+  const code = $("projectCode").value.trim(),
+    name = $("projectName").value.trim();
+  if (!code || !name) return toast("請完整輸入計畫編號與名稱");
+  // 所有設定都以「計畫編號|…」當鍵值，編號含有「|」會讓刪除計畫時
+  // 連同另一個計畫的設定一起被清掉。
+  if (code.includes("|")) return toast("計畫編號不可包含「|」符號");
+  const i = state.projects.findIndex((p) => p.code === code);
+  if (i >= 0) state.projects[i] = { code, name };
+  else state.projects.push({ code, name });
+  state.activeCode = code;
+  await save();
+  toast(i >= 0 ? "計畫設定已更新" : "新計畫已建立");
+  go("import");
+};
+$("files").onchange = () => {
+  $("fileInfo").textContent = $("files").files.length
+    ? `已選取 ${$("files").files.length} 份檔案`
+    : "尚未選取檔案";
+};
+$("preview").onclick = async () => {
+  if (!activeProject()) return toast("請先完成計畫設定");
+  const files = [...$("files").files],
+    year = $("rocYear").value,
+    q = $("quarter").value;
+  if (!files.length || !year) return toast("請輸入民國年並選取檔案");
+  // 民國年只接受 90～200 的整數。舊版完全不檢查，打錯成 1145 或 114.5
+  // 會產生一個「1145Q1」的幽靈季度，之後所有期間比較、速限版本與成果範圍
+  // 都比對不到它，只能用刪除季度才清得掉。
+  const yearNumber = Number(year);
+  if (!Number.isInteger(yearNumber) || yearNumber < 90 || yearNumber > 200)
+    return toast("民國年必須是 90～200 之間的整數");
+  if (!window.XLSX) return toast("Excel 讀取元件尚未載入，請確認網路後重新整理");
+  $("preview").disabled = true;
+  $("previewStatus").textContent = "讀取中…";
+  pending = [];
+  for (const f of files) {
+    try {
+      pending.push(await parseFile(f, year, q, $("defaultSpeed").value));
+    } catch (e) {
+      pending.push({ file: f.name, rows: [], ok: false, error: "檔案無法開啟或格式不支援" });
+    }
+  }
+  // 記住這次預覽的條件。寫入時要用這一份，而不是當下輸入框的值：
+  // 使用者若在預覽後才改民國年或季度，舊版會把資料寫進「預覽時的季度」，
+  // 卻把「改過的季度」記進匯入紀錄，兩邊不一致而且完全看不出來。
+  pendingContext = { year, quarter: q, projectCode: state.activeCode };
+  analyzeRoads();
+  $("preview").disabled = false;
+  renderPreview();
+};
+// 改了民國年或季度就讓預覽失效，避免用舊條件寫入。
+for (const id of ["rocYear", "quarter"])
+  $(id).addEventListener("change", () => {
+    if (!pending.length) return;
+    pending = [];
+    pendingContext = null;
+    roadAlert.style.display = "none";
+    renderPreview();
+    toast("季度或年度已變更，請重新按「讀取並預覽」");
+  });
+function matchBadge(type) {
+  const cls =
+    { 完全相符: "exact", 別名相符: "alias", 疑似相符: "possible", 新路段: "new" }[type] || "new";
+  return `<span class="match-badge match-${cls}">${esc(type || "新路段")}</span>`;
+}
+function roadDecision(x, i) {
+  if (!x.ok) return "—";
+  const badge = matchBadge(x.matchType);
+  if (!x.roadAlert)
+    return `${badge}<br>${x.roadChoice ? `自動對應：${esc(x.roadChoice)}` : "使用目前正式名稱"}`;
+  const known = existingRoads(),
+    hint = x.roadAlert.score >= 0.55 ? `（疑似：${esc(x.roadAlert.near)}）` : "";
+  return `${badge}<br><select class="road-choice" data-pending="${i}"><option value="" ${!x.roadChoice ? "selected" : ""}>請確認${hint}</option><option value="__NEW__" ${x.roadChoice === "__NEW__" ? "selected" : ""}>確認為新路段</option>${known.map((r) => `<option value="${esc(r)}" ${x.roadChoice === r ? "selected" : ""}>合併至：${esc(r)}</option>`).join("")}</select>`;
+}
+function projectedId(item, r) {
+  const target = item.roadChoice && item.roadChoice !== "__NEW__" ? item.roadChoice : r.road;
+  return [r.projectCode, r.year, `Q${r.quarter}`, target, r.day, r.peak, r.direction].join("|");
+}
+function duplicateStats() {
+  const ids = new Set(state.details.map((x) => x.id));
+  let added = 0,
+    updated = 0;
+  for (const item of pending.filter((x) => x.ok))
+    for (const r of item.rows) ids.has(projectedId(item, r)) ? updated++ : added++;
+  return { added, updated };
+}
+function renderPreview() {
+  const errors = pending.filter((x) => !x.ok).length,
+    unchecked = pending.filter((x) => x.ok && x.roadAlert && !x.roadChoice).length,
+    dup = duplicateStats();
+  $("errorBadge").textContent = unchecked ? `${unchecked} 路段待確認` : `${errors} 錯誤`;
+  $("errorBadge").style.color = errors || unchecked ? "#bd463d" : "#168466";
+  $("previewStatus").textContent =
+    `成功 ${pending.length - errors}，失敗 ${errors}｜新增 ${dup.added}，重複 ${dup.updated}`;
+  $("previewRows").innerHTML =
+    pending
+      .map(
+        (x, i) =>
+          `<tr><td>${esc(x.file)}</td><td>${esc(x.day || "—")}</td><td>${x.ok ? "辨識成功" : `<span style="color:#bd463d">${esc(x.error)}</span>`}</td><td>${x.rows.length}</td><td>${roadDecision(x, i)}</td></tr>`,
+      )
+      .join("") || '<tr><td colspan="5" class="empty">沒有可預覽資料</td></tr>';
+  document.querySelectorAll("[data-pending]").forEach(
+    (s) =>
+      (s.onchange = () => {
+        const item = pending[+s.dataset.pending];
+        item.roadChoice = s.value;
+        item.matchType = s.value === "__NEW__" ? "新路段" : "疑似相符";
+        renderPreview();
+      }),
+  );
+  $("commit").disabled = !pending.some((x) => x.ok) || unchecked > 0;
+}
+function remapPending(item, target) {
+  if (!target || target === "__NEW__") return;
+  state.aliases[`${state.activeCode}|${item.originalRoad}`] = target;
+  for (const r of item.rows) {
+    r.road = target;
+    r.id = [r.projectCode, r.year, `Q${r.quarter}`, target, r.day, r.peak, r.direction].join("|");
+    const k = `${r.projectCode}|${target}|${r.direction}`;
+    r.limit = state.limits[k] || r.limit;
+    r.ratio = r.travel == null ? null : r.travel / r.limit;
+    r.los = losOf(r.ratio);
+  }
+  item.road = target;
+}
+$("commit").onclick = async () => {
+  if (!pendingContext) return toast("請先按「讀取並預覽」");
+  if (pendingContext.projectCode !== state.activeCode)
+    return toast("預覽之後計畫被切換過了，請重新預覽再寫入");
+  const unchecked = pending.filter((x) => x.ok && x.roadAlert && !x.roadChoice);
+  if (unchecked.length) return toast("請先確認所有疑似新路段");
+  const good = pending.filter((x) => x.ok);
+  good.forEach((x) => remapPending(x, x.roadChoice));
+  // 同一批次內若有兩份檔案指向同一個路段＋日別，後寫入的會蓋掉前一份，
+  // 而畫面上仍顯示「新增 8 筆」。這種情況一律擋下並指出是哪些檔案。
+  const owners = new Map();
+  for (const item of good)
+    for (const row of item.rows) {
+      const list = owners.get(row.id) ?? [];
+      if (!list.includes(item.file)) list.push(item.file);
+      owners.set(row.id, list);
+    }
+  const collided = [...new Set([...owners.values()].filter((list) => list.length > 1).flat())];
+  if (collided.length)
+    return toast(
+      `這幾份檔案被判定為同一個路段與日別，會互相覆蓋，請確認後分批匯入：${collided.join("、")}`,
+    );
+  const all = good.flatMap((x) => x.rows),
+    before = new Map(state.details.map((x) => [x.id, x])),
+    policy = $("duplicatePolicy").value,
+    batchId = `B${Date.now()}`,
+    previous = [],
+    addedIds = [],
+    write = [];
+  let skipped = 0;
+  for (const row of all) {
+    const old = before.get(row.id);
+    if (old && policy === "skip") {
+      skipped++;
+      continue;
+    }
+    if (old) previous.push(structuredClone(old));
+    else addedIds.push(row.id);
+    write.push({ ...row, importBatch: batchId });
+  }
+  upsert(write);
+  const now = new Date(),
+    batch = {
+      id: batchId,
+      projectCode: state.activeCode,
+      projectName: activeProject()?.name || "",
+      period: `${pendingContext.year}Q${pendingContext.quarter}`,
+      time: now.toLocaleString("zh-TW"),
+      timestamp: now.toISOString(),
+      files: good.map((x) => x.file),
+      addedIds,
+      previous,
+      writtenIds: write.map((x) => x.id),
+      added: addedIds.length,
+      updated: previous.length,
+      skipped,
+      status: "有效",
+    };
+  state.imports.unshift(batch);
+  state.last = {
+    year: pendingContext.year,
+    quarter: pendingContext.quarter,
+    time: batch.time,
+  };
+  await save();
+  toast(`寫入完成：新增 ${batch.added}、更新 ${batch.updated}、略過 ${batch.skipped}`);
+  pending = [];
+  roadAlert.style.display = "none";
+  renderPreview();
+  go("importlog");
+};
 
-let pendingRoadChange=null;
-const roadMetaKey=(road,code=state.activeCode)=>`${code}|${road}`;
-function roadMeta(road,code=state.activeCode){return state.roadMeta[roadMetaKey(road,code)]||{directionA:'方向1',directionB:'方向2',startPeriod:'',endPeriod:''}}
-function validPeriod(v){return !v||/^\d{2,3}Q[1-4]$/.test(v)}
-function periodIndex(v){const m=String(v||'').match(/^(\d{2,3})Q([1-4])$/);return m?Number(m[1])*4+Number(m[2]):-1}
-function sortPeriods(values){return[...new Set(values)].sort((a,b)=>periodIndex(a)-periodIndex(b))}
-function roadObservedPeriods(road,code=state.activeCode){return sortPeriods(state.details.filter(x=>x.projectCode===code&&x.road===road).map(x=>x.period))}
-function roadIsActive(road,period,code=state.activeCode){const m=roadMeta(road,code),observed=roadObservedPeriods(road,code),projectPeriods=sortPeriods(state.details.filter(x=>x.projectCode===code).map(x=>x.period)),projectLast=projectPeriods.at(-1)||'',start=m.startPeriod||observed[0]||'',end=m.endPeriod||projectLast,p=periodIndex(period);return(!start||p>=periodIndex(start))&&(!end||p<=periodIndex(end))}
-function directionName(road,direction,code=state.activeCode){const m=roadMeta(road,code);return direction==='方向1'?(m.directionA||'方向1'):direction==='方向2'?(m.directionB||'方向2'):direction}
-function projectAliases(){const prefix=`${state.activeCode}|`;return Object.entries(state.aliases).filter(([k])=>k.startsWith(prefix)).map(([k,target])=>({alias:k.slice(prefix.length),target}))}
-function roadImpact(source,target){const rows=state.details.filter(x=>x.projectCode===state.activeCode&&x.road===source),periods=[...new Set(rows.map(x=>x.period))].sort(),targetIds=new Set(state.details.filter(x=>x.projectCode===state.activeCode&&x.road===target).map(x=>x.id)),collisions=rows.filter(x=>targetIds.has([x.projectCode,x.year,`Q${x.quarter}`,target,x.day,x.peak,x.direction].join('|'))).length;return{projectCode:state.activeCode,source,target,rows:rows.length,periods,summary:state.summaries.filter(x=>x.projectCode===state.activeCode&&x.road===source).length,collisions}}
-function showRoadImpact(source,target,mode){if(!source||!target||source===target){pendingRoadChange=null;$('confirmRoadChange').disabled=true;$('roadImpact').innerHTML='<b>無法預覽</b><p>來源與目標必須是不同名稱。</p><button class="danger-button" id="confirmRoadChange" disabled>備份後確認執行</button>';return}const impact=roadImpact(source,target),exists=existingRoads().includes(target);pendingRoadChange={...impact,mode};$('roadImpact').innerHTML=`<div><b>${mode==='rename'&&!exists?'正式名稱修改':'重複路段合併'}預覽</b><p>「${esc(source)}」→「${esc(target)}」</p><ul><li>影響季度：${impact.periods.length?impact.periods.join('、'):'無'}</li><li>尖峰明細：${impact.rows} 筆</li><li>尖峰彙總：${impact.summary} 筆</li><li>合併後重複鍵值：${impact.collisions} 筆（保留目標路段既有資料）</li></ul><small>執行前會自動下載 Project 專案包；路段速限、別名及圖表會一起更新。</small></div><button class="danger-button" id="confirmRoadChange">備份後確認執行</button>`;$('confirmRoadChange').onclick=confirmRoadChange}
-async function applyRoadChange(source,target){const code=state.activeCode,sourceKey=roadMetaKey(source),targetKey=roadMetaKey(target),sourceMeta=state.roadMeta[sourceKey],targetMeta=state.roadMeta[targetKey];state.aliases[`${code}|${normalize(source)}`]=target;for(const [k,v] of Object.entries(state.aliases))if(k.startsWith(`${code}|`)&&v===source)state.aliases[k]=target;const kept=state.details.filter(x=>!(x.projectCode===code&&x.road===source)),map=new Map(kept.map(x=>[x.id,x]));for(const d of state.details.filter(x=>x.projectCode===code&&x.road===source)){const oldLimit=`${code}|${source}|${d.direction}`,newLimit=`${code}|${target}|${d.direction}`;if(!state.limits[newLimit])state.limits[newLimit]=state.limits[oldLimit]||d.limit||50;if(state.limitConfirmed[oldLimit])state.limitConfirmed[newLimit]=true;delete state.limits[oldLimit];delete state.limitConfirmed[oldLimit];const moved={...d,road:target,limit:state.limits[newLimit]};moved.ratio=moved.travel/moved.limit;moved.los=losOf(moved.ratio,code);moved.id=[moved.projectCode,moved.year,`Q${moved.quarter}`,target,moved.day,moved.peak,moved.direction].join('|');if(!map.has(moved.id))map.set(moved.id,moved)}state.details=[...map.values()];if(sourceMeta||targetMeta)state.roadMeta[targetKey]={directionA:targetMeta?.directionA||sourceMeta?.directionA||'方向1',directionB:targetMeta?.directionB||sourceMeta?.directionB||'方向2',startPeriod:targetMeta?.startPeriod||sourceMeta?.startPeriod||'',endPeriod:targetMeta?.endPeriod||sourceMeta?.endPeriod||''};delete state.roadMeta[sourceKey];rebuild();await save()}
-async function confirmRoadChange(){const x=pendingRoadChange;if(!x)return;if(x.projectCode!==state.activeCode){pendingRoadChange=null;renderRoadAdmin();return toast('計畫已切換，請重新預覽合併影響')}if(!confirm(`確定執行？\n\n${x.source}\n→ ${x.target}\n\n影響 ${x.periods.length} 個季度、${x.rows} 筆明細；${x.collisions} 筆重複資料將保留目標路段版本。`))return;downloadProjectPackage(false);await applyRoadChange(x.source,x.target);pendingRoadChange=null;toast('路段正式名稱、明細、速限、別名與圖表已更新');go('roadadmin')}
-function roadOptions(selected=''){return existingRoads().sort().map(r=>`<option value="${esc(r)}" ${r===selected?'selected':''}>${esc(r)}</option>`).join('')||'<option value="">目前尚無路段</option>'}
-function renderRoadAdmin(){if(!$('roadAdminRows'))return;const roads=existingRoads().sort(),aliases=projectAliases(),periods=new Set(state.details.filter(x=>x.projectCode===state.activeCode).map(x=>x.period));$('roadCount').textContent=roads.length;$('aliasCount').textContent=aliases.length;$('roadPeriodCount').textContent=periods.size;for(const id of ['renameRoad','directionRoad','periodRoad','aliasTarget','mergeSource','mergeTarget']){const old=$(id).value;$(id).innerHTML=roadOptions(old);if(roads.includes(old))$(id).value=old}const selected=$('directionRoad').value;if(selected){const m=roadMeta(selected);$('directionA').value=m.directionA||'方向1';$('directionB').value=m.directionB||'方向2'}const periodSelected=$('periodRoad').value;if(periodSelected){const m=roadMeta(periodSelected);$('roadStartPeriod').value=m.startPeriod||'';$('roadEndPeriod').value=m.endPeriod||''}$('roadAdminRows').innerHTML=roads.length?roads.map(road=>{const rows=state.details.filter(x=>x.projectCode===state.activeCode&&x.road===road),m=roadMeta(road),ps=[...new Set(rows.map(x=>x.period))].sort(),range=m.startPeriod||m.endPeriod?`${m.startPeriod||'不限'}～${m.endPeriod||'持續'}`:ps.join('、');return`<tr><td><b>${esc(road)}</b></td><td>${esc(m.directionA||'方向1')}</td><td>${esc(m.directionB||'方向2')}</td><td>${esc(range)}</td><td>${rows.length}</td><td>${aliases.filter(x=>x.target===road).length}</td></tr>`}).join(''):'<tr><td colspan="6" class="empty">匯入資料後會建立正式路段清冊</td></tr>';$('aliasRows').innerHTML=aliases.length?aliases.map(x=>`<tr><td>${esc(x.alias)}</td><td>${esc(x.target)}</td><td><button class="outline" data-delete-alias="${esc(x.alias)}">刪除</button></td></tr>`).join(''):'<tr><td colspan="3" class="empty">尚未設定檔名別名</td></tr>';document.querySelectorAll('[data-delete-alias]').forEach(b=>b.onclick=async()=>{delete state.aliases[`${state.activeCode}|${b.dataset.deleteAlias}`];await save();toast('別名已刪除')})}
-$('roadAdminBackup').onclick=()=>downloadProjectPackage();$('directionRoad').onchange=()=>{const m=roadMeta($('directionRoad').value);$('directionA').value=m.directionA||'方向1';$('directionB').value=m.directionB||'方向2'};
-$('saveDirections').onclick=async()=>{const road=$('directionRoad').value;if(!road)return toast('請先選擇路段');const old=roadMeta(road);state.roadMeta[roadMetaKey(road)]={...old,directionA:$('directionA').value.trim()||'方向1',directionB:$('directionB').value.trim()||'方向2'};await save();toast('方向顯示名稱已更新')};
-$('periodRoad').onchange=()=>{const m=roadMeta($('periodRoad').value);$('roadStartPeriod').value=m.startPeriod||'';$('roadEndPeriod').value=m.endPeriod||''};
-$('saveRoadPeriod').onclick=async()=>{const road=$('periodRoad').value,start=$('roadStartPeriod').value.trim().toUpperCase(),end=$('roadEndPeriod').value.trim().toUpperCase();if(!road)return toast('請先選擇路段');if(!validPeriod(start)||!validPeriod(end))return toast('季度格式應為民國年加 Q1～Q4，例如 114Q1');if(start&&end&&periodIndex(start)>periodIndex(end))return toast('停止季度不可早於開始季度');state.roadMeta[roadMetaKey(road)]={...roadMeta(road),startPeriod:start,endPeriod:end};await save();toast('路段有效期間已更新')};
-$('addAlias').onclick=async()=>{const alias=normalize($('aliasName').value),target=$('aliasTarget').value;if(!alias||!target)return toast('請完整輸入別名並選擇正式路段');if(alias===target)return toast('別名不可與正式路段完全相同');state.aliases[`${state.activeCode}|${alias}`]=target;$('aliasName').value='';await save();toast(`別名「${alias}」將自動對應至「${target}」`)};
-$('previewRename').onclick=()=>{const source=$('renameRoad').value,target=normalize($('formalRoadName').value);if(!target)return toast('請輸入新的正式名稱');showRoadImpact(source,target,'rename')};$('previewMerge').onclick=()=>showRoadImpact($('mergeSource').value,$('mergeTarget').value,'merge');
+let pendingRoadChange = null;
+const roadMetaKey = (road, code = state.activeCode) => `${code}|${road}`;
+function roadMeta(road, code = state.activeCode) {
+  return (
+    state.roadMeta[roadMetaKey(road, code)] || {
+      directionA: "方向1",
+      directionB: "方向2",
+      startPeriod: "",
+      endPeriod: "",
+    }
+  );
+}
+function validPeriod(v) {
+  return !v || /^\d{2,3}Q[1-4]$/.test(v);
+}
+function periodIndex(v) {
+  const m = String(v || "").match(/^(\d{2,3})Q([1-4])$/);
+  return m ? Number(m[1]) * 4 + Number(m[2]) : -1;
+}
+function sortPeriods(values) {
+  return [...new Set(values)].sort((a, b) => periodIndex(a) - periodIndex(b));
+}
+function roadObservedPeriods(road, code = state.activeCode) {
+  return sortPeriods(
+    state.details.filter((x) => x.projectCode === code && x.road === road).map((x) => x.period),
+  );
+}
+function roadIsActive(road, period, code = state.activeCode) {
+  const m = roadMeta(road, code),
+    observed = roadObservedPeriods(road, code),
+    projectPeriods = sortPeriods(
+      state.details.filter((x) => x.projectCode === code).map((x) => x.period),
+    ),
+    projectLast = projectPeriods.at(-1) || "",
+    start = m.startPeriod || observed[0] || "",
+    end = m.endPeriod || projectLast,
+    p = periodIndex(period);
+  // 格式不合的期間（例如手改備份留下的 114Q9）視為「沒有設定」，
+  // 否則 periodIndex 會回 -1，任何季度都大於它，路段會被當成永遠有效。
+  const startIndex = periodIndex(start),
+    endIndex = periodIndex(end);
+  return (
+    (startIndex < 0 || p >= startIndex) && (endIndex < 0 || p <= endIndex)
+  );
+}
+function directionName(road, direction, code = state.activeCode) {
+  const m = roadMeta(road, code);
+  return direction === "方向1"
+    ? m.directionA || "方向1"
+    : direction === "方向2"
+      ? m.directionB || "方向2"
+      : direction;
+}
+function projectAliases() {
+  const prefix = `${state.activeCode}|`;
+  return Object.entries(state.aliases)
+    .filter(([k]) => k.startsWith(prefix))
+    .map(([k, target]) => ({ alias: k.slice(prefix.length), target }));
+}
+function roadImpact(source, target) {
+  const rows = state.details.filter((x) => x.projectCode === state.activeCode && x.road === source),
+    periods = sortPeriods(rows.map((x) => x.period)),
+    targetIds = new Set(
+      state.details
+        .filter((x) => x.projectCode === state.activeCode && x.road === target)
+        .map((x) => x.id),
+    ),
+    collisions = rows.filter((x) =>
+      targetIds.has(
+        [x.projectCode, x.year, `Q${x.quarter}`, target, x.day, x.peak, x.direction].join("|"),
+      ),
+    ).length;
+  return {
+    projectCode: state.activeCode,
+    source,
+    target,
+    rows: rows.length,
+    periods,
+    summary: state.summaries.filter((x) => x.projectCode === state.activeCode && x.road === source)
+      .length,
+    collisions,
+  };
+}
+function showRoadImpact(source, target, mode) {
+  if (!source || !target || source === target) {
+    pendingRoadChange = null;
+    $("confirmRoadChange").disabled = true;
+    $("roadImpact").innerHTML =
+      '<b>無法預覽</b><p>來源與目標必須是不同名稱。</p><button class="danger-button" id="confirmRoadChange" disabled>備份後確認執行</button>';
+    return;
+  }
+  const impact = roadImpact(source, target),
+    exists = existingRoads().includes(target);
+  pendingRoadChange = { ...impact, mode };
+  $("roadImpact").innerHTML =
+    `<div><b>${mode === "rename" && !exists ? "正式名稱修改" : "重複路段合併"}預覽</b><p>「${esc(source)}」→「${esc(target)}」</p><ul><li>影響季度：${impact.periods.length ? impact.periods.join("、") : "無"}</li><li>尖峰明細：${impact.rows} 筆</li><li>尖峰彙總：${impact.summary} 筆</li><li>合併後重複鍵值：${impact.collisions} 筆（保留目標路段既有資料）</li></ul><small>執行前會自動下載 Project 專案包；路段速限、別名及圖表會一起更新。</small></div><button class="danger-button" id="confirmRoadChange">備份後確認執行</button>`;
+  $("confirmRoadChange").onclick = confirmRoadChange;
+}
+async function applyRoadChange(source, target) {
+  const code = state.activeCode,
+    sourceKey = roadMetaKey(source),
+    targetKey = roadMetaKey(target),
+    sourceMeta = state.roadMeta[sourceKey],
+    targetMeta = state.roadMeta[targetKey];
+  state.aliases[`${code}|${normalize(source)}`] = target;
+  for (const [k, v] of Object.entries(state.aliases))
+    if (k.startsWith(`${code}|`) && v === source) state.aliases[k] = target;
+  const kept = state.details.filter((x) => !(x.projectCode === code && x.road === source)),
+    map = new Map(kept.map((x) => [x.id, x]));
+  for (const d of state.details.filter((x) => x.projectCode === code && x.road === source)) {
+    const oldLimit = `${code}|${source}|${d.direction}`,
+      newLimit = `${code}|${target}|${d.direction}`;
+    if (!state.limits[newLimit]) state.limits[newLimit] = state.limits[oldLimit] || d.limit || 50;
+    if (state.limitConfirmed[oldLimit]) state.limitConfirmed[newLimit] = true;
+    delete state.limits[oldLimit];
+    delete state.limitConfirmed[oldLimit];
+    // 速限版本（有效期間、查證來源與人員）也是以「計畫|路段|方向」為鍵，
+    // 改名時一併搬過去，否則整組查證紀錄會變成孤兒、速限悄悄退回預設值。
+    if (state.speedVersions?.[oldLimit]) {
+      state.speedVersions[newLimit] = (state.speedVersions[newLimit] || []).concat(
+        state.speedVersions[oldLimit],
+      );
+      delete state.speedVersions[oldLimit];
+    }
+    const moved = { ...d, road: target, limit: state.limits[newLimit] };
+    moved.ratio = moved.travel == null ? null : moved.travel / moved.limit;
+    moved.los = losOf(moved.ratio, code);
+    moved.id = [
+      moved.projectCode,
+      moved.year,
+      `Q${moved.quarter}`,
+      target,
+      moved.day,
+      moved.peak,
+      moved.direction,
+    ].join("|");
+    if (!map.has(moved.id)) map.set(moved.id, moved);
+  }
+  state.details = [...map.values()];
+  if (sourceMeta || targetMeta)
+    state.roadMeta[targetKey] = {
+      directionA: targetMeta?.directionA || sourceMeta?.directionA || "方向1",
+      directionB: targetMeta?.directionB || sourceMeta?.directionB || "方向2",
+      startPeriod: targetMeta?.startPeriod || sourceMeta?.startPeriod || "",
+      endPeriod: targetMeta?.endPeriod || sourceMeta?.endPeriod || "",
+    };
+  delete state.roadMeta[sourceKey];
+  rebuild();
+  await save();
+}
+async function confirmRoadChange() {
+  const x = pendingRoadChange;
+  if (!x) return;
+  if (x.projectCode !== state.activeCode) {
+    pendingRoadChange = null;
+    renderRoadAdmin();
+    return toast("計畫已切換，請重新預覽合併影響");
+  }
+  if (
+    !confirm(
+      `確定執行？\n\n${x.source}\n→ ${x.target}\n\n影響 ${x.periods.length} 個季度、${x.rows} 筆明細；${x.collisions} 筆重複資料將保留目標路段版本。`,
+    )
+  )
+    return;
+  downloadProjectPackage(false);
+  await applyRoadChange(x.source, x.target);
+  pendingRoadChange = null;
+  toast("路段正式名稱、明細、速限、別名與圖表已更新");
+  go("roadadmin");
+}
+function roadOptions(selected = "") {
+  return (
+    existingRoads()
+      .sort()
+      .map(
+        (r) => `<option value="${esc(r)}" ${r === selected ? "selected" : ""}>${esc(r)}</option>`,
+      )
+      .join("") || '<option value="">目前尚無路段</option>'
+  );
+}
+function renderRoadAdmin() {
+  if (!$("roadAdminRows")) return;
+  const roads = existingRoads().sort(),
+    aliases = projectAliases(),
+    periods = new Set(
+      state.details.filter((x) => x.projectCode === state.activeCode).map((x) => x.period),
+    );
+  $("roadCount").textContent = roads.length;
+  $("aliasCount").textContent = aliases.length;
+  $("roadPeriodCount").textContent = periods.size;
+  for (const id of [
+    "renameRoad",
+    "directionRoad",
+    "periodRoad",
+    "aliasTarget",
+    "mergeSource",
+    "mergeTarget",
+  ]) {
+    const old = $(id).value;
+    $(id).innerHTML = roadOptions(old);
+    if (roads.includes(old)) $(id).value = old;
+  }
+  const selected = $("directionRoad").value;
+  if (selected) {
+    const m = roadMeta(selected);
+    $("directionA").value = m.directionA || "方向1";
+    $("directionB").value = m.directionB || "方向2";
+  }
+  const periodSelected = $("periodRoad").value;
+  if (periodSelected) {
+    const m = roadMeta(periodSelected);
+    $("roadStartPeriod").value = m.startPeriod || "";
+    $("roadEndPeriod").value = m.endPeriod || "";
+  }
+  $("roadAdminRows").innerHTML = roads.length
+    ? roads
+        .map((road) => {
+          const rows = state.details.filter(
+              (x) => x.projectCode === state.activeCode && x.road === road,
+            ),
+            m = roadMeta(road),
+            ps = sortPeriods(rows.map((x) => x.period)),
+            range =
+              m.startPeriod || m.endPeriod
+                ? `${m.startPeriod || "不限"}～${m.endPeriod || "持續"}`
+                : ps.join("、");
+          return `<tr><td><b>${esc(road)}</b></td><td>${esc(m.directionA || "方向1")}</td><td>${esc(m.directionB || "方向2")}</td><td>${esc(range)}</td><td>${rows.length}</td><td>${aliases.filter((x) => x.target === road).length}</td></tr>`;
+        })
+        .join("")
+    : '<tr><td colspan="6" class="empty">匯入資料後會建立正式路段清冊</td></tr>';
+  $("aliasRows").innerHTML = aliases.length
+    ? aliases
+        .map(
+          (x) =>
+            `<tr><td>${esc(x.alias)}</td><td>${esc(x.target)}</td><td><button class="outline" data-delete-alias="${esc(x.alias)}">刪除</button></td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="3" class="empty">尚未設定檔名別名</td></tr>';
+  document.querySelectorAll("[data-delete-alias]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        delete state.aliases[`${state.activeCode}|${b.dataset.deleteAlias}`];
+        await save();
+        toast("別名已刪除");
+      }),
+  );
+}
+$("roadAdminBackup").onclick = () => downloadProjectPackage();
+$("directionRoad").onchange = () => {
+  const m = roadMeta($("directionRoad").value);
+  $("directionA").value = m.directionA || "方向1";
+  $("directionB").value = m.directionB || "方向2";
+};
+$("saveDirections").onclick = async () => {
+  const road = $("directionRoad").value;
+  if (!road) return toast("請先選擇路段");
+  const old = roadMeta(road);
+  state.roadMeta[roadMetaKey(road)] = {
+    ...old,
+    directionA: $("directionA").value.trim() || "方向1",
+    directionB: $("directionB").value.trim() || "方向2",
+  };
+  await save();
+  toast("方向顯示名稱已更新");
+};
+$("periodRoad").onchange = () => {
+  const m = roadMeta($("periodRoad").value);
+  $("roadStartPeriod").value = m.startPeriod || "";
+  $("roadEndPeriod").value = m.endPeriod || "";
+};
+$("saveRoadPeriod").onclick = async () => {
+  const road = $("periodRoad").value,
+    start = $("roadStartPeriod").value.trim().toUpperCase(),
+    end = $("roadEndPeriod").value.trim().toUpperCase();
+  if (!road) return toast("請先選擇路段");
+  if (!validPeriod(start) || !validPeriod(end))
+    return toast("季度格式應為民國年加 Q1～Q4，例如 114Q1");
+  if (start && end && periodIndex(start) > periodIndex(end))
+    return toast("停止季度不可早於開始季度");
+  state.roadMeta[roadMetaKey(road)] = { ...roadMeta(road), startPeriod: start, endPeriod: end };
+  await save();
+  toast("路段有效期間已更新");
+};
+$("addAlias").onclick = async () => {
+  const alias = normalize($("aliasName").value),
+    target = $("aliasTarget").value;
+  if (!alias || !target) return toast("請完整輸入別名並選擇正式路段");
+  if (alias === target) return toast("別名不可與正式路段完全相同");
+  state.aliases[`${state.activeCode}|${alias}`] = target;
+  $("aliasName").value = "";
+  await save();
+  toast(`別名「${alias}」將自動對應至「${target}」`);
+};
+$("previewRename").onclick = () => {
+  const source = $("renameRoad").value,
+    target = normalize($("formalRoadName").value);
+  if (!target) return toast("請輸入新的正式名稱");
+  showRoadImpact(source, target, "rename");
+};
+$("previewMerge").onclick = () =>
+  showRoadImpact($("mergeSource").value, $("mergeTarget").value, "merge");
 
-function losChip(l){return`<span class="los los-${String(l).toLowerCase()}">${esc(l)}</span>`}
-function renderDetails(){const q=normalize($('detailSearch')?.value||''),code=state.activeCode;const rows=state.details.filter(x=>x.projectCode===code&&(!q||normalize(Object.values(x).join(' ')).includes(q)));$('detailCount').textContent=`${rows.length} 筆`;$('detailRows').innerHTML=rows.length?rows.map(x=>`<tr><td>${x.period}</td><td>${esc(x.road)}</td><td>${x.day}</td><td>${x.peak}</td><td>${esc(directionName(x.road,x.direction,x.projectCode))}</td><td>${fmt(x.travel,3)}</td><td>${fmt(x.running,3)}</td><td>${fmt(x.totalDelay,3)}</td><td>${fmt(x.limit,0)}</td><td>${losChip(x.los)}</td></tr>`).join(''):'<tr><td colspan="10" class="empty">目前計畫尚無尖峰明細</td></tr>'}
-function renderSummaries(){const q=normalize($('summarySearch')?.value||''),code=state.activeCode;const rows=state.summaries.filter(x=>x.projectCode===code&&(!q||normalize(Object.values(x).join(' ')).includes(q)));$('summaryCount').textContent=`${rows.length} 筆`;$('summaryRows').innerHTML=rows.length?rows.map(x=>`<tr><td>${x.period}</td><td>${esc(x.road)}</td><td>${x.day}</td><td>${x.peak}</td><td>${esc(directionName(x.road,x.direction,x.projectCode))}</td><td>${fmt(x.travel,3)}</td><td>${fmt(x.running,3)}</td><td><b>${fmt(x.totalDelay,3)}</b></td><td>${fmt(x.ratio,3)}</td><td>${losChip(x.los)}</td></tr>`).join(''):'<tr><td colspan="10" class="empty">目前計畫尚無尖峰彙總</td></tr>'}
-function renderLosRules(){const x=rulesFor();for(const grade of ['A','B','C','D','E'])$(`los${grade}`).value=x[grade];$('losRuleExplanation').innerHTML=`<span><b>A：</b>速限比 ≥ ${fmt(x.A,2)}</span><span><b>B：</b>${fmt(x.B,2)} ≤ 速限比 ＜ ${fmt(x.A,2)}</span><span><b>C：</b>${fmt(x.C,2)} ≤ 速限比 ＜ ${fmt(x.B,2)}</span><span><b>D：</b>${fmt(x.D,2)} ≤ 速限比 ＜ ${fmt(x.C,2)}</span><span><b>E：</b>${fmt(x.E,2)} ≤ 速限比 ＜ ${fmt(x.D,2)}</span><span><b>F：</b>速限比 ＜ ${fmt(x.E,2)}</span>`}
-function readLosRules(){const x=Object.fromEntries(['A','B','C','D','E'].map(g=>[g,Number($(`los${g}`).value)]));return Object.values(x).every(Number.isFinite)&&x.A>x.B&&x.B>x.C&&x.C>x.D&&x.D>x.E&&x.E>=0&&x.A<=2?x:null}
-$('applyLosRules').onclick=async()=>{const p=activeProject();if(!p)return toast('請先建立或選擇計畫');const x=readLosRules();if(!x)return toast('門檻必須是 A＞B＞C＞D＞E，且介於 0～2');state.losRules[p.code]=x;rebuild();await save();toast('服務水準門檻已保存，明細、彙總與圖表已重新計算')};
-$('resetLosRules').onclick=async()=>{const p=activeProject();if(!p)return toast('請先建立或選擇計畫');if(!confirm('確定將目前計畫的服務水準門檻恢復為系統預設值？'))return;delete state.losRules[p.code];rebuild();await save();toast('已恢復預設門檻並重新計算')};
-$('detailSearch').oninput=renderDetails;$('summarySearch').oninput=renderSummaries;$('rebuild').onclick=async()=>{rebuild();await save();toast('尖峰彙總已重新建立')};
-function renderLimits(){const keys=[...new Set(state.details.filter(d=>d.projectCode===state.activeCode).map(d=>`${d.projectCode}|${d.road}|${d.direction}`))].sort();$('speedRows').innerHTML=keys.length?keys.map(k=>{const parts=k.split('|'),direction=parts.pop(),road=parts.pop();return`<tr><td>${esc(road)}</td><td>${esc(directionName(road,direction,state.activeCode))}</td><td><input class="speed-input" data-limit="${esc(k)}" type="number" min="1" value="${state.limits[k]||50}"></td><td>${state.limitConfirmed[k]?'<span class="status-ok">已人工確認</span>':'<span class="status-warn">預設值，未確認</span>'}</td></tr>`}).join(''):'<tr><td colspan="4" class="empty">目前計畫匯入資料後會自動建立路段方向</td></tr>'}
-$('applySpeed').onclick=async()=>{document.querySelectorAll('[data-limit]').forEach(i=>{state.limits[i.dataset.limit]=Number(i.value)||50;state.limitConfirmed[i.dataset.limit]=true});state.details.filter(d=>d.projectCode===state.activeCode).forEach(d=>{d.limit=state.limits[`${d.projectCode}|${d.road}|${d.direction}`]||50;d.ratio=d.travel/d.limit;d.los=losOf(d.ratio,d.projectCode)});rebuild();await save();toast('目前計畫的速限已人工確認，LOS 已重新計算')};
-function renderTravelCharts(rows,gridId){const grid=$(gridId);grid.innerHTML='';const roads=[...new Set(rows.map(x=>x.road))];for(const road of roads){const own=rows.filter(x=>x.road===road).sort((a,b)=>a.period.localeCompare(b.period)),periods=[...new Set(own.map(x=>x.period))],values=own.map(x=>Number(x.travel)||0),rawMax=Math.max(...values,1),max=Math.ceil(rawMax/10)*10||10,ticks=[max,max*.75,max*.5,max*.25,0],card=document.createElement('article');card.className='chart-card';card.innerHTML=`<h3>${esc(road)}｜旅行速率</h3><div class="bars speed-bars"><div class="speed-y-title">平均總旅行速率（km/h）</div><div class="y-axis">${ticks.map((t,i)=>`<span style="top:${i*25}%">${fmt(t,1)}</span>`).join('')}</div>${periods.map(p=>{const w=own.find(x=>x.period===p&&x.day==='平日'),h=own.find(x=>x.period===p&&x.day==='假日'),wv=Number(w?.travel)||0,hv=Number(h?.travel)||0;return`<div class="bar-group"><i class="bar weekday speed-bar" data-value="${w?fmt(wv,1):''}" title="平日 ${w?fmt(wv,3):'—'} km/h" style="height:${wv/max*100}%"></i><i class="bar holiday speed-bar" data-value="${h?fmt(hv,1):''}" title="假日 ${h?fmt(hv,3):'—'} km/h" style="height:${hv/max*100}%"></i><small>${p}</small></div>`}).join('')}</div><div class="chart-legend"><i style="background:#247db4"></i>平日<i style="background:#e88943"></i>假日　單位：km/h</div>`;grid.append(card)}}
-function renderCharts(){const grid=$('chartGrid'),code=state.activeCode,own=state.summaries.filter(x=>x.projectCode===code);grid.innerHTML='';$('chartEmpty').style.display=own.length?'none':'block';const roads=[...new Set(own.map(x=>x.road))];for(const road of roads){const rows=own.filter(x=>x.road===road).sort((a,b)=>a.period.localeCompare(b.period));const periods=[...new Set(rows.map(x=>x.period))];const card=document.createElement('article');card.className='chart-card';card.innerHTML=`<h3>${esc(road)}</h3><div class="bars">${periods.map(p=>{const w=rows.find(x=>x.period===p&&x.day==='平日'),h=rows.find(x=>x.period===p&&x.day==='假日');return`<div class="bar-group"><i class="bar weekday" data-los="${w?.los||''}" title="平日 ${w?.los||'—'}" style="height:${(losRank[w?.los]||0)/6*100}%"></i><i class="bar holiday" data-los="${h?.los||''}" title="假日 ${h?.los||'—'}" style="height:${(losRank[h?.los]||0)/6*100}%"></i><small>${p}</small></div>`}).join('')}</div><div class="chart-legend"><i style="background:#247db4"></i>平日<i style="background:#e88943"></i>假日　資料柱上方為LOS等級</div>`;grid.append(card)}renderTravelCharts(own,'speedTrendGrid')}
-function csv(rows,name){if(!rows.length)return toast('目前沒有資料');const heads=Object.keys(rows[0]),body=[heads,...rows.map(r=>heads.map(h=>r[h]))].map(a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');download('\ufeff'+body,name||`${activeProject()?.code||'Project'}_尖峰明細.csv`,'text/csv')}
-$('exportDetail').onclick=()=>csv(state.details.filter(x=>x.projectCode===state.activeCode));
-function download(data,name,type='application/json'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-function projectPackage(){const p=activeProject();if(!p)return null;const details=state.details.filter(x=>x.projectCode===p.code),summaries=state.summaries.filter(x=>x.projectCode===p.code),imports=state.imports.filter(x=>x.projectCode===p.code),limits=Object.fromEntries(Object.entries(state.limits).filter(([k])=>k.startsWith(`${p.code}|`))),limitConfirmed=Object.fromEntries(Object.entries(state.limitConfirmed).filter(([k])=>k.startsWith(`${p.code}|`))),aliases=Object.fromEntries(Object.entries(state.aliases).filter(([k])=>k.startsWith(`${p.code}|`))),roadMeta=Object.fromEntries(Object.entries(state.roadMeta).filter(([k])=>k.startsWith(`${p.code}|`))),speedVersions=Object.fromEntries(Object.entries(state.speedVersions).filter(([k])=>k.startsWith(`${p.code}|`))),reportDrafts=Object.fromEntries(Object.entries(state.reportDrafts).filter(([k])=>k.startsWith(`${p.code}|`)));return{kind:'TLM_PROJECT_PACKAGE',exportedAt:new Date().toISOString(),project:p,details,summaries,imports,limits,limitConfirmed,aliases,roadMeta,speedVersions,anomalyRule:state.anomalyRules[p.code]||null,reportDrafts,losRule:rulesFor(p.code)}}
-function downloadProjectPackage(note=true){const pack=projectPackage();if(!pack){toast('尚未建立計畫');return false}download(JSON.stringify(pack,null,2),`${pack.project.code}_${pack.project.name}_Project專案包.json`);if(note)toast('目前 Project 專案包已下載');return true}
-$('downloadBackup').textContent='下載目前 Project 專案包';$('downloadBackup').onclick=()=>downloadProjectPackage();
-const portfolioBtn=document.createElement('button');portfolioBtn.className='outline';portfolioBtn.style.marginLeft='8px';portfolioBtn.textContent='下載個人全部計畫包';$('downloadBackup').after(portfolioBtn);portfolioBtn.onclick=()=>{if(!state.projects.length)return toast('尚未建立計畫');download(JSON.stringify({kind:'TLM_PORTFOLIO_PACKAGE',exportedAt:new Date().toISOString(),projects:state.projects,details:state.details,summaries:state.summaries,imports:state.imports,limits:state.limits,limitConfirmed:state.limitConfirmed,aliases:state.aliases,roadMeta:state.roadMeta,speedVersions:state.speedVersions,anomalyRules:state.anomalyRules,reportDrafts:state.reportDrafts,operations:state.operations,losRules:state.losRules},null,2),'交通服務水準_個人全部計畫包.json');toast('個人全部計畫包已下載')};
-$('restoreFile').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text()),manager=state.manager;if(x.kind==='TLM_PROJECT_PACKAGE'){state.projects=state.projects.filter(p=>p.code!==x.project.code);state.projects.push(x.project);state.activeCode=x.project.code;state.details=state.details.filter(d=>d.projectCode!==x.project.code).concat(x.details||[]);state.imports=state.imports.filter(d=>d.projectCode!==x.project.code).concat(x.imports||[]);Object.assign(state.limits,x.limits||{});Object.assign(state.limitConfirmed,x.limitConfirmed||{});Object.assign(state.aliases,x.aliases||{});Object.assign(state.roadMeta,x.roadMeta||{});Object.assign(state.speedVersions,x.speedVersions||{});if(x.anomalyRule)state.anomalyRules[x.project.code]=x.anomalyRule;Object.assign(state.reportDrafts,x.reportDrafts||{});if(x.losRule&&!isLegacyLosRule(x.losRule))state.losRules[x.project.code]=x.losRule;else delete state.losRules[x.project.code]}else if(x.kind==='TLM_PORTFOLIO_PACKAGE'){state={...emptyState(),...x,activeCode:x.projects?.[0]?.code||'',manager}}else state={...emptyState(),...x,manager};migrateLosRules();rebuild();await save();toast('備份已載入')}catch{toast('這不是有效的備份檔')}};
-$('clearAll').onclick=async()=>{const p=activeProject();if(!p)return toast('目前沒有計畫');if(!confirm(`確定完整刪除「${p.code} ${p.name}」及其所有資料？此動作無法復原。`))return;state.projects=state.projects.filter(x=>x.code!==p.code);state.details=state.details.filter(x=>x.projectCode!==p.code);state.summaries=state.summaries.filter(x=>x.projectCode!==p.code);state.imports=state.imports.filter(x=>x.projectCode!==p.code);for(const bag of ['limits','limitConfirmed','aliases','roadMeta','speedVersions'])for(const k of Object.keys(state[bag]))if(k.startsWith(`${p.code}|`))delete state[bag][k];for(const k of Object.keys(state.reportDrafts))if(k.startsWith(`${p.code}|`))delete state.reportDrafts[k];state.operations=state.operations.filter(x=>x.projectCode!==p.code);delete state.losRules[p.code];delete state.anomalyRules[p.code];state.activeCode=state.projects[0]?.code||'';await save();toast('目前 Project 已刪除，其他計畫不受影響')};
+function losChip(l) {
+  return `<span class="los los-${String(l).toLowerCase()}">${esc(l)}</span>`;
+}
+function renderDetails() {
+  const q = normalize($("detailSearch")?.value || ""),
+    code = state.activeCode;
+  const rows = state.details.filter(
+    (x) => x.projectCode === code && (!q || normalize(Object.values(x).join(" ")).includes(q)),
+  );
+  $("detailCount").textContent = `${rows.length} 筆`;
+  $("detailRows").innerHTML = rows.length
+    ? rows
+        .map(
+          (x) =>
+            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(directionName(x.road, x.direction, x.projectCode))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, 0)}</td><td>${losChip(x.los)}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰明細</td></tr>';
+}
+function renderSummaries() {
+  const q = normalize($("summarySearch")?.value || ""),
+    code = state.activeCode;
+  const rows = state.summaries.filter(
+    (x) => x.projectCode === code && (!q || normalize(Object.values(x).join(" ")).includes(q)),
+  );
+  $("summaryCount").textContent = `${rows.length} 筆`;
+  $("summaryRows").innerHTML = rows.length
+    ? rows
+        .map(
+          (x) =>
+            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(directionName(x.road, x.direction, x.projectCode))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td><b>${fmt(x.totalDelay, 3)}</b></td><td>${fmt(x.ratio, 3)}</td><td>${losChip(x.los)}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰彙總</td></tr>';
+}
+function renderLosRules() {
+  const x = rulesFor();
+  for (const grade of ["A", "B", "C", "D", "E"]) $(`los${grade}`).value = x[grade];
+  $("losRuleExplanation").innerHTML =
+    `<span><b>A：</b>速限比 ≥ ${fmt(x.A, 2)}</span><span><b>B：</b>${fmt(x.B, 2)} ≤ 速限比 ＜ ${fmt(x.A, 2)}</span><span><b>C：</b>${fmt(x.C, 2)} ≤ 速限比 ＜ ${fmt(x.B, 2)}</span><span><b>D：</b>${fmt(x.D, 2)} ≤ 速限比 ＜ ${fmt(x.C, 2)}</span><span><b>E：</b>${fmt(x.E, 2)} ≤ 速限比 ＜ ${fmt(x.D, 2)}</span><span><b>F：</b>速限比 ＜ ${fmt(x.E, 2)}</span>`;
+}
+function readLosRules() {
+  const x = Object.fromEntries(
+    ["A", "B", "C", "D", "E"].map((g) => [g, Number($(`los${g}`).value)]),
+  );
+  return Object.values(x).every(Number.isFinite) &&
+    x.A > x.B &&
+    x.B > x.C &&
+    x.C > x.D &&
+    x.D > x.E &&
+    x.E >= 0 &&
+    x.A <= 2
+    ? x
+    : null;
+}
+$("applyLosRules").onclick = async () => {
+  const p = activeProject();
+  if (!p) return toast("請先建立或選擇計畫");
+  const x = readLosRules();
+  if (!x) return toast("門檻必須是 A＞B＞C＞D＞E，且介於 0～2");
+  state.losRules[p.code] = x;
+  rebuild();
+  await save();
+  toast("服務水準門檻已保存，明細、彙總與圖表已重新計算");
+};
+$("resetLosRules").onclick = async () => {
+  const p = activeProject();
+  if (!p) return toast("請先建立或選擇計畫");
+  if (!confirm("確定將目前計畫的服務水準門檻恢復為系統預設值？")) return;
+  delete state.losRules[p.code];
+  rebuild();
+  await save();
+  toast("已恢復預設門檻並重新計算");
+};
+$("detailSearch").oninput = renderDetails;
+$("summarySearch").oninput = renderSummaries;
+$("rebuild").onclick = async () => {
+  rebuild();
+  await save();
+  toast("尖峰彙總已重新建立");
+};
+function renderLimits() {
+  const keys = [
+    ...new Set(
+      state.details
+        .filter((d) => d.projectCode === state.activeCode)
+        .map((d) => `${d.projectCode}|${d.road}|${d.direction}`),
+    ),
+  ].sort();
+  $("speedRows").innerHTML = keys.length
+    ? keys
+        .map((k) => {
+          const parts = k.split("|"),
+            direction = parts.pop(),
+            road = parts.pop();
+          return `<tr><td>${esc(road)}</td><td>${esc(directionName(road, direction, state.activeCode))}</td><td><input class="speed-input" data-limit="${esc(k)}" type="number" min="1" value="${state.limits[k] || 50}"></td><td>${state.limitConfirmed[k] ? '<span class="status-ok">已人工確認</span>' : '<span class="status-warn">預設值，未確認</span>'}</td></tr>`;
+        })
+        .join("")
+    : '<tr><td colspan="4" class="empty">目前計畫匯入資料後會自動建立路段方向</td></tr>';
+}
+$("applySpeed").onclick = async () => {
+  document.querySelectorAll("[data-limit]").forEach((i) => {
+    state.limits[i.dataset.limit] = Number(i.value) || 50;
+    state.limitConfirmed[i.dataset.limit] = true;
+  });
+  state.details
+    .filter((d) => d.projectCode === state.activeCode)
+    .forEach((d) => {
+      d.limit = state.limits[`${d.projectCode}|${d.road}|${d.direction}`] || 50;
+      d.ratio = d.travel == null ? null : d.travel / d.limit;
+      d.los = losOf(d.ratio, d.projectCode);
+    });
+  rebuild();
+  await save();
+  toast("目前計畫的速限已人工確認，LOS 已重新計算");
+};
+function renderTravelCharts(rows, gridId) {
+  const grid = $(gridId);
+  grid.innerHTML = "";
+  const roads = [...new Set(rows.map((x) => x.road))];
+  for (const road of roads) {
+    const own = rows
+        .filter((x) => x.road === road)
+        .sort((a, b) => periodIndex(a.period) - periodIndex(b.period)),
+      periods = [...new Set(own.map((x) => x.period))],
+      values = own.map((x) => Number(x.travel) || 0),
+      rawMax = Math.max(...values, 1),
+      max = Math.ceil(rawMax / 10) * 10 || 10,
+      ticks = [max, max * 0.75, max * 0.5, max * 0.25, 0],
+      card = document.createElement("article");
+    card.className = "chart-card";
+    card.innerHTML = `<h3>${esc(road)}｜旅行速率</h3><div class="bars speed-bars"><div class="speed-y-title">平均總旅行速率（km/h）</div><div class="y-axis">${ticks.map((t, i) => `<span style="top:${i * 25}%">${fmt(t, 1)}</span>`).join("")}</div>${periods
+      .map((p) => {
+        const w = own.find((x) => x.period === p && x.day === "平日"),
+          h = own.find((x) => x.period === p && x.day === "假日"),
+          wv = Number(w?.travel) || 0,
+          hv = Number(h?.travel) || 0;
+        return `<div class="bar-group"><i class="bar weekday speed-bar" data-value="${w ? fmt(wv, 1) : ""}" title="平日 ${w ? fmt(wv, 3) : "—"} km/h" style="height:${(wv / max) * 100}%"></i><i class="bar holiday speed-bar" data-value="${h ? fmt(hv, 1) : ""}" title="假日 ${h ? fmt(hv, 3) : "—"} km/h" style="height:${(hv / max) * 100}%"></i><small>${p}</small></div>`;
+      })
+      .join(
+        "",
+      )}</div><div class="chart-legend"><i style="background:#247db4"></i>平日<i style="background:#e88943"></i>假日　單位：km/h</div>`;
+    grid.append(card);
+  }
+}
+function renderCharts() {
+  const grid = $("chartGrid"),
+    code = state.activeCode,
+    own = state.summaries.filter((x) => x.projectCode === code);
+  grid.innerHTML = "";
+  $("chartEmpty").style.display = own.length ? "none" : "block";
+  const roads = [...new Set(own.map((x) => x.road))];
+  for (const road of roads) {
+    const rows = own
+      .filter((x) => x.road === road)
+      .sort((a, b) => periodIndex(a.period) - periodIndex(b.period));
+    const periods = [...new Set(rows.map((x) => x.period))];
+    const card = document.createElement("article");
+    card.className = "chart-card";
+    card.innerHTML = `<h3>${esc(road)}</h3><div class="bars">${periods
+      .map((p) => {
+        const w = rows.find((x) => x.period === p && x.day === "平日"),
+          h = rows.find((x) => x.period === p && x.day === "假日");
+        return `<div class="bar-group"><i class="bar weekday" data-los="${w?.los || ""}" title="平日 ${w?.los || "—"}" style="height:${((losRank[w?.los] || 0) / 6) * 100}%"></i><i class="bar holiday" data-los="${h?.los || ""}" title="假日 ${h?.los || "—"}" style="height:${((losRank[h?.los] || 0) / 6) * 100}%"></i><small>${p}</small></div>`;
+      })
+      .join(
+        "",
+      )}</div><div class="chart-legend"><i style="background:#247db4"></i>平日<i style="background:#e88943"></i>假日　資料柱上方為LOS等級</div>`;
+    grid.append(card);
+  }
+  renderTravelCharts(own, "speedTrendGrid");
+}
+function csv(rows, name) {
+  if (!rows.length) return toast("目前沒有資料");
+  // 取所有列的欄位聯集：舊版只看第一列，若第一列剛好是舊版沒有來源欄位的資料，
+  // 整份 CSV 就會少掉來源檔名、工作表與驗證碼等欄位。
+  const heads = [...new Set(rows.flatMap((row) => Object.keys(row)))],
+    body = [heads, ...rows.map((r) => heads.map((h) => r[h]))]
+      .map((a) => a.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+  download(
+    "\ufeff" + body,
+    name || `${activeProject()?.code || "Project"}_尖峰明細.csv`,
+    "text/csv",
+  );
+}
+$("exportDetail").onclick = () =>
+  csv(state.details.filter((x) => x.projectCode === state.activeCode));
+/**
+ * 觸發瀏覽器下載。
+ * 連結一定要先掛進文件再點擊：部分瀏覽器對「沒有掛進 DOM」的 <a> 會忽略
+ * download 屬性，檔案就會被存成沒有副檔名的「download」，使用者根本認不出來。
+ */
+function triggerDownload(href, name) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name || "download";
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.append(a);
+  a.click();
+  setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(href);
+  }, 1500);
+}
+globalThis.triggerDownload = triggerDownload;
+function download(data, name, type = "application/json") {
+  triggerDownload(URL.createObjectURL(new Blob([data], { type })), name);
+}
+function projectPackage() {
+  const p = activeProject();
+  if (!p) return null;
+  const details = state.details.filter((x) => x.projectCode === p.code),
+    summaries = state.summaries.filter((x) => x.projectCode === p.code),
+    imports = state.imports.filter((x) => x.projectCode === p.code),
+    limits = Object.fromEntries(
+      Object.entries(state.limits).filter(([k]) => k.startsWith(`${p.code}|`)),
+    ),
+    limitConfirmed = Object.fromEntries(
+      Object.entries(state.limitConfirmed).filter(([k]) => k.startsWith(`${p.code}|`)),
+    ),
+    aliases = Object.fromEntries(
+      Object.entries(state.aliases).filter(([k]) => k.startsWith(`${p.code}|`)),
+    ),
+    roadMeta = Object.fromEntries(
+      Object.entries(state.roadMeta).filter(([k]) => k.startsWith(`${p.code}|`)),
+    ),
+    speedVersions = Object.fromEntries(
+      Object.entries(state.speedVersions).filter(([k]) => k.startsWith(`${p.code}|`)),
+    ),
+    reportDrafts = Object.fromEntries(
+      Object.entries(state.reportDrafts).filter(([k]) => k.startsWith(`${p.code}|`)),
+    );
+  return {
+    kind: "TLM_PROJECT_PACKAGE",
+    exportedAt: new Date().toISOString(),
+    project: p,
+    details,
+    summaries,
+    imports,
+    limits,
+    limitConfirmed,
+    aliases,
+    roadMeta,
+    speedVersions,
+    anomalyRule: state.anomalyRules[p.code] || null,
+    reportDrafts,
+    losRule: rulesFor(p.code),
+  };
+}
+function downloadProjectPackage(note = true) {
+  const pack = projectPackage();
+  if (!pack) {
+    toast("尚未建立計畫");
+    return false;
+  }
+  download(
+    JSON.stringify(pack, null, 2),
+    `${pack.project.code}_${pack.project.name}_Project專案包.json`,
+  );
+  if (note) toast("目前 Project 專案包已下載");
+  return true;
+}
+$("downloadBackup").textContent = "下載目前 Project 專案包";
+$("downloadBackup").onclick = () => downloadProjectPackage();
+const portfolioBtn = document.createElement("button");
+portfolioBtn.className = "outline";
+portfolioBtn.style.marginLeft = "8px";
+portfolioBtn.textContent = "下載個人全部計畫包";
+$("downloadBackup").after(portfolioBtn);
+portfolioBtn.onclick = () => {
+  if (!state.projects.length) return toast("尚未建立計畫");
+  download(
+    JSON.stringify(
+      {
+        kind: "TLM_PORTFOLIO_PACKAGE",
+        exportedAt: new Date().toISOString(),
+        projects: state.projects,
+        details: state.details,
+        summaries: state.summaries,
+        imports: state.imports,
+        limits: state.limits,
+        limitConfirmed: state.limitConfirmed,
+        aliases: state.aliases,
+        roadMeta: state.roadMeta,
+        speedVersions: state.speedVersions,
+        anomalyRules: state.anomalyRules,
+        reportDrafts: state.reportDrafts,
+        operations: state.operations,
+        losRules: state.losRules,
+      },
+      null,
+      2,
+    ),
+    "交通服務水準_個人全部計畫包.json",
+  );
+  toast("個人全部計畫包已下載");
+};
+$("restoreFile").onchange = async (e) => {
+  // 還原前先把目前狀態留一份。舊版是「邊解析邊改 state」，
+  // 遇到壞掉的備份檔會在改壞之後才丟出例外，畫面只顯示「這不是有效的備份檔」，
+  // 但原本的資料其實已經被覆蓋，而且下一次存檔就寫進資料庫，救不回來。
+  const snapshot = structuredClone(state);
+  try {
+    const x = JSON.parse(await e.target.files[0].text()),
+      manager = state.manager;
+    if (!x || typeof x !== "object") throw new Error("格式不符");
+    if (x.kind === "TLM_PROJECT_PACKAGE") {
+      state.projects = state.projects.filter((p) => p.code !== x.project.code);
+      state.projects.push(x.project);
+      state.activeCode = x.project.code;
+      state.details = state.details
+        .filter((d) => d.projectCode !== x.project.code)
+        .concat(x.details || []);
+      state.imports = state.imports
+        .filter((d) => d.projectCode !== x.project.code)
+        .concat(x.imports || []);
+      Object.assign(state.limits, x.limits || {});
+      Object.assign(state.limitConfirmed, x.limitConfirmed || {});
+      Object.assign(state.aliases, x.aliases || {});
+      Object.assign(state.roadMeta, x.roadMeta || {});
+      Object.assign(state.speedVersions, x.speedVersions || {});
+      if (x.anomalyRule) state.anomalyRules[x.project.code] = x.anomalyRule;
+      Object.assign(state.reportDrafts, x.reportDrafts || {});
+      if (x.losRule && !isLegacyLosRule(x.losRule)) state.losRules[x.project.code] = x.losRule;
+      else delete state.losRules[x.project.code];
+    } else if (x.kind === "TLM_PORTFOLIO_PACKAGE") {
+      state = { ...emptyState(), ...x, activeCode: x.projects?.[0]?.code || "", manager };
+    } else state = { ...emptyState(), ...x, manager };
+    if (!Array.isArray(state.projects) || !Array.isArray(state.details))
+      throw new Error("內容不完整");
+    state.summaries = Array.isArray(state.summaries) ? state.summaries : [];
+    state.imports = Array.isArray(state.imports) ? state.imports : [];
+    migrateLosRules();
+    rebuild();
+    await save();
+    toast("備份已載入");
+  } catch {
+    state = snapshot;
+    renderAll();
+    toast("這不是有效的備份檔，原有資料未變動");
+  } finally {
+    e.target.value = "";
+  }
+};
+/**
+ * 刪除一個計畫，以及它底下所有的資料。
+ * 各種以「計畫編號|…」為鍵值的設定（速限、別名、路段資料、速限版本、
+ * 報告草稿…）都必須一併清掉，否則之後建立同編號的計畫會沿用到舊設定。
+ */
+function purgeProject(code) {
+  state.projects = state.projects.filter((x) => x.code !== code);
+  state.details = state.details.filter((x) => x.projectCode !== code);
+  state.summaries = state.summaries.filter((x) => x.projectCode !== code);
+  state.imports = state.imports.filter((x) => x.projectCode !== code);
+  for (const bag of ["limits", "limitConfirmed", "aliases", "roadMeta", "speedVersions"])
+    for (const k of Object.keys(state[bag] || {}))
+      if (k.startsWith(`${code}|`)) delete state[bag][k];
+  for (const k of Object.keys(state.reportDrafts || {}))
+    if (k.startsWith(`${code}|`)) delete state.reportDrafts[k];
+  state.operations = (state.operations || []).filter((x) => x.projectCode !== code);
+  delete state.losRules[code];
+  delete state.anomalyRules[code];
+  if (state.activeCode === code) state.activeCode = state.projects[0]?.code || "";
+  clearPendingPreview();
+}
+/** 刪除計畫前一律先產生一份專案包，誤刪時還救得回來。 */
+async function deleteProjectFlow(code, { fromSetup = false } = {}) {
+  const target = state.projects.find((x) => x.code === code);
+  if (!target) return toast("找不到要刪除的計畫");
+  const rows = state.details.filter((x) => x.projectCode === code).length;
+  const periods = [
+    ...new Set(state.details.filter((x) => x.projectCode === code).map((x) => x.period)),
+  ].length;
+  if (
+    !confirm(
+      `確定要刪除計畫「${target.code} ${target.name}」嗎？\n\n` +
+        `這個計畫底下的 ${periods} 個季度、${rows} 筆尖峰明細、彙總、路段速限、別名與報告草稿都會一起刪除，且無法復原。\n\n` +
+        `按「確定」前，系統會先自動下載一份這個計畫的專案包備份。`,
+    )
+  )
+    return;
+  const previousActive = state.activeCode;
+  state.activeCode = code;
+  downloadProjectPackage(false);
+  state.activeCode = previousActive;
+  purgeProject(code);
+  await save();
+  toast(`計畫「${target.code} ${target.name}」已刪除，其他計畫不受影響`);
+  if (fromSetup) go(state.projects.length ? "home" : "setup");
+}
+// 「備份與淨空」原本的按鈕寫著「清除目前瀏覽器內所有計畫及資料」，
+// 實際上卻只刪掉目前這一個計畫，文案與行為不符。這裡改成兩個分開的動作。
+$("clearAll").textContent = "刪除目前這一個計畫";
+$("clearAll").onclick = async () => {
+  const p = activeProject();
+  if (!p) return toast("目前沒有計畫");
+  await deleteProjectFlow(p.code);
+};
+const clearAllCard = $("clearAll").closest(".action-card");
+if (clearAllCard) {
+  clearAllCard.querySelector("b").textContent = "刪除計畫";
+  clearAllCard.querySelector("p").textContent =
+    "刪除目前選取的那一個計畫及其全部資料；刪除前會自動下載一份專案包備份。其他計畫不受影響。";
+  const wipeAll = document.createElement("button");
+  wipeAll.id = "wipeEverything";
+  wipeAll.style.marginTop = "8px";
+  wipeAll.textContent = "清除這台電腦上的全部計畫";
+  clearAllCard.append(wipeAll);
+  wipeAll.onclick = async () => {
+    if (!state.projects.length && !state.manager.length) return toast("目前沒有任何資料");
+    if (
+      !confirm(
+        `確定要清除這個瀏覽器內的「全部 ${state.projects.length} 個計畫」及 Manager 已匯入的專案包嗎？\n\n` +
+          `此動作無法復原。建議先按上方「下載個人全部計畫包」保存備份。`,
+      )
+    )
+      return;
+    if (!confirm("再次確認：全部計畫資料都會被清除，且無法復原。確定繼續？")) return;
+    state = emptyState();
+    clearPendingPreview();
+    await save();
+    toast("已清除全部資料，回到全新空白模板");
+    go("setup");
+  };
+}
 
-$('managerFiles').onchange=async e=>{let added=0;for(const f of [...e.target.files])try{const p=JSON.parse(await f.text()),packs=p.kind==='TLM_PORTFOLIO_PACKAGE'?(p.projects||[]).map(project=>({kind:'TLM_PROJECT_PACKAGE',project,details:(p.details||[]).filter(x=>x.projectCode===project.code),summaries:(p.summaries||[]).filter(x=>x.projectCode===project.code)})):[p];for(const pack of packs){if(pack.kind!=='TLM_PROJECT_PACKAGE'||!pack.project?.code)continue;pack.importedAt=new Date().toLocaleString('zh-TW');state.manager=state.manager.filter(x=>x.project.code!==pack.project.code);state.manager.push(pack);added++}}catch{}e.target.value='';await save();toast(`已匯入或更新 ${added} 個 Project`)};
-for(const id of ['managerSearch','managerProjectFilter','managerPeriodFilter','managerDayFilter','managerLosFilter'])$(id).addEventListener(id==='managerSearch'?'input':'change',renderManager);
-$('resetManagerFilters').onclick=()=>{for(const id of ['managerProjectFilter','managerPeriodFilter','managerDayFilter','managerLosFilter','managerSearch'])$(id).value='';renderManager()};
-$('clearManager').onclick=async()=>{if(confirm('確定清除 Manager 內全部專案包？各 Project 本身不受影響。')){state.manager=[];await save()}};
-$('exportManager').onclick=()=>csv(managerFilteredRows().map(({packageProject,...row})=>row),`Manager_篩選結果_${new Date().toISOString().slice(0,10)}.csv`);
-function syncOptions(id,items,allLabel){const el=$(id),old=el.value;el.innerHTML=`<option value="">${allLabel}</option>`+items.map(x=>`<option value="${esc(x.value??x)}">${esc(x.label??x)}</option>`).join('');el.value=[...el.options].some(x=>x.value===old)?old:''}
-function managerAllRows(){return state.manager.flatMap(p=>(p.summaries||[]).map(x=>({...x,packageProject:p.project})))}
-function managerFilteredRows(){const all=managerAllRows(),project=$('managerProjectFilter').value,period=$('managerPeriodFilter').value,day=$('managerDayFilter').value,los=$('managerLosFilter').value,q=normalize($('managerSearch').value);return all.filter(x=>(!project||x.projectCode===project)&&(!period||x.period===period)&&(!day||x.day===day)&&(!los||x.los===los)&&(!q||normalize(Object.values(x).join(' ')).includes(q)))}
-function renderManagerCharts(rows){const grid=$('managerChartGrid'),project=$('managerProjectFilter').value;grid.innerHTML='';$('managerSpeedTrendGrid').innerHTML='';$('managerChartHint').style.display=project&&rows.length?'none':'block';$('managerChartHint').textContent=project?'目前篩選條件沒有可繪製資料。':'請先選擇一個計畫，避免一次載入過多圖表。';managerSpeedTitle.style.display=project&&rows.length?'flex':'none';if(!project)return;const roads=[...new Set(rows.map(x=>x.road))];for(const road of roads){const own=rows.filter(x=>x.road===road).sort((a,b)=>a.period.localeCompare(b.period)),periods=[...new Set(own.map(x=>x.period))],card=document.createElement('article');card.className='chart-card';card.innerHTML=`<h3>${esc(road)}</h3><div class="bars">${periods.map(p=>{const w=own.find(x=>x.period===p&&x.day==='平日'),h=own.find(x=>x.period===p&&x.day==='假日');return`<div class="bar-group"><i class="bar weekday" data-los="${w?.los||''}" title="平日 ${w?.los||'—'}" style="height:${(losRank[w?.los]||0)/6*100}%"></i><i class="bar holiday" data-los="${h?.los||''}" title="假日 ${h?.los||'—'}" style="height:${(losRank[h?.los]||0)/6*100}%"></i><small>${p}</small></div>`}).join('')}</div><div class="chart-legend"><i style="background:#247db4"></i>平日<i style="background:#e88943"></i>假日　資料柱上方為LOS等級</div>`;grid.append(card)}renderTravelCharts(rows,'managerSpeedTrendGrid')}
-function renderManager(){const all=managerAllRows(),projectBefore=$('managerProjectFilter').value;syncOptions('managerProjectFilter',state.manager.map(x=>({value:x.project.code,label:`${x.project.code} ${x.project.name}`})),'全部計畫');if(projectBefore)$('managerProjectFilter').value=projectBefore;const periodSource=all.filter(x=>!$('managerProjectFilter').value||x.projectCode===$('managerProjectFilter').value);syncOptions('managerPeriodFilter',[...new Set(periodSource.map(x=>x.period))].sort(),'全部季度');const rows=managerFilteredRows();$('managerProjects').textContent=state.manager.length;$('managerRecords').textContent=rows.length;$('managerRoads').textContent=new Set(rows.map(x=>`${x.projectCode}|${x.road}`)).size;const ps=rows.map(x=>x.period).sort();$('managerPeriod').textContent=ps.length?`${ps[0]}～${ps.at(-1)}`:'—';$('managerPackageRows').innerHTML=state.manager.length?state.manager.map(x=>`<tr><td>${esc(x.project.code)}</td><td>${esc(x.project.name)}</td><td>${(x.summaries||[]).length}</td><td>${esc(x.importedAt||x.exportedAt||'舊版匯入')}</td><td><button class="outline" data-remove-manager="${esc(x.project.code)}">移除</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">尚未匯入 Project 專案包</td></tr>';$('managerRows').innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${x.period}</td><td>${esc(x.road)}</td><td>${x.day}</td><td>${x.peak}</td><td>${x.direction}</td><td>${fmt(x.travel,3)}</td><td>${fmt(x.totalDelay,3)}</td><td>${losChip(x.los)}</td></tr>`).join(''):'<tr><td colspan="9" class="empty">目前篩選條件沒有資料</td></tr>';document.querySelectorAll('[data-remove-manager]').forEach(b=>b.onclick=async()=>{const code=b.dataset.removeManager,p=state.manager.find(x=>x.project.code===code)?.project;if(confirm(`確定從 Manager 移除「${code} ${p?.name||''}」？原始 Project 不受影響。`)){state.manager=state.manager.filter(x=>x.project.code!==code);await save()}});renderManagerCharts(rows)}
-function renderImportLog(){const rows=(state.imports||[]).filter(x=>x.projectCode===state.activeCode);$('importLogCount').textContent=`${rows.length} 個批次`;$('importLogRows').innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(x.time)}</td><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(x.period)}</td><td>${x.files.length}</td><td>${x.added}</td><td>${x.updated}</td><td>${x.skipped}</td><td>${x.status}</td><td>${x.status==='有效'?`<button class="outline" data-rollback="${x.id}">復原此批</button>`:'—'}</td></tr>`).join(''):'<tr><td colspan="9" class="empty">目前計畫尚無匯入紀錄</td></tr>';document.querySelectorAll('[data-rollback]').forEach(b=>b.onclick=()=>rollbackBatch(b.dataset.rollback))}
-async function rollbackBatch(id){const batch=state.imports.find(x=>x.id===id);if(!batch||batch.status!=='有效')return;const current=new Map(state.details.map(x=>[x.id,x])),changed=batch.writtenIds.filter(key=>current.has(key)&&current.get(key).importBatch!==id);if(changed.length)return toast('此批資料已被後續批次更新，請先復原較新的相關批次');const message=batch.type==='delete-quarter'?`確定還原已刪除的 ${batch.period}？\n將回復 ${batch.previous.length} 筆尖峰明細。`:`確定復原 ${batch.time} 的匯入？\n新增 ${batch.added} 筆將移除，更新 ${batch.updated} 筆將還原。`;if(!confirm(message))return;const added=new Set(batch.addedIds);state.details=state.details.filter(x=>!added.has(x.id));const map=new Map(state.details.map(x=>[x.id,x]));batch.previous.forEach(x=>map.set(x.id,x));state.details=[...map.values()];batch.status='已復原';batch.revertedAt=new Date().toLocaleString('zh-TW');rebuild();await save();toast(batch.type==='delete-quarter'?'該季度已還原':'該匯入批次已復原')}
-function projectPeriods(){return[...new Set(state.details.filter(x=>x.projectCode===state.activeCode).map(x=>x.period))].sort()}
-function refreshMaintenance(){const periods=projectPeriods(),selected=$('deletePeriod').value;$('deletePeriod').innerHTML=periods.map(p=>`<option value="${esc(p)}" ${p===selected?'selected':''}>${p}</option>`).join('')||'<option value="">目前沒有資料</option>';const period=$('deletePeriod').value,rows=state.details.filter(x=>x.projectCode===state.activeCode&&x.period===period),roads=new Set(rows.map(x=>x.road)).size;$('deleteImpact').textContent=period?`${period}：${rows.length} 筆尖峰明細、${roads} 個路段。刪除後可重新批次匯入。`:'目前沒有可刪除的季度';$('deleteQuarter').disabled=!rows.length}
-$('deletePeriod').onchange=refreshMaintenance;
-$('deleteQuarter').onclick=async()=>{const p=activeProject(),period=$('deletePeriod').value,rows=state.details.filter(x=>x.projectCode===state.activeCode&&x.period===period);if(!p||!rows.length)return;if(!confirm(`確定刪除「${p.code} ${p.name}」的 ${period}？\n共 ${rows.length} 筆尖峰明細。系統會先下載備份，刪除後可重新匯入。`))return;downloadProjectPackage(false);const now=new Date(),batch={id:`D${Date.now()}`,type:'delete-quarter',projectCode:p.code,projectName:p.name,period,time:now.toLocaleString('zh-TW'),timestamp:now.toISOString(),files:[],addedIds:[],previous:structuredClone(rows),writtenIds:[],added:0,updated:rows.length,skipped:0,status:'有效'};state.details=state.details.filter(x=>!(x.projectCode===p.code&&x.period===period));state.imports.unshift(batch);rebuild();await save();inspectHealth();toast(`${period} 已刪除，可重新批次匯入`)};
-function roadSignature(s){return stripRoadSuffix(s).normalize('NFKC').toLowerCase().replace(/[\s　/\\_~～〜‐‑‒–—―－.,，、。:：;；()（）\[\]【】]/g,'')}
-function inspectHealth(){const rows=state.details.filter(x=>x.projectCode===state.activeCode),issues=[];const roads=[...new Set(rows.map(x=>x.road))];for(const road of roads){const clean=stripRoadSuffix(road);if(clean!==road)issues.push({type:'異常名稱',period:'全部',item:road,detail:`疑似包含日別或日期尾碼，建議修正為「${clean}」`,fixable:true})}
- const signatures={};for(const road of roads)(signatures[roadSignature(road)]??=[]).push(road);for(const variants of Object.values(signatures)){const names=[...new Set(variants)];if(names.length>1)issues.push({type:'名稱疑似重複',period:'全部',item:names.join('／'),detail:'標點或分隔符不同，請確認是否為同一路段；可使用「路段名稱修改／合併」。'})}
- const groups={};for(const d of rows){const k=[d.period,d.road,d.day].join('|');(groups[k]??=[]).push(d);if(!(Number(d.travel)>0&&Number(d.running)>0&&Number(d.totalDelay)>=0&&Number(d.limit)>0))issues.push({type:'數值異常',period:d.period,item:`${d.road}／${d.day}／${d.peak}／${d.direction}`,detail:'旅行速率、行駛速率、總延滯或速限包含空白、零值或無效數值。'})}for(const [key,g] of Object.entries(groups))if(g.length!==4){const [period,road,day]=key.split('|');issues.push({type:'資料組不完整',period,item:`${road}／${day}`,detail:`應有4筆尖峰方向資料，目前為 ${g.length} 筆。`})}
- const periods=projectPeriods(),dayGroups={};for(const d of rows)(dayGroups[`${d.period}|${stripRoadSuffix(d.road)}`]??=new Set()).add(d.day);for(const period of periods)for(const road of roads){if(!roadIsActive(road,period))continue;const days=dayGroups[`${period}|${stripRoadSuffix(road)}`]||new Set();if(!days.has('平日')||!days.has('假日'))issues.push({type:'日別不完整',period,item:road,detail:days.size?`目前只有 ${[...days].join('、')}，請確認本季是否漏匯檔案。`:'有效期間內沒有平日及假日資料，請確認是否漏匯。'})}
- const limitKeys=[...new Set(rows.map(d=>`${d.projectCode}|${d.road}|${d.direction}`))];for(const key of limitKeys)if(!state.limitConfirmed[key]){const parts=key.split('|'),direction=parts.pop(),road=parts.pop();issues.push({type:'速限未確認',period:'全部',item:`${road}／${directionName(road,direction)}`,detail:`目前使用預設 ${state.limits[key]||50} km/h，請至「路段速限」人工核對後按套用。`})}
- for(const road of roads)for(const day of ['平日','假日']){const seq=state.summaries.filter(x=>x.projectCode===state.activeCode&&x.road===road&&x.day===day).sort((a,b)=>a.period.localeCompare(b.period));for(let i=1;i<seq.length;i++){const prev=seq[i-1],now=seq[i],drop=(losRank[prev.los]||0)-(losRank[now.los]||0),speedChange=prev.travel?Math.abs(now.travel-prev.travel)/prev.travel:0;if(drop>=2||speedChange>=.25)issues.push({type:'異常變化',period:now.period,item:`${road}／${day}`,detail:`相較 ${prev.period}：LOS ${prev.los}→${now.los}，旅行速率 ${fmt(prev.travel,1)}→${fmt(now.travel,1)} km/h，請確認資料或現地變化。`})}}
- healthIssues=issues;renderHealth();return issues}
-function renderHealth(){const counts=t=>healthIssues.filter(x=>x.type===t).length;$('healthNames').textContent=counts('異常名稱')+counts('名稱疑似重複');$('healthGroups').textContent=counts('資料組不完整')+counts('日別不完整');$('healthValues').textContent=counts('數值異常');$('healthCount').textContent=healthIssues.length?`發現 ${healthIssues.length} 項需確認`:'檢查通過，未發現異常';$('healthRows').innerHTML=healthIssues.length?healthIssues.map(x=>`<tr><td>${esc(x.type)}</td><td>${esc(x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">目前計畫未發現資料異常</td></tr>';$('cleanSuffix').disabled=!healthIssues.some(x=>x.fixable);renderQuality()}
-function renderQuality(){if(!$('qualityRows'))return;const types=['日別不完整','資料組不完整','速限未確認','異常變化'],rows=healthIssues.filter(x=>types.includes(x.type));$('qualityDay').textContent=rows.filter(x=>x.type==='日別不完整').length;$('qualityGroup').textContent=rows.filter(x=>x.type==='資料組不完整').length;$('qualitySpeed').textContent=rows.filter(x=>x.type==='速限未確認').length;$('qualityChange').textContent=rows.filter(x=>x.type==='異常變化').length;$('qualityRows').innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(x.type)}</td><td>${esc(x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">目前四項品質檢查均通過</td></tr>'}
-$('runHealth').onclick=()=>{inspectHealth();toast(healthIssues.length?`健康檢查完成：${healthIssues.length} 項需確認`:'健康檢查通過')};
-$('cleanSuffix').onclick=async()=>{const p=activeProject(),targets=new Map(healthIssues.filter(x=>x.fixable).map(x=>[x.item,stripRoadSuffix(x.item)]));if(!p||!targets.size)return;if(!confirm(`確定修正 ${targets.size} 個含日期尾碼的路段名稱？\n系統會先下載 Project 備份，再合併明細、彙總與速限。`))return;downloadProjectPackage(false);const cleanFirst=state.details.filter(x=>x.projectCode!==p.code||!targets.has(x.road)),dirty=state.details.filter(x=>x.projectCode===p.code&&targets.has(x.road)),map=new Map(cleanFirst.map(x=>[x.id,x]));for(const d of dirty){const old=d.road,target=targets.get(old);state.aliases[`${p.code}|${old}`]=target;const oldLimit=`${p.code}|${old}|${d.direction}`,newLimit=`${p.code}|${target}|${d.direction}`;if(!state.limits[newLimit])state.limits[newLimit]=state.limits[oldLimit]||d.limit;if(state.limitConfirmed[oldLimit])state.limitConfirmed[newLimit]=true;delete state.limits[oldLimit];delete state.limitConfirmed[oldLimit];d.road=target;d.limit=state.limits[newLimit];d.ratio=d.travel/d.limit;d.los=losOf(d.ratio);d.id=[d.projectCode,d.year,`Q${d.quarter}`,target,d.day,d.peak,d.direction].join('|');if(!map.has(d.id))map.set(d.id,d)}state.details=[...map.values()];rebuild();await save();inspectHealth();toast('明顯日期尾碼已修正並合併')};
-function renderAll(){const p=activeProject(),ownDetails=state.details.filter(x=>x.projectCode===state.activeCode),ownSummary=state.summaries.filter(x=>x.projectCode===state.activeCode),options=state.projects.map(x=>`<option value="${esc(x.code)}" ${x.code===state.activeCode?'selected':''}>${esc(x.code)} ${esc(x.name)}</option>`).join('');projectSwitch.innerHTML=options||'<option value="">尚未建立計畫</option>';$('projectPicker').innerHTML='<option value="">＋ 建立新計畫</option>'+options;$('projectCode').value=p?.code||'';$('projectName').value=p?.name||'';$('headProject').textContent=p?`${p.code} ${p.name}`:'尚未建立計畫';$('mProject').textContent=state.projects.length;$('mDetail').textContent=ownDetails.length;$('mSummary').textContent=ownSummary.length;$('mPeriod').textContent=state.last.year?`${state.last.year}Q${state.last.quarter}`:'—';$('mTime').textContent=state.last.time||'尚無資料';if(state.last.year){$('rocYear').value=state.last.year;$('quarter').value=state.last.quarter}renderDetails();renderSummaries();renderLosRules();renderLimits();renderCharts();renderManager();renderImportLog();refreshMaintenance();renderHealth();if(p&&!ownDetails.length){$('nextTitle').textContent='匯入目前計畫的第一季尖峰資料';$('nextText').textContent='選擇同一季度的平日、假日 Excel，先預覽再寫入。';$('nextBtn').onclick=()=>go('import')}else if(ownDetails.length){$('nextTitle').textContent='檢查目前計畫的尖峰彙總';$('nextText').textContent='確認旅行速率、行駛速率與總延滯來自同一筆紀錄。';$('nextBtn').onclick=()=>go('summary')}else{$('nextTitle').textContent='建立第一個計畫';$('nextText').textContent='計畫數量不設上限，可持續新增並切換管理。';$('nextBtn').onclick=()=>go('setup')}}
-const renderAllBase=renderAll;renderAll=()=>{renderAllBase();renderRoadAdmin()};
+$("managerFiles").onchange = async (e) => {
+  let added = 0;
+  for (const f of [...e.target.files])
+    try {
+      const p = JSON.parse(await f.text()),
+        packs =
+          p.kind === "TLM_PORTFOLIO_PACKAGE"
+            ? (p.projects || []).map((project) => ({
+                kind: "TLM_PROJECT_PACKAGE",
+                project,
+                details: (p.details || []).filter((x) => x.projectCode === project.code),
+                summaries: (p.summaries || []).filter((x) => x.projectCode === project.code),
+              }))
+            : [p];
+      for (const pack of packs) {
+        if (pack.kind !== "TLM_PROJECT_PACKAGE" || !pack.project?.code) continue;
+        pack.importedAt = new Date().toLocaleString("zh-TW");
+        state.manager = state.manager.filter((x) => x.project.code !== pack.project.code);
+        state.manager.push(pack);
+        added++;
+      }
+    } catch {}
+  e.target.value = "";
+  await save();
+  toast(`已匯入或更新 ${added} 個 Project`);
+};
+for (const id of [
+  "managerSearch",
+  "managerProjectFilter",
+  "managerPeriodFilter",
+  "managerDayFilter",
+  "managerLosFilter",
+])
+  $(id).addEventListener(id === "managerSearch" ? "input" : "change", renderManager);
+$("resetManagerFilters").onclick = () => {
+  for (const id of [
+    "managerProjectFilter",
+    "managerPeriodFilter",
+    "managerDayFilter",
+    "managerLosFilter",
+    "managerSearch",
+  ])
+    $(id).value = "";
+  renderManager();
+};
+$("clearManager").onclick = async () => {
+  if (confirm("確定清除 Manager 內全部專案包？各 Project 本身不受影響。")) {
+    state.manager = [];
+    await save();
+  }
+};
+$("exportManager").onclick = () =>
+  csv(
+    managerFilteredRows().map(({ packageProject, ...row }) => row),
+    `Manager_篩選結果_${new Date().toISOString().slice(0, 10)}.csv`,
+  );
+function syncOptions(id, items, allLabel) {
+  const el = $(id),
+    old = el.value;
+  el.innerHTML =
+    `<option value="">${allLabel}</option>` +
+    items.map((x) => `<option value="${esc(x.value ?? x)}">${esc(x.label ?? x)}</option>`).join("");
+  el.value = [...el.options].some((x) => x.value === old) ? old : "";
+}
+function managerAllRows() {
+  return state.manager.flatMap((p) =>
+    (p.summaries || []).map((x) => ({ ...x, packageProject: p.project })),
+  );
+}
+function managerFilteredRows() {
+  const all = managerAllRows(),
+    project = $("managerProjectFilter").value,
+    period = $("managerPeriodFilter").value,
+    day = $("managerDayFilter").value,
+    los = $("managerLosFilter").value,
+    q = normalize($("managerSearch").value);
+  return all.filter(
+    (x) =>
+      (!project || x.projectCode === project) &&
+      (!period || x.period === period) &&
+      (!day || x.day === day) &&
+      (!los || x.los === los) &&
+      (!q || normalize(Object.values(x).join(" ")).includes(q)),
+  );
+}
+function renderManagerCharts(rows) {
+  const grid = $("managerChartGrid"),
+    project = $("managerProjectFilter").value;
+  grid.innerHTML = "";
+  $("managerSpeedTrendGrid").innerHTML = "";
+  $("managerChartHint").style.display = project && rows.length ? "none" : "block";
+  $("managerChartHint").textContent = project
+    ? "目前篩選條件沒有可繪製資料。"
+    : "請先選擇一個計畫，避免一次載入過多圖表。";
+  managerSpeedTitle.style.display = project && rows.length ? "flex" : "none";
+  if (!project) return;
+  const roads = [...new Set(rows.map((x) => x.road))];
+  for (const road of roads) {
+    const own = rows
+        .filter((x) => x.road === road)
+        .sort((a, b) => periodIndex(a.period) - periodIndex(b.period)),
+      periods = [...new Set(own.map((x) => x.period))],
+      card = document.createElement("article");
+    card.className = "chart-card";
+    card.innerHTML = `<h3>${esc(road)}</h3><div class="bars">${periods
+      .map((p) => {
+        const w = own.find((x) => x.period === p && x.day === "平日"),
+          h = own.find((x) => x.period === p && x.day === "假日");
+        return `<div class="bar-group"><i class="bar weekday" data-los="${w?.los || ""}" title="平日 ${w?.los || "—"}" style="height:${((losRank[w?.los] || 0) / 6) * 100}%"></i><i class="bar holiday" data-los="${h?.los || ""}" title="假日 ${h?.los || "—"}" style="height:${((losRank[h?.los] || 0) / 6) * 100}%"></i><small>${p}</small></div>`;
+      })
+      .join(
+        "",
+      )}</div><div class="chart-legend"><i style="background:#247db4"></i>平日<i style="background:#e88943"></i>假日　資料柱上方為LOS等級</div>`;
+    grid.append(card);
+  }
+  renderTravelCharts(rows, "managerSpeedTrendGrid");
+}
+function renderManager() {
+  const all = managerAllRows(),
+    projectBefore = $("managerProjectFilter").value;
+  syncOptions(
+    "managerProjectFilter",
+    state.manager.map((x) => ({
+      value: x.project.code,
+      label: `${x.project.code} ${x.project.name}`,
+    })),
+    "全部計畫",
+  );
+  if (projectBefore) $("managerProjectFilter").value = projectBefore;
+  const periodSource = all.filter(
+    (x) => !$("managerProjectFilter").value || x.projectCode === $("managerProjectFilter").value,
+  );
+  syncOptions(
+    "managerPeriodFilter",
+    sortPeriods(periodSource.map((x) => x.period)),
+    "全部季度",
+  );
+  const rows = managerFilteredRows();
+  $("managerProjects").textContent = state.manager.length;
+  $("managerRecords").textContent = rows.length;
+  $("managerRoads").textContent = new Set(rows.map((x) => `${x.projectCode}|${x.road}`)).size;
+  const ps = sortPeriods(rows.map((x) => x.period));
+  $("managerPeriod").textContent = ps.length ? `${ps[0]}～${ps.at(-1)}` : "—";
+  $("managerPackageRows").innerHTML = state.manager.length
+    ? state.manager
+        .map(
+          (x) =>
+            `<tr><td>${esc(x.project.code)}</td><td>${esc(x.project.name)}</td><td>${(x.summaries || []).length}</td><td>${esc(x.importedAt || x.exportedAt || "舊版匯入")}</td><td><button class="outline" data-remove-manager="${esc(x.project.code)}">移除</button></td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="5" class="empty">尚未匯入 Project 專案包</td></tr>';
+  $("managerRows").innerHTML = rows.length
+    ? rows
+        .map(
+          (x) =>
+            `<tr><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(x.direction)}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${losChip(x.los)}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="9" class="empty">目前篩選條件沒有資料</td></tr>';
+  document.querySelectorAll("[data-remove-manager]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        const code = b.dataset.removeManager,
+          p = state.manager.find((x) => x.project.code === code)?.project;
+        if (confirm(`確定從 Manager 移除「${code} ${p?.name || ""}」？原始 Project 不受影響。`)) {
+          state.manager = state.manager.filter((x) => x.project.code !== code);
+          await save();
+        }
+      }),
+  );
+  renderManagerCharts(rows);
+}
+function renderImportLog() {
+  const rows = (state.imports || []).filter((x) => x.projectCode === state.activeCode);
+  $("importLogCount").textContent = `${rows.length} 個批次`;
+  $("importLogRows").innerHTML = rows.length
+    ? rows
+        .map(
+          (x) =>
+            `<tr><td>${esc(x.time)}</td><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(x.period)}</td><td>${x.files.length}</td><td>${x.added}</td><td>${x.updated}</td><td>${x.skipped}</td><td>${esc(x.status)}</td><td>${x.status === "有效" ? `<button class="outline" data-rollback="${esc(x.id)}">復原此批</button>` : "—"}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="9" class="empty">目前計畫尚無匯入紀錄</td></tr>';
+  document
+    .querySelectorAll("[data-rollback]")
+    .forEach((b) => (b.onclick = () => rollbackBatch(b.dataset.rollback)));
+}
+async function rollbackBatch(id) {
+  const batch = state.imports.find((x) => x.id === id);
+  if (!batch || batch.status !== "有效") return;
+  const current = new Map(state.details.map((x) => [x.id, x])),
+    written = Array.isArray(batch.writtenIds) ? batch.writtenIds : [],
+    changed = written.filter(
+      (key) => current.has(key) && current.get(key).importBatch !== id,
+    );
+  if (changed.length) return toast("此批資料已被後續批次更新，請先復原較新的相關批次");
+  // 舊版的守門只看「被改掉的」，看不出「已經不存在的」。
+  // 路段改名或合併會把每一筆的 id 全部改寫，這時 writtenIds 全部查無資料，
+  // 守門形同虛設，一按復原就會把改名前的舊路段整批復活、與新名稱重複計算。
+  if (written.length && written.some((key) => !current.has(key)))
+    return toast("這批資料的路段名稱或期間已被後續操作變更，無法安全復原；請改用備份還原");
+  // 「刪除季度」批次若之後又重新匯入同一季，直接還原會把新資料蓋回舊值。
+  const restoring = (batch.previous || []).filter((row) => current.has(row.id));
+  if (
+    batch.type === "delete-quarter" &&
+    restoring.some((row) => current.get(row.id).importBatch !== id)
+  )
+    return toast("這個季度在刪除後已重新匯入，還原會覆蓋新資料；請先復原較新的匯入批次");
+  const message =
+    batch.type === "delete-quarter"
+      ? `確定還原已刪除的 ${batch.period}？\n將回復 ${batch.previous.length} 筆尖峰明細。`
+      : `確定復原 ${batch.time} 的匯入？\n新增 ${batch.added} 筆將移除，更新 ${batch.updated} 筆將還原。`;
+  if (!confirm(message)) return;
+  const added = new Set(batch.addedIds);
+  state.details = state.details.filter((x) => !added.has(x.id));
+  const map = new Map(state.details.map((x) => [x.id, x]));
+  batch.previous.forEach((x) => map.set(x.id, x));
+  state.details = [...map.values()];
+  batch.status = "已復原";
+  batch.revertedAt = new Date().toLocaleString("zh-TW");
+  rebuild();
+  await save();
+  toast(batch.type === "delete-quarter" ? "該季度已還原" : "該匯入批次已復原");
+}
+function projectPeriods() {
+  // 用期間本身的先後排序，不能用字串比較：
+  // "100Q1".localeCompare("99Q4") 會是負的，99→100 年的資料會整個排反。
+  return sortPeriods(
+    state.details.filter((x) => x.projectCode === state.activeCode).map((x) => x.period),
+  );
+}
+function refreshMaintenance() {
+  const periods = projectPeriods(),
+    selected = $("deletePeriod").value;
+  $("deletePeriod").innerHTML =
+    periods
+      .map((p) => `<option value="${esc(p)}" ${p === selected ? "selected" : ""}>${p}</option>`)
+      .join("") || '<option value="">目前沒有資料</option>';
+  const period = $("deletePeriod").value,
+    rows = state.details.filter((x) => x.projectCode === state.activeCode && x.period === period),
+    roads = new Set(rows.map((x) => x.road)).size;
+  $("deleteImpact").textContent = period
+    ? `${period}：${rows.length} 筆尖峰明細、${roads} 個路段。刪除後可重新批次匯入。`
+    : "目前沒有可刪除的季度";
+  $("deleteQuarter").disabled = !rows.length;
+}
+$("deletePeriod").onchange = refreshMaintenance;
+$("deleteQuarter").onclick = async () => {
+  const p = activeProject(),
+    period = $("deletePeriod").value,
+    rows = state.details.filter((x) => x.projectCode === state.activeCode && x.period === period);
+  if (!p || !rows.length) return;
+  if (
+    !confirm(
+      `確定刪除「${p.code} ${p.name}」的 ${period}？\n共 ${rows.length} 筆尖峰明細。系統會先下載備份，刪除後可重新匯入。`,
+    )
+  )
+    return;
+  downloadProjectPackage(false);
+  const now = new Date(),
+    batch = {
+      id: `D${Date.now()}`,
+      type: "delete-quarter",
+      projectCode: p.code,
+      projectName: p.name,
+      period,
+      time: now.toLocaleString("zh-TW"),
+      timestamp: now.toISOString(),
+      files: [],
+      addedIds: [],
+      previous: structuredClone(rows),
+      writtenIds: [],
+      added: 0,
+      updated: rows.length,
+      skipped: 0,
+      status: "有效",
+    };
+  state.details = state.details.filter((x) => !(x.projectCode === p.code && x.period === period));
+  state.imports.unshift(batch);
+  rebuild();
+  await save();
+  inspectHealth();
+  toast(`${period} 已刪除，可重新批次匯入`);
+};
+function roadSignature(s) {
+  return stripRoadSuffix(s)
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s　/\\_~～〜‐‑‒–—―－.,，、。:：;；()（）\[\]【】]/g, "");
+}
+function inspectHealth() {
+  const rows = state.details.filter((x) => x.projectCode === state.activeCode),
+    issues = [];
+  const roads = [...new Set(rows.map((x) => x.road))];
+  for (const road of roads) {
+    const clean = stripRoadSuffix(road);
+    if (clean !== road)
+      issues.push({
+        type: "異常名稱",
+        period: "全部",
+        item: road,
+        detail: `疑似包含日別或日期尾碼，建議修正為「${clean}」`,
+        fixable: true,
+      });
+  }
+  const signatures = {};
+  for (const road of roads) (signatures[roadSignature(road)] ??= []).push(road);
+  for (const variants of Object.values(signatures)) {
+    const names = [...new Set(variants)];
+    if (names.length > 1)
+      issues.push({
+        type: "名稱疑似重複",
+        period: "全部",
+        item: names.join("／"),
+        detail: "標點或分隔符不同，請確認是否為同一路段；可使用「路段名稱修改／合併」。",
+      });
+  }
+  const groups = {};
+  for (const d of rows) {
+    const k = [d.period, d.road, d.day].join("|");
+    (groups[k] ??= []).push(d);
+    if (!(
+      Number(d.travel) > 0 &&
+      Number(d.running) > 0 &&
+      Number(d.totalDelay) >= 0 &&
+      Number(d.limit) > 0
+    ))
+      issues.push({
+        type: "數值異常",
+        period: d.period,
+        item: `${d.road}／${d.day}／${d.peak}／${d.direction}`,
+        detail: "旅行速率、行駛速率、總延滯或速限包含空白、零值或無效數值。",
+      });
+  }
+  for (const [key, g] of Object.entries(groups))
+    if (g.length !== 4) {
+      const [period, road, day] = key.split("|");
+      issues.push({
+        type: "資料組不完整",
+        period,
+        item: `${road}／${day}`,
+        detail: `應有4筆尖峰方向資料，目前為 ${g.length} 筆。`,
+      });
+    }
+  const periods = projectPeriods(),
+    dayGroups = {};
+  for (const d of rows)
+    (dayGroups[`${d.period}|${stripRoadSuffix(d.road)}`] ??= new Set()).add(d.day);
+  for (const period of periods)
+    for (const road of roads) {
+      if (!roadIsActive(road, period)) continue;
+      const days = dayGroups[`${period}|${stripRoadSuffix(road)}`] || new Set();
+      if (!days.has("平日") || !days.has("假日"))
+        issues.push({
+          type: "日別不完整",
+          period,
+          item: road,
+          detail: days.size
+            ? `目前只有 ${[...days].join("、")}，請確認本季是否漏匯檔案。`
+            : "有效期間內沒有平日及假日資料，請確認是否漏匯。",
+        });
+    }
+  const limitKeys = [...new Set(rows.map((d) => `${d.projectCode}|${d.road}|${d.direction}`))];
+  for (const key of limitKeys)
+    if (!state.limitConfirmed[key]) {
+      const parts = key.split("|"),
+        direction = parts.pop(),
+        road = parts.pop();
+      issues.push({
+        type: "速限未確認",
+        period: "全部",
+        item: `${road}／${directionName(road, direction)}`,
+        detail: `目前使用預設 ${state.limits[key] || 50} km/h，請至「路段速限」人工核對後按套用。`,
+      });
+    }
+  for (const road of roads)
+    for (const day of ["平日", "假日"]) {
+      const seq = state.summaries
+        .filter((x) => x.projectCode === state.activeCode && x.road === road && x.day === day)
+        .sort((a, b) => periodIndex(a.period) - periodIndex(b.period));
+      for (let i = 1; i < seq.length; i++) {
+        const prev = seq[i - 1],
+          now = seq[i],
+          drop = (losRank[prev.los] || 0) - (losRank[now.los] || 0),
+          speedChange = prev.travel ? Math.abs(now.travel - prev.travel) / prev.travel : 0;
+        if (drop >= 2 || speedChange >= 0.25)
+          issues.push({
+            type: "異常變化",
+            period: now.period,
+            item: `${road}／${day}`,
+            detail: `相較 ${prev.period}：LOS ${prev.los}→${now.los}，旅行速率 ${fmt(prev.travel, 1)}→${fmt(now.travel, 1)} km/h，請確認資料或現地變化。`,
+          });
+      }
+    }
+  healthIssues = issues;
+  renderHealth();
+  return issues;
+}
+function renderHealth() {
+  const counts = (t) => healthIssues.filter((x) => x.type === t).length;
+  $("healthNames").textContent = counts("異常名稱") + counts("名稱疑似重複");
+  $("healthGroups").textContent = counts("資料組不完整") + counts("日別不完整");
+  $("healthValues").textContent = counts("數值異常");
+  $("healthCount").textContent = healthIssues.length
+    ? `發現 ${healthIssues.length} 項需確認`
+    : "檢查通過，未發現異常";
+  $("healthRows").innerHTML = healthIssues.length
+    ? healthIssues
+        .map(
+          (x) =>
+            `<tr><td>${esc(x.type)}</td><td>${esc(x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="4" class="empty">目前計畫未發現資料異常</td></tr>';
+  $("cleanSuffix").disabled = !healthIssues.some((x) => x.fixable);
+  renderQuality();
+}
+function renderQuality() {
+  if (!$("qualityRows")) return;
+  const types = ["日別不完整", "資料組不完整", "速限未確認", "異常變化"],
+    rows = healthIssues.filter((x) => types.includes(x.type));
+  $("qualityDay").textContent = rows.filter((x) => x.type === "日別不完整").length;
+  $("qualityGroup").textContent = rows.filter((x) => x.type === "資料組不完整").length;
+  $("qualitySpeed").textContent = rows.filter((x) => x.type === "速限未確認").length;
+  $("qualityChange").textContent = rows.filter((x) => x.type === "異常變化").length;
+  $("qualityRows").innerHTML = rows.length
+    ? rows
+        .map(
+          (x) =>
+            `<tr><td>${esc(x.type)}</td><td>${esc(x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="4" class="empty">目前四項品質檢查均通過</td></tr>';
+}
+$("runHealth").onclick = () => {
+  inspectHealth();
+  toast(healthIssues.length ? `健康檢查完成：${healthIssues.length} 項需確認` : "健康檢查通過");
+};
+$("cleanSuffix").onclick = async () => {
+  const p = activeProject(),
+    targets = new Map(
+      healthIssues.filter((x) => x.fixable).map((x) => [x.item, stripRoadSuffix(x.item)]),
+    );
+  if (!p || !targets.size) return;
+  if (
+    !confirm(
+      `確定修正 ${targets.size} 個含日期尾碼的路段名稱？\n系統會先下載 Project 備份，再合併明細、彙總與速限。`,
+    )
+  )
+    return;
+  downloadProjectPackage(false);
+  const cleanFirst = state.details.filter((x) => x.projectCode !== p.code || !targets.has(x.road)),
+    dirty = state.details.filter((x) => x.projectCode === p.code && targets.has(x.road)),
+    map = new Map(cleanFirst.map((x) => [x.id, x]));
+  for (const d of dirty) {
+    const old = d.road,
+      target = targets.get(old);
+    state.aliases[`${p.code}|${old}`] = target;
+    const oldLimit = `${p.code}|${old}|${d.direction}`,
+      newLimit = `${p.code}|${target}|${d.direction}`;
+    if (!state.limits[newLimit]) state.limits[newLimit] = state.limits[oldLimit] || d.limit;
+    if (state.limitConfirmed[oldLimit]) state.limitConfirmed[newLimit] = true;
+    delete state.limits[oldLimit];
+    delete state.limitConfirmed[oldLimit];
+    // 速限版本一併搬過去（同 applyRoadChange）
+    if (state.speedVersions?.[oldLimit]) {
+      state.speedVersions[newLimit] = (state.speedVersions[newLimit] || []).concat(
+        state.speedVersions[oldLimit],
+      );
+      delete state.speedVersions[oldLimit];
+    }
+    d.road = target;
+    d.limit = state.limits[newLimit];
+    d.ratio = d.travel == null ? null : d.travel / d.limit;
+    d.los = losOf(d.ratio);
+    d.id = [d.projectCode, d.year, `Q${d.quarter}`, target, d.day, d.peak, d.direction].join("|");
+    if (!map.has(d.id)) map.set(d.id, d);
+  }
+  state.details = [...map.values()];
+  rebuild();
+  await save();
+  inspectHealth();
+  toast("明顯日期尾碼已修正並合併");
+};
+function renderAll() {
+  const p = activeProject(),
+    ownDetails = state.details.filter((x) => x.projectCode === state.activeCode),
+    ownSummary = state.summaries.filter((x) => x.projectCode === state.activeCode),
+    options = state.projects
+      .map(
+        (x) =>
+          `<option value="${esc(x.code)}" ${x.code === state.activeCode ? "selected" : ""}>${esc(x.code)} ${esc(x.name)}</option>`,
+      )
+      .join("");
+  projectSwitch.innerHTML = options || '<option value="">尚未建立計畫</option>';
+  $("projectPicker").innerHTML = '<option value="">＋ 建立新計畫</option>' + options;
+  $("projectCode").value = p?.code || "";
+  $("projectName").value = p?.name || "";
+  $("headProject").textContent = p ? `${p.code} ${p.name}` : "尚未建立計畫";
+  renderProjectSetupActions();
+  $("mProject").textContent = state.projects.length;
+  $("mDetail").textContent = ownDetails.length;
+  $("mSummary").textContent = ownSummary.length;
+  $("mPeriod").textContent = state.last.year ? `${state.last.year}Q${state.last.quarter}` : "—";
+  $("mTime").textContent = state.last.time || "尚無資料";
+  if (state.last.year) {
+    $("rocYear").value = state.last.year;
+    $("quarter").value = state.last.quarter;
+  }
+  renderDetails();
+  renderSummaries();
+  renderLosRules();
+  renderLimits();
+  renderCharts();
+  renderManager();
+  renderImportLog();
+  refreshMaintenance();
+  renderHealth();
+  if (p && !ownDetails.length) {
+    $("nextTitle").textContent = "匯入目前計畫的第一季尖峰資料";
+    $("nextText").textContent = "選擇同一季度的平日、假日 Excel，先預覽再寫入。";
+    $("nextBtn").onclick = () => go("import");
+  } else if (ownDetails.length) {
+    $("nextTitle").textContent = "檢查目前計畫的尖峰彙總";
+    $("nextText").textContent = "確認旅行速率、行駛速率與總延滯來自同一筆紀錄。";
+    $("nextBtn").onclick = () => go("summary");
+  } else {
+    $("nextTitle").textContent = "建立第一個計畫";
+    $("nextText").textContent = "計畫數量不設上限，可持續新增並切換管理。";
+    $("nextBtn").onclick = () => go("setup");
+  }
+}
+const renderAllBase = renderAll;
+renderAll = () => {
+  renderAllBase();
+  renderRoadAdmin();
+};
 load();

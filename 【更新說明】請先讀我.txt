@@ -1,0 +1,24 @@
+交通服務水準分析系統 — GitHub Pages 更新包 v2.6
+================================================
+
+本次更新：
+・可以刪除整個計畫（刪除前自動下載備份）
+・成果交付的範圍可選一段期間（例如 114Q1～114Q4）
+・新增新手使用手冊（PDF＋可編輯 Word），網站「新手說明」頁可下載
+・改為離線可用：Excel 與壓縮元件隨網站提供，不再依賴外部網路
+・一批 Excel 讀取與資料安全的修正（詳見 README.md）
+
+更新步驟
+--------
+1. 刪除 repository 內的舊檔：
+   quality-extension-v2.5.js   ← 已改名為 quality-extension.js，舊檔必須刪除
+2. 把本壓縮檔內全部檔案放到 repository 根目錄（覆蓋同名檔案）：
+   index.html、app.js、excel-export.js、quality-extension.js、styles.css、
+   README.md、.nojekyll，以及 vendor/ 與 manuals/ 兩個資料夾。
+3. commit → push，約 1～3 分鐘後生效；畫面沒變請按 Ctrl+F5。
+4. 確認：左上角顯示「正式版 v2.6」，「新手說明」頁面有手冊下載按鈕。
+
+注意
+----
+・vendor/ 內是 Excel 與 ZIP 元件，缺少它匯入與匯出會無法運作，務必一起上傳。
+・使用者的資料存在各自瀏覽器，更新網站不會清除，但仍建議先下載專案包備份。
