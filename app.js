@@ -145,7 +145,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.13";
+document.querySelector(".brand small").textContent = "正式版 v2.15";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -156,8 +156,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.13.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.13.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.15.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.15.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -325,6 +325,16 @@ function clearPendingPreview() {
   pending = [];
   pendingContext = null;
   healthIssues = [];
+  /*
+   * healthChecked 也要跟著清掉。
+   *
+   * 舊版只清 healthIssues，healthChecked 仍是 true，於是切到一個從來沒檢查過
+   * 的計畫時，健康檢查與品質總覽會顯示「檢查通過，未發現異常」「目前四項品質
+   * 檢查均通過」——把「沒有檢查」講成「檢查過而且沒問題」，是這兩張表最不該
+   * 出現的錯誤。
+   */
+  healthChecked = false;
+  healthStale = false;
   roadPicks = new Set();
   if (typeof roadAlert !== "undefined") roadAlert.style.display = "none";
   if (typeof roadBatchBar !== "undefined") roadBatchBar.style.display = "none";
@@ -424,7 +434,7 @@ roadPeriodPanel.innerHTML = `<h3>路段有效期間</h3><p class="muted">開始�
 document.querySelector("#roadadmin .road-admin-grid").after(roadPeriodPanel);
 const qualityPanel = document.createElement("div");
 qualityPanel.className = "panel quality-panel";
-qualityPanel.innerHTML = `<div class="panel-head"><div><h3>計畫資料品質總覽</h3><small>依路段有效期間檢查平假日、四筆尖峰方向、速限確認及相鄰季度異常變化。</small></div></div><div class="metrics compact quality-metrics"><article><span>缺少平假日</span><b id="qualityDay">0</b></article><article><span>缺少方向／尖峰</span><b id="qualityGroup">0</b></article><article><span>速限未確認</span><b id="qualitySpeed">0</b></article><article><span>異常變化</span><b id="qualityChange">0</b></article></div><div class="table-wrap"><table><thead><tr><th>類型</th><th>期間</th><th>路段／項目</th><th>說明</th></tr></thead><tbody id="qualityRows"><tr><td colspan="4" class="empty">按「執行健康檢查」產生品質總覽</td></tr></tbody></table></div>`;
+qualityPanel.innerHTML = `<div class="panel-head"><div><h3>計畫資料品質總覽</h3><small>依路段有效期間檢查平假日、四筆尖峰方向、速限確認及相鄰季度異常變化。</small></div><span id="qualityShown" class="quality-shown">尚未檢查</span></div><div class="metrics compact quality-metrics"><article><span>缺少平假日</span><b id="qualityDay">0</b></article><article><span>缺少方向／尖峰</span><b id="qualityGroup">0</b></article><article><span>速限未確認</span><b id="qualitySpeed">0</b></article><article><span>異常變化</span><b id="qualityChange">0</b></article></div><div class="anomaly-filters"><div class="anomaly-filter-row"><label>起始季度<select id="qualityFrom"><option value="">不限</option></select></label><label>結束季度<select id="qualityTo"><option value="">不限</option></select></label><label>路段<select id="qualityRoad"><option value="">全部路段</option></select></label><label>日別<select id="qualityDayFilter"><option value="">全部日別</option><option value="平日">平日</option><option value="假日">假日</option></select></label></div><div class="anomaly-chips" id="qualityTypeChips"></div><p class="anomaly-hint">季度區間的語意是「比較區間有重疊就列出」：異常變化是相鄰兩季相比，選 114Q1～114Q4 時，113Q4→114Q1 也會出現——114Q1 被標成異常的原因就在那一次比較。所有篩選都遵循同一個原則：<b>與該維度無關的項目，任何選擇都會列出</b>（期間標「全部」的名稱與速限不受季度區間影響；沒有日別的項目不受日別影響）。<b>匯出與交付檔案一律輸出全部項目，不受這裡的篩選影響。</b></p></div><div class="table-wrap"><table><thead><tr><th>類型</th><th>期間</th><th>路段／項目</th><th>說明</th></tr></thead><tbody id="qualityRows"><tr><td colspan="4" class="empty">按「執行健康檢查」產生品質總覽</td></tr></tbody></table></div>`;
 document.querySelector("#maintenance .health-panel").before(qualityPanel);
 renameBtn.onclick = () => go("roadadmin");
 
@@ -908,6 +918,12 @@ async function parseFile(file, year, q, defSpeed) {
   };
 }
 function rebuild() {
+  /*
+   * 資料一動，畫面上的健康檢查結果就是舊的。以前不標示，使用者匯入一整季
+   * 新資料之後，品質總覽仍然顯示上一次的筆數與路段清單，而且四個統計數字
+   * 看起來就像是「現在的」結果——新路段的問題完全看不到。
+   */
+  if (healthChecked) healthStale = true;
   const groups = {};
   for (const d of state.details) {
     d.los = d.ratio == null ? "?" : losOf(d.ratio, d.projectCode);
@@ -970,7 +986,11 @@ $("saveProject").onclick = async () => {
   const i = state.projects.findIndex((p) => p.code === code);
   if (i >= 0) state.projects[i] = { code, name };
   else state.projects.push({ code, name });
+  // 換了作用中的計畫就要清掉上一個計畫的預覽與健康檢查結果，
+  // 否則新計畫會看到別人的路段清單與異常項目（切換下拉選單有清，這裡漏了）。
+  const switched = state.activeCode !== code;
   state.activeCode = code;
+  if (switched) clearPendingPreview();
   await save();
   toast(i >= 0 ? "計畫設定已更新" : "新計畫已建立");
   go("import");
@@ -1038,20 +1058,28 @@ $("cancelPreview").onclick = () => {
   // 不清掉的話瀏覽器可能不觸發 change，看起來像「選了卻沒反應」。
   $("files").value = "";
   $("fileInfo").textContent = "尚未選取檔案";
-  $("previewStatus").textContent = "尚未開始";
   renderPreview();
+  // renderPreview() 會把狀態列改寫成「成功 0，失敗 0…」，看起來像剛匯完
+  // 一批 0 筆的資料。所以「尚未開始」要放在它後面才留得住。
+  $("previewStatus").textContent = "尚未開始";
   toast("已取消本次預覽，資料完全沒有變動；修正檔案後請重新選取並預覽");
 };
 
 // 改了民國年或季度就讓預覽失效，避免用舊條件寫入。
 for (const id of ["rocYear", "quarter"])
   $(id).addEventListener("change", () => {
+    // 使用者一旦自己動過，renderAll 就不可以再把它改回上次匯入的季度。
+    importPeriodTouched = true;
     if (!pending.length) return;
     pending = [];
     pendingContext = null;
     roadAlert.style.display = "none";
     renderPreview();
     toast("季度或年度已變更，請重新按「讀取並預覽」");
+  });
+for (const id of ["rocYear", "quarter"])
+  $(id).addEventListener("input", () => {
+    importPeriodTouched = true;
   });
 function matchBadge(type) {
   const cls =
@@ -1250,6 +1278,8 @@ $("commit").onclick = async () => {
     quarter: pendingContext.quarter,
     time: batch.time,
   };
+  // 寫入完成之後這一輪就結束了，下一次可以再帶入「上次的季度」當預設值。
+  importPeriodTouched = false;
   await save();
   toast(`寫入完成：新增 ${batch.added}、更新 ${batch.updated}、略過 ${batch.skipped}`);
   pending = [];
@@ -1574,7 +1604,7 @@ function renderDetails() {
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(x.directionText || directionName(x.road, x.direction, x.projectCode))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, 0)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(x.directionText || directionName(x.road, x.direction, x.projectCode))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, Number.isInteger(Number(x.limit)) ? 0 : 1)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰明細</td></tr>';
@@ -1655,7 +1685,19 @@ function renderLimits() {
           const parts = k.split("|"),
             direction = parts.pop(),
             road = parts.pop();
-          return `<tr><td>${esc(road)}</td><td>${esc(directionName(road, direction, state.activeCode))}</td><td><input class="speed-input" data-limit="${esc(k)}" type="number" min="1" value="${state.limits[k] || 50}"></td><td>${state.limitConfirmed[k] ? '<span class="status-ok">已人工確認</span>' : '<span class="status-warn">預設值，未確認</span>'}</td></tr>`;
+          /*
+           * 有「速限版本」覆蓋時，這一格顯示的基準速限並不是實際換算 LOS
+           * 用的值。舊版什麼都不標，使用者在這裡把 90 改成 60、按下套用，
+           * 畫面顯示 60、資料仍用 90，而 toast 還說「LOS 已重新計算」。
+           * 這裡把「有版本覆蓋」明白標出來，並列出實際生效的速限。
+           */
+          const versions = (state.speedVersions?.[k] || []).filter(Boolean);
+          const versionNote = versions.length
+            ? `<div class="limit-version-note">此路段方向設有 ${versions.length} 個速限版本，實際換算 LOS 時以版本速限為準（${versions
+                .map((v) => `${esc(String(v.from || "起始"))}起 ${esc(String(v.limit))} km/h`)
+                .join("、")}）；下方欄位是未被版本涵蓋的季度所使用的基準速限。</div>`
+            : "";
+          return `<tr><td>${esc(road)}</td><td>${esc(directionName(road, direction, state.activeCode))}</td><td><input class="speed-input" data-limit="${esc(k)}" type="number" min="1" value="${state.limits[k] || 50}">${versionNote}</td><td>${state.limitConfirmed[k] ? '<span class="status-ok">已人工確認</span>' : '<span class="status-warn">預設值，未確認</span>'}</td></tr>`;
         })
         .join("")
     : '<tr><td colspan="4" class="empty">目前計畫匯入資料後會自動建立路段方向</td></tr>';
@@ -1923,7 +1965,16 @@ $("restoreFile").onchange = async (e) => {
       Object.assign(state.speedVersions, x.speedVersions || {});
       if (x.anomalyRule) state.anomalyRules[x.project.code] = x.anomalyRule;
       Object.assign(state.reportDrafts, x.reportDrafts || {});
-      if (x.losRule && !isLegacyLosRule(x.losRule)) state.losRules[x.project.code] = x.losRule;
+      /*
+       * 備份裡有什麼就還原什麼，不要再用 isLegacyLosRule 過濾。
+       *
+       * A.9/B.7/C.5/D.4/E.3 是實務上真的有人在用的門檻表（migrateLosRules
+       * 的註解自己就寫了這件事，所以只在版本升級時清一次）。這裡卻無條件
+       * 過濾，於是「匯出專案包再還原同一個檔案」就會把使用者的自訂門檻
+       * 清成預設值——同一筆速限比 0.65 的紀錄，還原前是 C、還原後變成 B，
+       * 整個計畫的服務水準悄悄改變，畫面只說「備份已載入」。
+       */
+      if (x.losRule) state.losRules[x.project.code] = x.losRule;
       else delete state.losRules[x.project.code];
     } else if (x.kind === "TLM_PORTFOLIO_PACKAGE") {
       state = { ...emptyState(), ...x, activeCode: x.projects?.[0]?.code || "", manager };
@@ -2356,6 +2407,7 @@ function inspectHealth() {
       issues.push({
         type: "異常名稱",
         period: "全部",
+        road,
         item: road,
         detail: `疑似包含日別或日期尾碼，建議修正為「${clean}」`,
         fixable: true,
@@ -2393,10 +2445,13 @@ function inspectHealth() {
         detail: `不同報告把這個方向寫成：${[...set].join("、")}。請確認各季報告的旅次順序是否一致，否則跨季比較會拿相反方向互比。`,
       });
     }
+  // 分組的 key 用 | 串接，但還原欄位時不能再 split 回來——路段名稱本身可能
+  // 含有 |，切出來的片段會變成錯誤的路段／日別，而那些值現在會進到篩選的
+  // 下拉選單裡。改成把欄位直接掛在分組上。
   const groups = {};
   for (const d of rows) {
     const k = [d.period, d.road, d.day].join("|");
-    (groups[k] ??= []).push(d);
+    (groups[k] ??= Object.assign([], { period: d.period, road: d.road, day: d.day })).push(d);
     if (!(
       Number(d.travel) > 0 &&
       Number(d.running) > 0 &&
@@ -2406,20 +2461,43 @@ function inspectHealth() {
       issues.push({
         type: "數值異常",
         period: d.period,
+        road: d.road,
+        day: d.day,
+        peak: d.peak,
         item: `${d.road}／${d.day}／${d.peak}／${d.direction}`,
         detail: "旅行速率、行駛速率、總延滯或速限包含空白、零值或無效數值。",
       });
+    /*
+     * 物理常識：旅行速率一定 ≤ 行駛速率（旅行速率含停等時間，行駛速率不含）。
+     * 這個檢查本來只在匯入預覽時做，但備份／專案包還原是直接把資料塞進
+     * state，完全不經過那條路徑——還原進來的不合理資料因此永遠不會被發現，
+     * 還會被選為彙總的代表紀錄。
+     */
+    if (
+      Number(d.travel) > 0 &&
+      Number(d.running) > 0 &&
+      Number(d.travel) > Number(d.running)
+    )
+      issues.push({
+        type: "數值異常",
+        period: d.period,
+        road: d.road,
+        day: d.day,
+        peak: d.peak,
+        item: `${d.road}／${d.day}／${d.peak}／${d.direction}`,
+        detail: `旅行速率 ${fmt(d.travel, 1)} km/h 大於行駛速率 ${fmt(d.running, 1)} km/h，物理上不可能（旅行速率含停等時間）。常見原因是讀到隔壁欄位，請核對原始報告。`,
+      });
   }
-  for (const [key, g] of Object.entries(groups))
-    if (g.length !== 4) {
-      const [period, road, day] = key.split("|");
+  for (const g of Object.values(groups))
+    if (g.length !== 4)
       issues.push({
         type: "資料組不完整",
-        period,
-        item: `${road}／${day}`,
+        period: g.period,
+        road: g.road,
+        day: g.day,
+        item: `${g.road}／${g.day}`,
         detail: `應有4筆尖峰方向資料，目前為 ${g.length} 筆。`,
       });
-    }
   const periods = projectPeriods(),
     dayGroups = {};
   for (const d of rows)
@@ -2432,25 +2510,29 @@ function inspectHealth() {
         issues.push({
           type: "日別不完整",
           period,
+          road,
           item: road,
           detail: days.size
             ? `目前只有 ${[...days].join("、")}，請確認本季是否漏匯檔案。`
             : "有效期間內沒有平日及假日資料，請確認是否漏匯。",
         });
     }
-  const limitKeys = [...new Set(rows.map((d) => `${d.projectCode}|${d.road}|${d.direction}`))];
-  for (const key of limitKeys)
-    if (!state.limitConfirmed[key]) {
-      const parts = key.split("|"),
-        direction = parts.pop(),
-        road = parts.pop();
+  // 這裡同樣不能 split 回來取欄位，改為連同原始欄位一起記著。
+  const limitKeys = new Map();
+  for (const d of rows)
+    limitKeys.set(`${d.projectCode}|${d.road}|${d.direction}`, {
+      road: d.road,
+      direction: d.direction,
+    });
+  for (const [key, meta] of limitKeys)
+    if (!state.limitConfirmed[key])
       issues.push({
         type: "速限未確認",
         period: "全部",
-        item: `${road}／${directionName(road, direction)}`,
+        road: meta.road,
+        item: `${meta.road}／${directionName(meta.road, meta.direction)}`,
         detail: `目前使用預設 ${state.limits[key] || 50} km/h，請至「路段速限」人工核對後按套用。`,
       });
-    }
   for (const road of roads)
     for (const day of ["平日", "假日"]) {
       const seq = state.summaries
@@ -2464,13 +2546,20 @@ function inspectHealth() {
         if (drop >= 2 || speedChange >= 0.25)
           issues.push({
             type: "異常變化",
+            // 異常變化是「相鄰兩季之間」的比較，兩端都要記著，
+            // 季度區間篩選才能用「比較區間有重疊就列出」的語意。
+            fromPeriod: prev.period,
             period: now.period,
+            road,
+            day,
             item: `${road}／${day}`,
             detail: `相較 ${prev.period}：LOS ${prev.los}→${now.los}，旅行速率 ${fmt(prev.travel, 1)}→${fmt(now.travel, 1)} km/h，請確認資料或現地變化。`,
           });
       }
     }
   healthIssues = issues;
+  healthChecked = true;
+  healthStale = false;
   renderHealth();
   return issues;
 }
@@ -2479,37 +2568,204 @@ function renderHealth() {
   $("healthNames").textContent = counts("異常名稱") + counts("名稱疑似重複");
   $("healthGroups").textContent = counts("資料組不完整") + counts("日別不完整");
   $("healthValues").textContent = counts("數值異常");
-  $("healthCount").textContent = healthIssues.length
-    ? `發現 ${healthIssues.length} 項需確認`
-    : "檢查通過，未發現異常";
-  $("healthRows").innerHTML = healthIssues.length
-    ? healthIssues
-        .map(
-          (x) =>
-            `<tr><td>${esc(x.type)}</td><td>${esc(x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
-        )
-        .join("")
-    : '<tr><td colspan="4" class="empty">目前計畫未發現資料異常</td></tr>';
+  /*
+   * 沒檢查過就不能說「檢查通過」。品質總覽已經有這道守衛，這一格漏了：
+   * 一開啟頁面（完全沒有資料時）就顯示「檢查通過，未發現異常」。
+   * 檢查完之後資料又變動過的話，也要標示結果是舊的。
+   */
+  $("healthCount").textContent = !healthChecked
+    ? "尚未檢查"
+    : (healthIssues.length
+        ? `發現 ${healthIssues.length} 項需確認`
+        : "檢查通過，未發現異常") +
+      (healthStale ? "（資料已變動，請重新檢查）" : "");
+  $("healthCount").classList.toggle("stale", healthChecked && healthStale);
+  $("healthRows").innerHTML = !healthChecked
+    ? '<tr><td colspan="4" class="empty">按「執行健康檢查」開始</td></tr>'
+    : healthIssues.length
+      ? healthIssues
+          .map(
+            (x) =>
+              `<tr><td>${esc(x.type)}</td><td>${esc(x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
+          )
+          .join("")
+      : '<tr><td colspan="4" class="empty">目前計畫未發現資料異常</td></tr>';
   $("cleanSuffix").disabled = !healthIssues.some((x) => x.fixable);
   renderQuality();
 }
+/*
+ * 品質總覽的篩選條件。
+ *
+ * 季度一累積，這張表就會長到幾十上百列，整片文字看不出重點。使用者要問的
+ * 通常是「114Q1 到 114Q4 之間出過哪些異常」或「只看異常變化」，所以提供
+ * 季度區間、類型（可複選）、路段、日別、尖峰五種篩選。
+ *
+ * 兩個刻意的設計：
+ * 1. 篩選只影響「畫面」。匯出與交付的專案包一律含全部項目——篩選是給人看
+ *    的工具，交付檔案不該因為畫面上剛好篩了什麼而少東西。
+ * 2. 季度區間用「比較區間有重疊就列出」：異常變化是相鄰兩季相比，若只比對
+ *    後面那一季，選 114Q1～114Q4 就會漏掉 113Q4→114Q1 這一筆，而那正是
+ *    114Q1 出問題的原因。
+ */
+const QUALITY_TYPES = ["日別不完整", "資料組不完整", "速限未確認", "異常變化"];
+const qualityFilter = { from: "", to: "", road: "", day: "", types: [] };
+/**
+ * 使用者是否自己動過匯入的年度／季度欄位。
+ * 動過之後，renderAll 就不再把它改回「上次匯入的季度」。
+ */
+let importPeriodTouched = false;
+/** 已經跑過健康檢查了嗎。沒跑過時不能宣稱「四項品質檢查均通過」。 */
+let healthChecked = false;
+/** 檢查完之後資料又變動過了嗎。是的話畫面上的結果是舊的，要講出來。 */
+let healthStale = false;
+/**
+ * 這一筆異常涵蓋的季度區間；與季度無關的項目回 null（任何區間都列出）。
+ * periodIndex 對無法解析的字串會回 -1，那個 -1 若被當成真正的季度，
+ * 會讓區間變成「幾乎涵蓋全部」，使用者以為篩掉了舊季度其實沒有。
+ */
+function issueSpan(issue) {
+  if (!issue.period || issue.period === "全部") return null;
+  const end = periodIndex(issue.period);
+  if (end < 0) return null;
+  const start = issue.fromPeriod ? periodIndex(issue.fromPeriod) : end;
+  const safeStart = start < 0 ? end : start;
+  return { start: Math.min(safeStart, end), end: Math.max(safeStart, end) };
+}
+function filterQualityIssues(issues, filter) {
+  // 無法解析的季度字串（手改過的備份可能出現 114Q9）不能當成邊界：
+  // periodIndex 會回 -1，等於把下界拿掉。
+  const fromIndex = filter.from ? periodIndex(filter.from) : -Infinity;
+  const toIndex = filter.to ? periodIndex(filter.to) : Infinity;
+  const from = fromIndex < 0 ? -Infinity : fromIndex;
+  const to = toIndex < 0 ? Infinity : toIndex;
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  return issues.filter((issue) => {
+    if (filter.types.length && !filter.types.includes(issue.type)) return false;
+    /*
+     * 路段與日別採用與季度相同的規則：「與這個維度無關的項目，任何選擇都列出」。
+     *
+     * 舊寫法是 issue.day !== filter.day，於是沒有日別欄位的項目（速限未確認、
+     * 日別不完整）一選日別就整批消失——而「日別不完整」講的正是日別缺漏，
+     * 被日別篩選藏起來完全說不通。路段同理，且日後若把「名稱疑似重複」
+     * 這類沒有單一路段的項目納進來，也不會默默消失。
+     */
+    if (filter.road && issue.road && issue.road !== filter.road) return false;
+    if (filter.day && issue.day && issue.day !== filter.day) return false;
+    const span = issueSpan(issue);
+    // 與季度無關的項目（名稱、速限）在任何區間都要看得到。
+    if (!span) return true;
+    return span.end >= lo && span.start <= hi;
+  });
+}
 function renderQuality() {
   if (!$("qualityRows")) return;
-  const types = ["日別不完整", "資料組不完整", "速限未確認", "異常變化"],
-    rows = healthIssues.filter((x) => types.includes(x.type));
-  $("qualityDay").textContent = rows.filter((x) => x.type === "日別不完整").length;
-  $("qualityGroup").textContent = rows.filter((x) => x.type === "資料組不完整").length;
-  $("qualitySpeed").textContent = rows.filter((x) => x.type === "速限未確認").length;
-  $("qualityChange").textContent = rows.filter((x) => x.type === "異常變化").length;
-  $("qualityRows").innerHTML = rows.length
-    ? rows
-        .map(
-          (x) =>
-            `<tr><td>${esc(x.type)}</td><td>${esc(x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
-        )
-        .join("")
-    : '<tr><td colspan="4" class="empty">目前四項品質檢查均通過</td></tr>';
+  const all = healthIssues.filter((x) => QUALITY_TYPES.includes(x.type));
+  // 上方四個數字報的是「全部」，不隨篩選變動——那是這一季的體檢結果，
+  // 不是目前畫面看了幾筆。筆數變化在下面的「顯示 N / 共 M」講。
+  $("qualityDay").textContent = all.filter((x) => x.type === "日別不完整").length;
+  $("qualityGroup").textContent = all.filter((x) => x.type === "資料組不完整").length;
+  $("qualitySpeed").textContent = all.filter((x) => x.type === "速限未確認").length;
+  $("qualityChange").textContent = all.filter((x) => x.type === "異常變化").length;
+  /*
+   * 季度下拉要列「這個計畫有哪些季度」，不是「哪些季度已經出過異常」。
+   * 用後者的話，4 季資料只有一筆異常時下拉就只剩那一季，使用者根本沒辦法
+   * 表達「114Q1 到 114Q4」這個問題——而那正是這個功能要回答的問題。
+   */
+  const periods = projectPeriods().filter(validPeriod);
+  const roads = [...new Set(all.map((x) => x.road).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "zh-Hant"),
+  );
+  const fillSelect = (id, values, placeholder, current) => {
+    const el = $(id);
+    if (!el) return "";
+    const keep = values.includes(current) ? current : "";
+    el.innerHTML =
+      `<option value="">${placeholder}</option>` +
+      values
+        .map((v) => `<option value="${esc(v)}"${v === keep ? " selected" : ""}>${esc(v)}</option>`)
+        .join("");
+    return keep;
+  };
+  qualityFilter.from = fillSelect("qualityFrom", periods, "不限", qualityFilter.from);
+  qualityFilter.to = fillSelect("qualityTo", periods, "不限", qualityFilter.to);
+  qualityFilter.road = fillSelect("qualityRoad", roads, "全部路段", qualityFilter.road);
+  if ($("qualityDayFilter")) $("qualityDayFilter").value = qualityFilter.day;
+  /*
+   * 重畫按鈕會把焦點打掉：使用者用鍵盤按下一個類型鈕之後，該按鈕在事件處理
+   * 過程中就被 innerHTML 換掉了，activeElement 掉回 body，第二下 Enter 沒有
+   * 任何反應，得從頁首重新 Tab 一次。所以記住焦點在哪一顆，重畫後放回去。
+   */
+  const focusedType = document.activeElement?.closest?.(".anomaly-chip")?.dataset?.type;
+  const focusedClear = document.activeElement?.id === "qualityClear";
+  const chips = $("qualityTypeChips");
+  if (chips) {
+    chips.innerHTML =
+      QUALITY_TYPES.map((type) => {
+        const count = all.filter((x) => x.type === type).length;
+        const on = qualityFilter.types.includes(type);
+        return `<button type="button" class="anomaly-chip${on ? " on" : ""}" aria-pressed="${on}" data-type="${esc(type)}">${esc(type)}（${count}）</button>`;
+      }).join("") +
+      `<button type="button" class="anomaly-chip clear" id="qualityClear">清除篩選</button>`;
+    if (focusedType)
+      chips.querySelector(`.anomaly-chip[data-type="${CSS.escape(focusedType)}"]`)?.focus();
+    else if (focusedClear) $("qualityClear")?.focus();
+  }
+  const rows = filterQualityIssues(all, qualityFilter);
+  const countEl = $("qualityShown");
+  if (countEl) {
+    const base = !healthChecked
+      ? "尚未檢查"
+      : rows.length === all.length
+        ? `共 ${all.length} 項`
+        : `顯示 ${rows.length} / 共 ${all.length} 項`;
+    countEl.textContent =
+      healthChecked && healthStale ? `${base}（資料已變動，請重新檢查）` : base;
+    countEl.classList.toggle("stale", healthChecked && healthStale);
+  }
+  // 還沒按過「執行健康檢查」時不能寫「四項品質檢查均通過」——那是把
+  //「沒檢查」講成「檢查過而且沒問題」，是這張表最不該出的錯。
+  $("qualityRows").innerHTML = !healthChecked
+    ? '<tr><td colspan="4" class="empty">按「執行健康檢查」產生品質總覽</td></tr>'
+    : rows.length
+      ? rows
+          .map(
+            (x) =>
+              `<tr><td>${esc(x.type)}</td><td>${esc(x.fromPeriod ? `${x.fromPeriod}→${x.period}` : x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
+          )
+          .join("")
+      : all.length
+        ? '<tr><td colspan="4" class="empty">目前篩選條件下沒有符合的項目，請放寬季度區間或類型。</td></tr>'
+        : '<tr><td colspan="4" class="empty">目前四項品質檢查均通過</td></tr>';
 }
+/* 篩選事件用委派綁在整個面板上：下拉選單與類型鈕都是每次 render 重畫的。 */
+qualityPanel.addEventListener("change", (e) => {
+  const map = {
+    qualityFrom: "from",
+    qualityTo: "to",
+    qualityRoad: "road",
+    qualityDayFilter: "day",
+  };
+  const key = map[e.target.id];
+  if (!key) return;
+  qualityFilter[key] = e.target.value;
+  renderQuality();
+});
+qualityPanel.addEventListener("click", (e) => {
+  const chip = e.target.closest(".anomaly-chip");
+  if (!chip) return;
+  if (chip.id === "qualityClear") {
+    qualityFilter.from = qualityFilter.to = qualityFilter.road = "";
+    qualityFilter.day = "";
+    qualityFilter.types = [];
+  } else {
+    const type = chip.dataset.type;
+    qualityFilter.types = qualityFilter.types.includes(type)
+      ? qualityFilter.types.filter((x) => x !== type)
+      : [...qualityFilter.types, type];
+  }
+  renderQuality();
+});
 $("runHealth").onclick = () => {
   inspectHealth();
   toast(healthIssues.length ? `健康檢查完成：${healthIssues.length} 項需確認` : "健康檢查通過");
@@ -2530,6 +2786,7 @@ $("cleanSuffix").onclick = async () => {
   const cleanFirst = state.details.filter((x) => x.projectCode !== p.code || !targets.has(x.road)),
     dirty = state.details.filter((x) => x.projectCode === p.code && targets.has(x.road)),
     map = new Map(cleanFirst.map((x) => [x.id, x]));
+  let dropped = 0;
   for (const d of dirty) {
     const old = d.road,
       target = targets.get(old);
@@ -2552,13 +2809,21 @@ $("cleanSuffix").onclick = async () => {
     d.ratio = d.travel == null ? null : d.travel / d.limit;
     d.los = losOf(d.ratio);
     d.id = [d.projectCode, d.year, `Q${d.quarter}`, target, d.day, d.peak, d.direction].join("|");
+    // 併到同一個路段之後，鍵值可能撞到既有紀錄。保留既有的那一筆，
+    // 但要記下丟掉幾筆——實測 32 筆合併成 16 筆而畫面只說「已修正並合併」，
+    // 使用者不會知道有一半的資料被丟掉了（路段管理的合併就有揭露這件事）。
     if (!map.has(d.id)) map.set(d.id, d);
+    else dropped += 1;
   }
   state.details = [...map.values()];
   rebuild();
   await save();
   inspectHealth();
-  toast("明顯日期尾碼已修正並合併");
+  toast(
+    dropped
+      ? `明顯日期尾碼已修正並合併；其中 ${dropped} 筆與既有資料鍵值重複，已保留原有資料（合併前的備份已下載）。`
+      : "明顯日期尾碼已修正並合併",
+  );
 };
 function renderAll() {
   const p = activeProject(),
@@ -2581,7 +2846,15 @@ function renderAll() {
   $("mSummary").textContent = ownSummary.length;
   $("mPeriod").textContent = state.last.year ? `${state.last.year}Q${state.last.quarter}` : "—";
   $("mTime").textContent = state.last.time || "尚無資料";
-  if (state.last.year) {
+  /*
+   * 匯入表單只在「使用者還沒自己填過」時才帶入上次的季度。
+   *
+   * 舊版是每次 renderAll 都無條件覆寫，而每一個 save() 結尾都會呼叫
+   * renderAll——於是使用者輸入 116 年第 3 季之後，去別的頁面存個路段名稱
+   * 再回來，表單已經悄悄變回 115Q1，接著「確認寫入」就把資料寫進錯誤的
+   * 季度。因為是程式指派，change 事件不會觸發，預覽失效的保護也不會啟動。
+   */
+  if (state.last.year && !importPeriodTouched) {
     $("rocYear").value = state.last.year;
     $("quarter").value = state.last.quarter;
   }

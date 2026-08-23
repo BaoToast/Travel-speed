@@ -350,10 +350,19 @@
       by: q("versionBy").value.trim(),
       note: q("versionNote").value.trim(),
     });
-    state.limitConfirmed[key] = true;
+    /*
+     * 不可以順手把「基準速限」標成已人工確認。
+     *
+     * 速限版本只涵蓋它自己的季度區間；區間外的季度用的還是那個沒被確認過的
+     * 預設值 50。舊版在這裡把 limitConfirmed 設成 true，於是「速限未確認」
+     * 的健康檢查提示整條消失，而真正還在用未確認預設值的，正是版本沒涵蓋到
+     * 的那些季度——手冊自己說這是「最容易發生也最嚴重的錯誤」。
+     */
     rebuild();
     await save();
-    toast("速限版本已儲存，相關季度 LOS 已重算");
+    toast(
+      "速限版本已儲存，相關季度 LOS 已重算。（版本未涵蓋的季度仍使用基準速限，請另外到上方確認）",
+    );
   };
 
   function operationSnapshot() {
@@ -461,7 +470,12 @@
     button.onclick = null;
     button.addEventListener("click", async () => {
       const info = impact();
-      if (!info.ok) return toast(info.message);
+      if (!info.ok) {
+        // 擋下來時要把畫面還原成儲存的內容，不要讓無效的值留在欄位裡
+        // 看起來像已經生效了。
+        if (typeof info.rerender === "function") info.rerender();
+        return toast(info.message);
+      }
       if (
         !confirm(`${info.title}\n\n${info.detail}\n\n系統將先下載目前 Project 備份。確定繼續嗎？`)
       )
@@ -480,6 +494,27 @@
       affected = activeRows().filter((d) =>
         keys.has(`${d.projectCode}|${d.road}|${d.direction}`),
       ).length;
+    /*
+     * 先驗證再下載備份。
+     *
+     * 舊版一律 ok:true，於是欄位裡有負數或空白時，使用者會先看到一個
+     *「將修改 2 個路段方向」的確認視窗、被下載一份備份、在復原清單多一筆
+     *「可復原」紀錄——然後才跳出「速限必須大於 0，這次完全沒有變更」。
+     * 一次什麼都沒做的操作，留下了三個「好像做了什麼」的痕跡。
+     * 這裡比照 applyLosRules 的作法，先把 app.js 的驗證條件跑一遍。
+     */
+    const invalid = inputs.filter((i) => {
+      const value = Number(i.value);
+      return !Number.isFinite(value) || value <= 0;
+    });
+    if (invalid.length)
+      return {
+        ok: false,
+        message: `速限必須大於 0，這次完全沒有變更（請修正 ${invalid.length} 個欄位）`,
+        rerender: renderLimits,
+      };
+    if (!changed.length)
+      return { ok: false, message: "速限沒有任何變更" };
     return {
       ok: true,
       title: "套用路段速限並重算",
@@ -540,17 +575,24 @@
           reasons = [];
         let score = 6 - (losRank[now.los] || 6);
         if (prev) {
+          // 上一季是 0 時同樣不能報 0%（見 inspectHealth 的說明）。
           const speed = prev.travel ? ((prev.travel - now.travel) / prev.travel) * 100 : 0,
             delay = prev.totalDelay
               ? ((now.totalDelay - prev.totalDelay) / prev.totalDelay) * 100
-              : 0,
+              : now.totalDelay > 0
+                ? Infinity
+                : 0,
             los = (losRank[prev.los] || 0) - (losRank[now.los] || 0);
           if (speed >= r.speedDrop) {
             reasons.push(`旅行速率下降 ${speed.toFixed(1)}%`);
             score += 2;
           }
           if (delay >= r.delayRise) {
-            reasons.push(`總延滯增加 ${delay.toFixed(1)}%`);
+            reasons.push(
+              Number.isFinite(delay)
+                ? `總延滯增加 ${delay.toFixed(1)}%`
+                : `總延滯由 0 秒增為 ${Number(now.totalDelay || 0).toFixed(1)} 秒`,
+            );
             score += 2;
           }
           if (los >= r.losDrop) {
@@ -680,9 +722,25 @@
         .at(-1);
       let change = "無前期資料可比較";
       if (prev) {
-        const speed = prev.travel ? ((x.travel - prev.travel) / prev.travel) * 100 : 0,
-          delay = prev.totalDelay ? ((x.totalDelay - prev.totalDelay) / prev.totalDelay) * 100 : 0;
-        change = `較 ${prev.period} 旅行速率${speed >= 0 ? "增加" : "下降"} ${Math.abs(speed).toFixed(1)}%，總延滯${delay >= 0 ? "增加" : "下降"} ${Math.abs(delay).toFixed(1)}%`;
+        /*
+         * 這一段會原封不動寫進報告文字草稿，所以絕對不能把「0 → 480 秒」
+         * 講成「增加 0.0%」。上一季是 0 而這一季有值，就直接寫出實際數值。
+         */
+        const pctText = (before, after, label) => {
+          if (!Number.isFinite(before) || !Number.isFinite(after))
+            return `${label}無法比較（資料含非數值）`;
+          if (!before)
+            return after > 0
+              ? `${label}由 0 增為 ${fmt(after, 1)}`
+              : `${label}維持 0`;
+          const change = ((after - before) / before) * 100;
+          return `${label}${change >= 0 ? "增加" : "下降"} ${Math.abs(change).toFixed(1)}%`;
+        };
+        change =
+          `較 ${prev.period} ` +
+          pctText(prev.travel, x.travel, "旅行速率") +
+          "，" +
+          pctText(prev.totalDelay, x.totalDelay, "總延滯");
       }
       lines.push(
         `${x.period} ${x.road}（${x.day}）服務水準為 ${x.los}，代表紀錄為${x.peak}${directionName(x.road, x.direction, x.projectCode)}，旅行速率 ${fmt(x.travel, 1)} km/h、總延滯 ${fmt(x.totalDelay, 1)} 秒；${change}。`,
@@ -744,8 +802,14 @@
   };
   q("deliveryPeriodStart").onchange = onRangeChange;
   q("deliveryPeriodEnd").onchange = onRangeChange;
-  q("deliveryRoad").onchange = loadDraft;
-  q("deliveryDay").onchange = loadDraft;
+  /*
+   * onchange 會把 DOM Event 當成第一個參數傳進去，而 loadDraft 的第一個
+   * 參數是 force——Event 物件是 truthy，於是每次改路段或日別都等同於
+   *「強制重新產生」，使用者剛打好的正式分析文字被無聲蓋掉。
+   * 必須包一層，明確不帶 force。
+   */
+  q("deliveryRoad").onchange = () => loadDraft();
+  q("deliveryDay").onchange = () => loadDraft();
   q("reportDraft").addEventListener("input", () => {
     draftDirty = true;
   });
@@ -871,26 +935,51 @@
             now = seq[i],
             losDrop = (losRank[prev.los] || 0) - (losRank[now.los] || 0),
             speedDrop = prev.travel ? ((prev.travel - now.travel) / prev.travel) * 100 : 0,
+            /*
+             * 上一季是 0 時不能回 0%。路段延滯 0 在真實資料裡很常見
+             *（28 份樣本每一份都有），舊版於是把「0 秒 → 480 秒」報成
+             *「增加 0.0%」，而且那句話會原封不動寫進報告文字草稿。
+             * 從 0 變成有值＝新出現的延滯，一律視為需要提醒。
+             */
             delayRise = prev.totalDelay
               ? ((now.totalDelay - prev.totalDelay) / prev.totalDelay) * 100
-              : 0,
+              : now.totalDelay > 0
+                ? Infinity
+                : 0,
             worse = losDrop > 0 || speedDrop > 0;
           streak = worse ? streak + 1 : 0;
           const reasons = [];
           if (losDrop >= r.losDrop) reasons.push(`服務水準 ${prev.los}→${now.los}`);
           if (speedDrop >= r.speedDrop) reasons.push(`旅行速率下降 ${speedDrop.toFixed(1)}%`);
-          if (delayRise >= r.delayRise) reasons.push(`總延滯增加 ${delayRise.toFixed(1)}%`);
+          if (delayRise >= r.delayRise)
+            reasons.push(
+              // Infinity 代表上一季是 0：講「增加 Infinity%」沒有意義，
+              // 要講實際發生了什麼。
+              Number.isFinite(delayRise)
+                ? `總延滯增加 ${delayRise.toFixed(1)}%`
+                : `總延滯由 0 秒增為 ${Number(now.totalDelay || 0).toFixed(1)} 秒`,
+            );
           if (streak >= r.streak) reasons.push(`連續 ${streak} 季惡化`);
           if (reasons.length)
             extra.push({
               type: "異常變化",
+              // 這幾個結構化欄位是「品質總覽」的篩選在用的。
+              // 這支覆寫掉了 app.js 的「異常變化」判定（改用可自訂門檻），
+              // 少帶任何一個欄位，篩選就會把整類異常變化默默濾掉——而且
+              // 畫面上看起來只是「這個路段沒有異常」，不會有任何錯誤訊息。
+              fromPeriod: prev.period,
               period: now.period,
+              road,
+              day,
               item: `${road}／${day}`,
               detail: `相較 ${prev.period}：${reasons.join("；")}，請確認原始資料或現地變化。`,
             });
         }
       }
     healthIssues = base.concat(extra);
+    // baseInspectHealth() 內部已經 render 過一次（用的是還沒換掉異常變化的
+    // 清單），這裡再 render 一次才是最終結果。兩次 render 之間畫面會閃一下
+    // 不同的筆數，但最終狀態正確。
     renderHealth();
     return healthIssues;
   };

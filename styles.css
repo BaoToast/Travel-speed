@@ -23,3 +23,79 @@ aside{display:flex;flex-direction:column}.brand{flex:none}aside nav{flex:1;min-h
 }
 .manual-download a.primary { background: #17354d; color: #fff; }
 .manual-download a.outline { border: 1px solid #cbd7dd; color: #17354d; background: #fff; }
+
+/* 品質總覽的異常篩選：季度區間、類型（可複選）、路段、日別、尖峰。
+   季度一累積這張表會長到上百列，沒有篩選就等於看不到重點。 */
+.quality-shown{font-size:12px;color:var(--muted);white-space:nowrap;align-self:center}
+.quality-shown.stale{color:var(--orange);font-weight:700}
+#healthCount.stale{color:var(--orange);font-weight:700}
+.anomaly-filters{margin:4px 0 16px;padding:14px 16px;border:1px solid var(--line);border-radius:9px;background:#f7fafb}
+.anomaly-filter-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.anomaly-filter-row label{display:block;font-size:12px;font-weight:700;color:var(--navy)}
+.anomaly-filter-row select{width:100%;margin-top:6px;padding:8px 9px;border:1px solid #cbd7dd;border-radius:6px;font:inherit;background:#fff}
+.anomaly-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.anomaly-chip{border:1px solid #cbd7dd;background:#fff;color:#415662;border-radius:999px;padding:6px 12px;font:inherit;font-size:12px;cursor:pointer}
+.anomaly-chip:hover{border-color:var(--blue)}
+.anomaly-chip.on{border-color:var(--blue);background:var(--blue2);color:var(--navy);font-weight:800}
+.anomaly-chip.clear{color:var(--muted)}
+.anomaly-hint{margin:11px 0 0;font-size:11.5px;color:var(--muted);line-height:1.75}
+.limit-version-note{margin-top:6px;font-size:11.5px;line-height:1.65;color:#8a5312;background:#fff6e8;border-left:3px solid var(--orange);padding:7px 9px;border-radius:6px;max-width:420px}
+
+/* ══════════ 版面修正（全面稽核） ══════════════════════════════════
+   稽核在多個寬度實測到：預覽表的 min-content 把整頁撐開、圖表卡片
+   有不可壓縮的最小寬度、按鈕被擠成一行一個字、以及列印永遠印出手冊。 */
+
+/* 1. 匯入預覽：grid 項目的自動最小尺寸等於內容的 min-content，
+      .table-wrap 的 overflow 對「格線項目本身」沒有作用，於是整頁左右捲動
+      （實測 390px 溢出 500px，連左邊的表單都跑到畫面外）。 */
+.import-grid,.two,.diff-grid,.version-grid,.chart-grid{grid-auto-columns:minmax(0,1fr)}
+.import-grid>*,.two>*,.diff-grid>*,.version-grid>*,.chart-grid>*{min-width:0}
+
+/* 2. LOS／旅行速率圖表卡片：.bar{min-width:7px} 讓卡片有一個隨季度數
+      成長的最小寬度，季度一多就把格線撐爆。改成讓 .bars 自己捲動。 */
+.bars{overflow-x:auto;overflow-y:hidden}
+.chart-card{min-width:0}
+
+/* 3. 速限版本的下拉沒有寬度限制，其 intrinsic width 是最長選項（實測
+      422px），在每個寬度都會截斷選中的文字，窄視窗還會頂出容器。 */
+#versionLimitKey,#diffLimitKey,.version-grid select,.diff-grid select{width:100%;max-width:100%}
+
+/* 4. 按鈕列在窄視窗被壓成一行一個字（實測 390px「套用並重新計算」變成
+      4 行、Manager 的「匯出篩選結果」在 1201px 變成 6 行）。 */
+.title,.panel-head,.los-rule-actions,.manager-filters,.filters{flex-wrap:wrap}
+.title button,.panel-head button,.los-rule-actions button,
+.manager-filters button,.road-batch-bar button,.preview-actions button{flex:none;white-space:nowrap}
+button,.primary,.ghost,.outline,.success{white-space:nowrap}
+@media(max-width:1340px){.manager-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1150px){.title{flex-direction:column;align-items:flex-start;gap:12px}}
+
+/* 5. 匯入預覽的動作列宣告兩欄卻有三個子元素，主要按鈕被擠到第二列，
+      取消鈕被拉成 315×94 的方塊。 */
+.preview-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.preview-actions>*{flex:1 1 200px}
+.preview-actions button{flex:0 0 auto}
+
+/* 6. 列印：原本無論在哪一頁都只印新手說明。改成印目前這一頁，
+      並把純操作用的元件收起來、讓表格完整展開。 */
+@media print{
+  .view{display:none!important}
+  .view.active{display:block!important}
+  aside,header,#menu,.filters,.preview-actions,.road-batch-bar,
+  .title button,.panel-head button,#toast{display:none!important}
+  .shell{grid-template-columns:1fr!important}
+  main{grid-column:1!important}
+  .table-wrap{overflow:visible!important;max-height:none!important}
+  .panel,.chart-card,.metrics article{break-inside:avoid;box-shadow:none!important}
+  body{background:#fff!important}
+}
+
+/* 7. 圖表的季度標籤 8px 且互相重疊，速率標籤也疊在一起。
+      放大到 10px 並讓標籤有自己的水平空間。 */
+.bar-group small{font-size:10px}
+.speed-bar::before{font-size:10px}
+.bar-group{min-width:34px}
+
+/* 8. 對比：eyebrow 在淺背景上只有 2.45:1，muted 系統字剛好卡在 4.49:1。 */
+:root{--muted:#5d6c78}
+.eyebrow{color:#1a6b9c}
+.los-f{background:#b83f3d}
