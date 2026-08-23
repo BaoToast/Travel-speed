@@ -139,7 +139,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.10";
+document.querySelector(".brand small").textContent = "正式版 v2.12";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -150,8 +150,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.10.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.10.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.12.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.12.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -970,7 +970,18 @@ $("preview").onclick = async () => {
     try {
       pending.push(await parseFile(f, year, q, $("defaultSpeed").value));
     } catch (e) {
-      pending.push({ file: f.name, rows: [], ok: false, error: "檔案無法開啟或格式不支援" });
+      // 使用者在預覽後把檔案拿去 Excel 修正、再按一次「讀取並預覽」時，
+      // 瀏覽器手上那個檔案參照已經失效（內容與選取當下不一致），
+      // 讀取會直接失敗。這時講「格式不支援」會把人引到完全錯誤的方向。
+      const changed = /NotReadable|not be read|changed/i.test(String(e?.name || e?.message || ""));
+      pending.push({
+        file: f.name,
+        rows: [],
+        ok: false,
+        error: changed
+          ? "這個檔案在選取之後被修改過，請重新選取一次檔案再預覽"
+          : "檔案無法開啟或格式不支援",
+      });
     }
   }
   // 記住這次預覽的條件。寫入時要用這一份，而不是當下輸入框的值：
@@ -981,6 +992,26 @@ $("preview").onclick = async () => {
   $("preview").disabled = false;
   renderPreview();
 };
+/**
+ * 取消本次預覽。
+ *
+ * 預覽的用意就是「先看看有沒有問題，有問題先去修檔案」。舊版只有
+ *「讀取並預覽」與「確認寫入」兩個按鈕，看到判讀失敗之後沒有任何方式
+ * 把這批結果清掉——畫面就一直掛著一份錯誤的預覽，使用者也不確定自己
+ * 是不是已經被寫進去了。這個按鈕把預覽狀態整個清乾淨，資料完全不動。
+ */
+$("cancelPreview").onclick = () => {
+  if (!pending.length) return;
+  clearPendingPreview();
+  // 檔案輸入也要清掉：使用者修好檔案後通常會重新選同一個檔名，
+  // 不清掉的話瀏覽器可能不觸發 change，看起來像「選了卻沒反應」。
+  $("files").value = "";
+  $("fileInfo").textContent = "尚未選取檔案";
+  $("previewStatus").textContent = "尚未開始";
+  renderPreview();
+  toast("已取消本次預覽，資料完全沒有變動；修正檔案後請重新選取並預覽");
+};
+
 // 改了民國年或季度就讓預覽失效，避免用舊條件寫入。
 for (const id of ["rocYear", "quarter"])
   $(id).addEventListener("change", () => {
@@ -1042,6 +1073,8 @@ function renderPreview() {
       }),
   );
   $("commit").disabled = !pending.some((x) => x.ok) || unchecked > 0;
+  // 只要有預覽結果就可以取消，不論成功或失敗。
+  if ($("cancelPreview")) $("cancelPreview").disabled = !pending.length;
 }
 function remapPending(item, target) {
   if (!target || target === "__NEW__") return;
