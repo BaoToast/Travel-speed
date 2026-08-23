@@ -99,3 +99,84 @@ button,.primary,.ghost,.outline,.success{white-space:nowrap}
 :root{--muted:#5d6c78}
 .eyebrow{color:#1a6b9c}
 .los-f{background:#b83f3d}
+
+/* ── 結論草稿產生器（v2.16 新增） ─────────────────────────── */
+.conclusion-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.conclusion-head h3{margin:0}
+.conclusion-count{padding:5px 11px;border-radius:999px;background:#e8f4f2;color:#0f6f68;font-size:11px;font-weight:800;white-space:nowrap}
+.conclusion-count.zero{background:#fdeeea;color:#a4472f}
+.conclusion-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.conclusion-field{min-width:0;margin:0;padding:11px 13px 13px;border:1px solid var(--line);border-radius:10px;background:#fbfdfd}
+.conclusion-field-wide{grid-column:1/-1}
+.conclusion-field legend{padding:0 6px;font-size:11px;font-weight:800;color:var(--teal,#0f6f68)}
+.conclusion-radios,.conclusion-checks{display:flex;flex-wrap:wrap;gap:7px 15px;margin-bottom:7px}
+.conclusion-radios label,.conclusion-checks label,.conclusion-list label{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;cursor:pointer}
+.conclusion-list{display:grid;gap:5px;max-height:180px;overflow:auto;padding:2px 2px 2px 0}
+.conclusion-list label{word-break:break-word}
+.conclusion-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.conclusion-inline select{min-width:92px}
+.conclusion-hint{margin:5px 0 0;font-size:11px;line-height:1.7;color:#6b7d84}
+.conclusion-metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:7px}
+.conclusion-metrics label{display:flex;align-items:flex-start;gap:8px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:12px;line-height:1.5;cursor:pointer}
+.conclusion-metrics label.selected{border-color:#0f6f68;background:#eef8f7}
+.conclusion-metrics input{margin-top:2px;flex:none}
+.conclusion-templates{margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+.conclusion-templates>strong{display:block;margin-bottom:7px;font-size:12px}
+.conclusion-actions-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.conclusion-actions-row input{flex:1 1 180px;min-width:150px}
+.conclusion-template-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.conclusion-template{display:inline-flex;align-items:center;overflow:hidden;border:1px solid #cfdcdf;border-radius:999px;background:#fff}
+.conclusion-template button{padding:6px 11px;border:0;background:transparent;font-size:11px;font-weight:700;cursor:pointer}
+.conclusion-template button.danger{padding:6px 9px;border-left:1px solid #e6eef0;color:#a4472f}
+#conclusionDraft{width:100%;min-height:360px;padding:13px 14px;border:1px solid #cad6df;border-radius:10px;background:#fbfdfd;font-family:inherit;font-size:12.5px;line-height:1.9;resize:vertical}
+@media(max-width:760px){.conclusion-grid,.conclusion-metrics{grid-template-columns:minmax(0,1fr)}}
+
+/*
+ * 窄視窗的防溢出（v2.16）。
+ * grid 的子項目預設 min-width:auto，內容一長就撐破容器，整頁跟著橫向捲動。
+ * 實測 640px 時結論草稿的條件區溢出 11px、760px 時備份頁的三欄卡片溢出 10px。
+ */
+.conclusion-grid > *,
+.conclusion-metrics > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.conclusion-checks label,
+.conclusion-radios label,
+.conclusion-list label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.conclusion-field select,
+.conclusion-field input {
+  max-width: 100%;
+}
+.cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .conclusion-actions-row input {
+    min-width: 0;
+    flex: 1 1 120px;
+  }
+}
+
+/*
+ * 勾選卡片的文字要能換行。
+ * 原本是 display:flex，文字是「匿名 flex 項目」，min-width 預設 auto，
+ * 於是像「範圍內服務水準最差的路段」這種長標籤不會換行，整張卡被撐寬
+ * （實測 640px 時單一標籤就溢出 62px）。改成兩欄 grid，第二欄 minmax(0,1fr)
+ * 才是真的允許縮小換行。
+ */
+.conclusion-metrics label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+  overflow-wrap: anywhere;
+}

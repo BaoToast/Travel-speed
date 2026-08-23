@@ -26,6 +26,7 @@
     state.anomalyRules = state.anomalyRules || {};
     state.operations = state.operations || [];
     state.reportDrafts = state.reportDrafts || {};
+    state.conclusionTemplates = state.conclusionTemplates || {};
     state.version = Math.max(Number(state.version) || 0, 10);
   }
   ensureState();
@@ -984,6 +985,327 @@
     return healthIssues;
   };
 
+  /* ══════════════ 結論草稿產生器 ══════════════
+   *
+   * 條件面板 → conclusion.js 組字 → 文字框。
+   * 這裡只負責把畫面上的勾選整理成 condition，數字一律由 state.details 帶，
+   * 不在這裡重算，草稿的數字才會和「尖峰明細」「彙總」完全一致。
+   */
+  let conclusionCondition = clone(SPEED_DEFAULT_CONDITION);
+  let conclusionEdited = false;
+  let conclusionOwner = null;
+
+  function conclusionRows() {
+    return activeRows();
+  }
+
+  function conclusionTemplates() {
+    state.conclusionTemplates = state.conclusionTemplates || {};
+    const key = state.activeCode || "";
+    if (!Array.isArray(state.conclusionTemplates[key]))
+      state.conclusionTemplates[key] = [];
+    return state.conclusionTemplates[key];
+  }
+
+  function checkboxGroup(host, values, selected, onToggle) {
+    if (!host) return;
+    host.innerHTML = values
+      .map(
+        (value, index) =>
+          `<label><input type="checkbox" data-index="${index}" ${
+            selected.indexOf(value) >= 0 ? "checked" : ""
+          }>${safe(value)}</label>`,
+      )
+      .join("");
+    host.querySelectorAll("input").forEach((input) => {
+      input.onchange = () => onToggle(values[Number(input.dataset.index)]);
+    });
+  }
+
+  function toggleIn(list, value) {
+    const index = list.indexOf(value);
+    if (index >= 0) list.splice(index, 1);
+    else list.push(value);
+  }
+
+  function renderConclusion() {
+    if (!q("conclusionMain")) return;
+    /* 換計畫時條件與草稿都要重設，否則會把上一個計畫的路段帶過來，
+       篩出 0 筆卻找不出原因。 */
+    if (conclusionOwner !== state.activeCode) {
+      conclusionOwner = state.activeCode;
+      conclusionCondition = clone(SPEED_DEFAULT_CONDITION);
+      conclusionEdited = false;
+      if (q("conclusionDraft")) q("conclusionDraft").value = "";
+    }
+    const rows = conclusionRows();
+    q("conclusionEmpty").hidden = rows.length > 0;
+    q("conclusionMain").hidden = rows.length === 0;
+    if (!rows.length) return;
+
+    const periods = ordered(rows.map((x) => x.period));
+    const years = [...new Set(periods.map((x) => speedPeriodYear(x)).filter(Boolean))].sort();
+    const options = (list, value) =>
+      list.map((x) => `<option ${x === value ? "selected" : ""}>${safe(x)}</option>`).join("");
+    const scope = conclusionCondition.scope;
+
+    q("conclusionQuarterBox").hidden = scope.kind !== "quarter";
+    q("conclusionYearBox").hidden = scope.kind !== "year";
+    q("conclusionRangeBox").hidden = scope.kind !== "range";
+    q("conclusionQuarter").innerHTML = options(periods, scope.quarter);
+    q("conclusionYear").innerHTML = options(years, scope.year);
+    q("conclusionFrom").innerHTML = options(periods, scope.from);
+    q("conclusionTo").innerHTML = options(periods, scope.to);
+    q("conclusionScopeKinds")
+      .querySelectorAll("input")
+      .forEach((input) => {
+        input.checked = input.value === scope.kind;
+      });
+
+    checkboxGroup(
+      q("conclusionPeaks"),
+      [...new Set(rows.map((x) => x.peak))].sort(),
+      conclusionCondition.peaks,
+      (value) => {
+        toggleIn(conclusionCondition.peaks, value);
+        renderConclusion();
+      },
+    );
+    checkboxGroup(
+      q("conclusionDirections"),
+      [...new Set(rows.map((x) => x.direction))].sort(),
+      conclusionCondition.directions,
+      (value) => {
+        toggleIn(conclusionCondition.directions, value);
+        renderConclusion();
+      },
+    );
+    checkboxGroup(
+      q("conclusionDays"),
+      [...new Set(rows.map((x) => x.day))].sort(),
+      conclusionCondition.days,
+      (value) => {
+        toggleIn(conclusionCondition.days, value);
+        renderConclusion();
+      },
+    );
+    checkboxGroup(
+      q("conclusionRoads"),
+      [...new Set(rows.map((x) => x.road))].sort(),
+      conclusionCondition.roads,
+      (value) => {
+        toggleIn(conclusionCondition.roads, value);
+        renderConclusion();
+      },
+    );
+
+    q("conclusionMetrics").innerHTML = SPEED_CONCLUSION_METRICS.map(
+      (metric, index) =>
+        `<label class="${conclusionCondition.metrics.indexOf(metric.key) >= 0 ? "selected" : ""}">` +
+        `<input type="checkbox" data-index="${index}" ${
+          conclusionCondition.metrics.indexOf(metric.key) >= 0 ? "checked" : ""
+        }>${safe(metric.label)}</label>`,
+    ).join("");
+    q("conclusionMetrics")
+      .querySelectorAll("input")
+      .forEach((input) => {
+        input.onchange = () => {
+          toggleIn(
+            conclusionCondition.metrics,
+            SPEED_CONCLUSION_METRICS[Number(input.dataset.index)].key,
+          );
+          renderConclusion();
+        };
+      });
+
+    q("conclusionGrouping")
+      .querySelectorAll("input")
+      .forEach((input) => {
+        input.checked = input.value === conclusionCondition.grouping;
+      });
+    q("conclusionDigits").value = String(conclusionCondition.digits);
+
+    q("conclusionCount").textContent =
+      "符合條件 " + selectSpeedConclusionRows(rows, conclusionCondition).length + " 筆";
+    q("conclusionCount").classList.toggle(
+      "zero",
+      selectSpeedConclusionRows(rows, conclusionCondition).length === 0,
+    );
+
+    const templates = conclusionTemplates();
+    q("conclusionTemplateList").innerHTML = templates
+      .map(
+        (t, index) =>
+          `<span class="conclusion-template"><button data-apply="${index}">${safe(t.name)}</button>` +
+          `<button class="danger" data-remove="${index}" aria-label="刪除範本 ${safe(t.name)}">×</button></span>`,
+      )
+      .join("");
+    q("conclusionTemplateHint").hidden = templates.length > 0;
+    q("conclusionTemplateList")
+      .querySelectorAll("button[data-apply]")
+      .forEach((button) => {
+        button.onclick = () => {
+          conclusionCondition = clone(templates[Number(button.dataset.apply)].condition);
+          renderConclusion();
+          toast("已套用範本「" + templates[Number(button.dataset.apply)].name + "」");
+        };
+      });
+    q("conclusionTemplateList")
+      .querySelectorAll("button[data-remove]")
+      .forEach((button) => {
+        button.onclick = () => {
+          templates.splice(Number(button.dataset.remove), 1);
+          save();
+          renderConclusion();
+        };
+      });
+
+    q("conclusionEditHint").textContent = conclusionEdited
+      ? "您已手動修改過這份草稿；按「重新產生」會先詢問再覆蓋。"
+      : "這段文字可以直接修改，改過之後不會被自動覆蓋。";
+  }
+
+  function generateConclusion() {
+    if (
+      conclusionEdited &&
+      !confirm("您已經手動修改過草稿。重新產生會覆蓋掉修改內容，確定要繼續嗎？")
+    )
+      return;
+    const p = activeProject();
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    q("conclusionDraft").value = buildSpeedConclusion(
+      conclusionRows(),
+      conclusionCondition,
+      {
+        projectName: p ? `${p.code} ${p.name}` : "未命名計畫",
+        systemVersion: document.querySelector(".brand small")?.textContent || "",
+        generatedAt:
+          now.getFullYear() +
+          "-" +
+          pad(now.getMonth() + 1) +
+          "-" +
+          pad(now.getDate()) +
+          " " +
+          pad(now.getHours()) +
+          ":" +
+          pad(now.getMinutes()),
+      },
+    );
+    conclusionEdited = false;
+    renderConclusion();
+    toast("結論草稿已產生");
+  }
+
+  if (q("conclusionScopeKinds"))
+    q("conclusionScopeKinds")
+      .querySelectorAll("input")
+      .forEach((input) => {
+        input.onchange = () => {
+          const periods = ordered(conclusionRows().map((x) => x.period));
+          const years = [...new Set(periods.map((x) => speedPeriodYear(x)).filter(Boolean))].sort();
+          const kind = input.value;
+          conclusionCondition.scope =
+            kind === "quarter"
+              ? { kind: "quarter", quarter: periods.at(-1) || "" }
+              : kind === "year"
+                ? { kind: "year", year: years.at(-1) || "" }
+                : kind === "range"
+                  ? { kind: "range", from: periods[0] || "", to: periods.at(-1) || "" }
+                  : { kind: "project" };
+          renderConclusion();
+        };
+      });
+  if (q("conclusionQuarter"))
+    q("conclusionQuarter").onchange = () => {
+      conclusionCondition.scope = { kind: "quarter", quarter: q("conclusionQuarter").value };
+      renderConclusion();
+    };
+  if (q("conclusionYear"))
+    q("conclusionYear").onchange = () => {
+      conclusionCondition.scope = { kind: "year", year: q("conclusionYear").value };
+      renderConclusion();
+    };
+  if (q("conclusionFrom"))
+    q("conclusionFrom").onchange = () => {
+      conclusionCondition.scope = {
+        kind: "range",
+        from: q("conclusionFrom").value,
+        to: q("conclusionTo").value,
+      };
+      renderConclusion();
+    };
+  if (q("conclusionTo"))
+    q("conclusionTo").onchange = () => {
+      conclusionCondition.scope = {
+        kind: "range",
+        from: q("conclusionFrom").value,
+        to: q("conclusionTo").value,
+      };
+      renderConclusion();
+    };
+  if (q("conclusionGrouping"))
+    q("conclusionGrouping")
+      .querySelectorAll("input")
+      .forEach((input) => {
+        input.onchange = () => {
+          conclusionCondition.grouping = input.value;
+          renderConclusion();
+        };
+      });
+  if (q("conclusionDigits"))
+    q("conclusionDigits").onchange = () => {
+      conclusionCondition.digits = Number(q("conclusionDigits").value);
+      renderConclusion();
+    };
+  if (q("conclusionAllRoads"))
+    q("conclusionAllRoads").onclick = () => {
+      conclusionCondition.roads = [];
+      renderConclusion();
+    };
+  if (q("conclusionGenerate")) q("conclusionGenerate").onclick = generateConclusion;
+  if (q("conclusionRegenerate")) q("conclusionRegenerate").onclick = generateConclusion;
+  if (q("conclusionDraft"))
+    q("conclusionDraft").oninput = () => {
+      conclusionEdited = true;
+      q("conclusionEditHint").textContent =
+        "您已手動修改過這份草稿；按「重新產生」會先詢問再覆蓋。";
+    };
+  if (q("conclusionCopy"))
+    q("conclusionCopy").onclick = () => {
+      const text = q("conclusionDraft").value;
+      if (!text) return toast("草稿還是空的，請先按「產生草稿」");
+      navigator.clipboard
+        ?.writeText(text)
+        .then(() => toast("已複製到剪貼簿"))
+        .catch(() => toast("瀏覽器不允許複製，請手動全選複製"));
+    };
+  if (q("conclusionDownload"))
+    q("conclusionDownload").onclick = () => {
+      const text = q("conclusionDraft").value;
+      if (!text) return toast("草稿還是空的，請先按「產生草稿」");
+      downloadBlob(new Blob(["\uFEFF" + text], { type: "text/plain;charset=utf-8" }), "結論草稿.txt");
+    };
+  if (q("conclusionSaveTemplate"))
+    q("conclusionSaveTemplate").onclick = () => {
+      const name = String(q("conclusionTemplateName").value || "").trim();
+      if (!name) return toast("請先輸入範本名稱");
+      const templates = conclusionTemplates();
+      const existing = templates.findIndex((t) => t.name === name);
+      const entry = {
+        id: "CT-" + Date.now(),
+        name,
+        condition: clone(conclusionCondition),
+        savedAt: new Date().toISOString(),
+      };
+      if (existing >= 0) templates.splice(existing, 1, entry);
+      else templates.unshift(entry);
+      q("conclusionTemplateName").value = "";
+      save();
+      renderConclusion();
+      toast("已存成範本「" + name + "」");
+    };
+
   const baseRenderAll = renderAll;
   renderAll = function () {
     ensureState();
@@ -994,6 +1316,7 @@
     renderPriority();
     refreshDelivery();
     renderOperations();
+    renderConclusion();
   };
   renderAll();
 })();
