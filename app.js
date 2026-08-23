@@ -139,7 +139,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.9";
+document.querySelector(".brand small").textContent = "正式版 v2.10";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -150,8 +150,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.9.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.9.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.10.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.10.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -525,9 +525,16 @@ function metricAt(m, r, c) {
   // 「冒號後面就是數字」，把 30 讀成速率——這一格明明只是標題，沒有數值。
   const inline = label.match(/(?:^|[^\d])[：:]\s*(-?\d+(?:\.\d+)?)\s*[^\d]*$/);
   if (inline) return +inline[1];
+  // 往右找數值時，一碰到「另一個文字格」就停。真實版面同一列是
+  //「平均總旅行速率｜21.08｜平均總行駛速率｜35.78」，原始檔若因為公式沒有
+  // 快取值而讓 21.08 是空的，舊寫法會一路掃過「平均總行駛速率」這個標題，
+  // 把 35.78 當成旅行速率讀進來——旅行速率與行駛速率變成同一個數字，
+  // 服務水準直接差兩級，畫面上卻沒有任何異常。
   for (let dc = 1; dc <= 5; dc++) {
-    const n = num(m[r]?.[c + dc]);
+    const cell = m[r]?.[c + dc];
+    const n = num(cell);
     if (n != null) return n;
+    if (cell != null && String(cell).trim() !== "") break;
   }
   for (let dr = 1; dr <= 3; dr++)
     for (let dc = 0; dc <= 3; dc++) {
@@ -543,31 +550,9 @@ function findLabels(m, text) {
       if (normalize(m[r][c]).includes(text)) a.push({ r, c });
   return a;
 }
-/**
- * 判斷某一列的標籤屬於哪一個方向。
- *
- * 規則是「離哪個『平均總旅行速率』標籤最近就屬於誰」，這樣不論檔案是把
- * 延滯表放在速率標籤上面或下面都判得對。之前只用「上一個速率標籤的下一列」
- * 當區塊起點，方向1的延滯表（在方向1標籤下方）剛好落在方向2的區塊裡，
- * 方向2就整組沿用方向1的數字，兩個方向的延滯一模一樣卻沒有任何提示。
- */
-function ownsRow(travelRows, row, candidateRow) {
-  let owner = row;
-  let bestDist = Math.abs(candidateRow - row);
-  for (const other of travelRows) {
-    const dist = Math.abs(candidateRow - other);
-    // 距離相同時歸給上面那一個，避免兩個方向都宣稱擁有同一列。
-    if (dist < bestDist || (dist === bestDist && other < owner)) {
-      owner = other;
-      bestDist = dist;
-    }
-  }
-  return owner === row;
-}
-function nearestMetric(m, row, text, travelRows = []) {
+function nearestMetric(m, row, text) {
   let best = null;
   for (const p of findLabels(m, text)) {
-    if (travelRows.length && !ownsRow(travelRows, row, p.r)) continue;
     const dist = Math.abs(p.r - row);
     // 距離相同時要挑「在下方」的那個標籤。findLabels 由上往下掃，
     // 舊版嚴格小於的比較會讓上一個方向的行駛速率被誤讀成這個方向的。
@@ -586,13 +571,9 @@ function nearestMetric(m, row, text, travelRows = []) {
 function delayPart(m, row, text, bounds) {
   const from = bounds?.from ?? 0;
   const to = bounds?.to ?? m.length;
-  const travelRows = bounds?.travelRows || [];
   let best = null;
   for (const p of findLabels(m, text)) {
     if (p.r < from || p.r >= to) continue;
-    // 區塊界線只擋得住一半：方向1的延滯表若排在它的速率標籤下面，同樣落在
-    // 方向2的區塊內。再用「離誰最近就屬於誰」確認這一列真的屬於這個方向。
-    if (travelRows.length && !ownsRow(travelRows, row, p.r)) continue;
     // 優先取「在速率標籤上方、且最靠近」的那一個；區塊內沒有才往下找。
     if (p.r <= row) {
       if (!best || best.r > row || p.r > best.r) best = p;
@@ -606,44 +587,220 @@ function delayPart(m, row, text, bounds) {
   }
   return null;
 }
-function parsePeakSheet(m, peak) {
-  if (!m) return [];
+/**
+ * 把一張尖峰工作表切成「一趟旅次一個區塊」。
+ *
+ * 這是讀取這類報告最關鍵的一步。實際收到的調查表，一張「上午尖峰」工作表裡
+ * 會有 6 趟旅次（每個方向 3 趟）上下疊在一起，每一趟的高度還不一樣（實測有
+ * 37、40、61 列三種）；平均速率寫在該趟的最後一列，延滯表則寫在該趟的上方。
+ * 只用「上一個平均速率標籤」當界線，或用「離哪個標籤最近」來猜，都會在某些
+ * 版型把方向2 的延滯判給方向1（或反過來），而且錯了不會有任何提示。
+ *
+ * 改以「記錄分隔線」切塊就跟版面高度無關：先找每趟都會出現一次的「旅次編號」，
+ * 沒有的話退而求其次用「重複出現的標題列」。兩者都找不到才回到舊的界線邏輯。
+ */
+function recordBlocks(m) {
+  const starts = [];
+  const push = (r) => {
+    if (!starts.includes(r)) starts.push(r);
+  };
+  for (let r = 0; r < m.length; r++)
+    for (let c = 0; c < (m[r]?.length || 0); c++)
+      if (normalize(m[r][c]).includes("旅次編號")) {
+        push(r);
+        break;
+      }
+  if (starts.length < 2) {
+    starts.length = 0;
+    const firstRow = m.findIndex((row) => (row || []).some((v) => normalize(v)));
+    const title =
+      firstRow < 0 ? "" : normalize((m[firstRow] || []).find((v) => normalize(v)));
+    // 標題太短（例如只有「1」）當分隔線太危險，會把整張表切碎。
+    if (title.length >= 6)
+      for (let r = 0; r < m.length; r++)
+        if ((m[r] || []).some((v) => normalize(v) === title)) push(r);
+  }
+  if (starts.length < 2) return [];
+  starts.sort((a, b) => a - b);
+  return starts.map((from, i) => ({
+    from,
+    to: i + 1 < starts.length ? starts[i + 1] : m.length,
+  }));
+}
+function labelsInBlock(m, block, text) {
+  return findLabels(m, text).filter((p) => p.r >= block.from && p.r < block.to);
+}
+/** 讀標籤正下方最近的一個數字，只在同一個區塊內找。 */
+function valueBelowLabel(m, p, block) {
+  const limit = Math.min(block.to - 1, p.r + 20);
+  for (let r = p.r + 1; r <= limit; r++) {
+    const n = num(m[r]?.[p.c]);
+    if (n != null) return n;
+  }
+  return null;
+}
+/** 取「方向　往：A--->B」的內容，用來判斷兩趟旅次是不是同一個方向。 */
+function directionTextOf(m, block) {
+  for (let r = block.from; r < block.to; r++)
+    for (const v of m[r] || []) {
+      const text = normalize(v);
+      if (!text.startsWith("方向往")) continue;
+      const parts = String(v).split(/[:：]/);
+      if (parts.length > 1) return normalize(parts.slice(1).join(":"));
+    }
+  return "";
+}
+function rowFromBlockData(item, peak, index) {
+  return {
+    peak,
+    direction: `方向${index + 1}`,
+    // 報告上寫的方向文字（例如「大同路口--->中正路口」），只用於顯示，
+    // 不參與任何計算，也不會變成資料的鍵值。
+    directionText: item.directionText || "",
+    travel: item.travel,
+    running: item.running,
+    roadDelay: item.roadDelay,
+    junctionDelay: item.junctionDelay,
+    // 路段延滯與交叉口延滯都是總延滯的必要組成，缺一不可。
+    // 舊版把讀不到的那一項當成 0，會讓總延滯嚴重低估卻照樣通過檢核。
+    totalDelay:
+      item.roadDelay == null || item.junctionDelay == null
+        ? null
+        : item.roadDelay + item.junctionDelay,
+  };
+}
+/** 以記錄區塊讀取。讀不出剛好兩個方向時，一律附上具體原因。 */
+function parseByRecordBlocks(m, peak, blocks) {
+  const found = [];
+  // 同一個區塊裡出現兩個同名標籤（例如另外印了一份「平均總旅行速率(雙向)」），
+  // 取第一個就結束會靜默拿到錯的值，而且跟跨區塊重複的守門標準不一致。
+  let ambiguous = "";
+  const single = (block, text) => {
+    const hits = labelsInBlock(m, block, text);
+    if (hits.length > 1 && !ambiguous)
+      ambiguous = `「${peak}」工作表同一趟旅次裡有 ${hits.length} 個「${text}」，系統不會自行挑選，請確認報告只保留一個`;
+    return hits[0] || null;
+  };
+  for (const block of blocks) {
+    const travelLabel = single(block, "平均總旅行速率");
+    if (!travelLabel) continue;
+    const travel = metricAt(m, travelLabel.r, travelLabel.c);
+    if (travel == null) continue;
+    const runningLabel = single(block, "平均總行駛速率");
+    const roadLabel = single(block, "路段延滯");
+    const junctionLabel = single(block, "交叉口延滯");
+    found.push({
+      directionText: directionTextOf(m, block),
+      travel,
+      running: runningLabel ? metricAt(m, runningLabel.r, runningLabel.c) : null,
+      roadDelay: roadLabel ? valueBelowLabel(m, roadLabel, block) : null,
+      junctionDelay: junctionLabel
+        ? valueBelowLabel(m, junctionLabel, block)
+        : null,
+    });
+  }
+  if (ambiguous) return { rows: [], issue: ambiguous };
+  if (found.length < 2)
+    return {
+      rows: [],
+      issue: `「${peak}」工作表切出 ${blocks.length} 趟旅次，但只有 ${found.length} 趟讀得到「平均總旅行速率」（應為 2 趟：兩個調查方向各一）`,
+    };
+  const groups = [];
+  found.forEach((item, index) => {
+    // 沒寫方向文字時，每一筆自成一個方向（等同以出現順序區分）。
+    const key = item.directionText || `#${index}`;
+    const group = groups.find((g) => g.key === key);
+    if (group) group.items.push(item);
+    else groups.push({ key, items: [item] });
+  });
+  if (groups.length !== 2)
+    return {
+      rows: [],
+      issue: `「${peak}」工作表讀到 ${groups.length} 個調查方向（應為 2 個）：${groups
+        .map((g) => (g.key.startsWith("#") ? "未標示方向" : g.key))
+        .join("、")}`,
+    };
+  const duplicated = groups.find((g) => g.items.length > 1);
+  if (duplicated)
+    return {
+      rows: [],
+      issue: `「${peak}」工作表中方向「${duplicated.key}」有 ${duplicated.items.length} 個「平均總旅行速率」，系統不會自行挑選或平均，請確認報告只保留一個代表值`,
+    };
+  return {
+    rows: groups.map((g, i) => rowFromBlockData(g.items[0], peak, i)),
+    issue: "",
+  };
+}
+/** 舊解法：整張表只有兩個「平均總旅行速率」、沒有記錄分隔線時使用。 */
+function parseByTravelAnchors(m, peak) {
   const travels = findLabels(m, "平均總旅行速率");
   // 一張尖峰工作表應該剛好有兩個方向。多出來（例如另有一個雙向平均區塊）
   // 或少於兩個時，寧可讓這份檔案在預覽時報錯，也不要用位置去猜哪兩個是方向1、2——
   // 猜錯會把「雙向平均」當成方向1，真正最差的那個方向反而整個不見。
-  if (travels.length !== 2) {
-    // 讓呼叫端能說清楚是哪一種問題，而不是只丟一句「無法辨識完整4筆」。
-    parsePeakSheet.lastIssue = `「${peak}」工作表找到 ${travels.length} 個「平均總旅行速率」區塊（應為 2 個：方向1、方向2），系統不會猜測哪兩個才是調查方向`;
-    return [];
-  }
-  return travels.map((p, i) => {
+  if (travels.length !== 2)
+    return {
+      rows: [],
+      issue: `「${peak}」工作表找到 ${travels.length} 個「平均總旅行速率」區塊（應為 2 個：方向1、方向2），系統不會猜測哪兩個才是調查方向`,
+    };
+  const rows = travels.map((p, i) => {
     // 這個方向的區塊：從上一個速率標籤的下一列開始，到下一個速率標籤為止。
     const previous = travels[i - 1];
     const next = travels[i + 1];
-    const travelRows = travels.map((item) => item.r);
     const bounds = {
       from: previous ? previous.r + 1 : 0,
       to: next ? next.r : m.length,
-      travelRows,
     };
-    const travel = metricAt(m, p.r, p.c),
-      running = nearestMetric(m, p.r, "平均總行駛速率", travelRows);
-    const roadDelay = delayPart(m, p.r, "路段延滯", bounds),
-      junctionDelay = delayPart(m, p.r, "交叉口延滯", bounds);
-    return {
+    return rowFromBlockData(
+      {
+        directionText: "",
+        travel: metricAt(m, p.r, p.c),
+        running: nearestMetric(m, p.r, "平均總行駛速率"),
+        roadDelay: delayPart(m, p.r, "路段延滯", bounds),
+        junctionDelay: delayPart(m, p.r, "交叉口延滯", bounds),
+      },
       peak,
-      direction: `方向${i + 1}`,
-      travel,
-      running,
-      roadDelay,
-      junctionDelay,
-      // 路段延滯與交叉口延滯都是總延滯的必要組成，缺一不可。
-      // 舊版把讀不到的那一項當成 0，會讓總延滯嚴重低估卻照樣通過檢核。
-      totalDelay:
-        roadDelay == null || junctionDelay == null ? null : roadDelay + junctionDelay,
-    };
+      i,
+    );
   });
+  return { rows, issue: "" };
+}
+/**
+ * 讀取一張尖峰工作表，回傳 { rows, issue }。
+ *
+ * 這裡不再用函式屬性傳遞診斷訊息：呼叫端會連續讀上午與下午兩張表，
+ * 第二次呼叫一開始就會把第一次的訊息清掉，於是「問題出在上午尖峰」時
+ * 使用者永遠看不到具體原因，只剩最泛用的那一句。
+ *
+ * 另外：只有在「切不出記錄分隔線」時才退回舊解法。區塊解法若已經明確
+ * 判定版面有問題（例如兩趟旅次其實是同一個方向），那是陽性診斷，不能
+ * 被舊解法覆蓋成靜默成功——舊解法只數整張表有幾個平均速率，看不出
+ * 那兩個屬於同一個方向。
+ */
+function parsePeakSheet(m, peak) {
+  if (!m) return { rows: [], issue: "" };
+  const blocks = recordBlocks(m);
+  if (blocks.length >= 2) return parseByRecordBlocks(m, peak, blocks);
+  return parseByTravelAnchors(m, peak);
+}
+/**
+ * 讀出來的四個數字合不合物理常識。
+ *
+ * 旅行速率是「含延滯」的速率，行駛速率是「不含延滯」的速率，所以
+ * 旅行速率一定不會大於行駛速率；有延滯時一定嚴格小於。這條不變式幾乎
+ * 不花成本，卻能擋掉「讀到隔壁欄位」這一整類錯誤——那類錯誤最可怕的
+ * 地方在於數字看起來很正常，只是屬於別的欄位，事後完全查不出來。
+ */
+function implausibleReason(r) {
+  const label = `${r.peak}／${r.directionText || r.direction}`;
+  if (!(r.travel > 0)) return `${label} 的旅行速率不是正數（讀到 ${r.travel}）`;
+  if (!(r.running > 0)) return `${label} 的行駛速率不是正數（讀到 ${r.running}）`;
+  // 浮點數比較留一點餘裕，避免四捨五入造成誤判。
+  const tolerance = 0.01;
+  if (r.travel > r.running + tolerance)
+    return `${label} 的旅行速率 ${r.travel.toFixed(2)} 大於行駛速率 ${r.running.toFixed(2)}，數值可能讀到相鄰欄位`;
+  if (r.totalDelay > 0 && Math.abs(r.travel - r.running) < tolerance)
+    return `${label} 有 ${r.totalDelay.toFixed(1)} 秒延滯，旅行速率卻等於行駛速率，數值可能讀到相鄰欄位`;
+  return "";
 }
 async function parseFile(file, year, q, defSpeed) {
   const p = activeProject();
@@ -652,9 +809,12 @@ async function parseFile(file, year, q, defSpeed) {
     day = dayFromFile(file.name),
     morning = matrix(wb, ["上午尖峰", "上午", "AM尖峰", "AM"]),
     afternoon = matrix(wb, ["下午尖峰", "下午", "PM尖峰", "PM"]);
-  parsePeakSheet.lastIssue = "";
-  const rows = [...parsePeakSheet(morning, "上午尖峰"), ...parsePeakSheet(afternoon, "下午尖峰")];
-  const blockIssue = parsePeakSheet.lastIssue;
+  const am = parsePeakSheet(morning, "上午尖峰");
+  const pm = parsePeakSheet(afternoon, "下午尖峰");
+  const rows = [...am.rows, ...pm.rows];
+  // 兩張表的診斷都要留著。舊寫法把訊息放在函式屬性上，下午那次呼叫會把
+  // 上午的訊息洗掉，而上午永遠先解析，等於上午的問題永遠看不到原因。
+  const blockIssue = [am.issue, pm.issue].filter(Boolean).join("；");
   for (const r of rows) {
     const k = `${p.code}|${road}|${r.direction}`;
     // 匯入預覽也要走「速限版本」那一套。舊版只看 state.limits，於是設過
@@ -685,6 +845,8 @@ async function parseFile(file, year, q, defSpeed) {
       road,
       day,
       limit,
+      // 報告上寫的方向文字，只作顯示用；方向的鍵值仍是方向1／方向2。
+      directionText: r.directionText || "",
       limitSource: version ? version.source || "" : "",
       limitVersionStart: version ? version.start : "",
       ratio: r.travel == null ? null : r.travel / limit,
@@ -692,9 +854,11 @@ async function parseFile(file, year, q, defSpeed) {
       source: file.name,
     });
   }
-  const ok =
+  const complete =
     rows.length === 4 &&
     rows.every((r) => r.travel != null && r.running != null && r.totalDelay != null);
+  const implausible = complete ? rows.map(implausibleReason).filter(Boolean) : [];
+  const ok = complete && !implausible.length;
   const sheetError =
     !morning || !afternoon
       ? "找不到上午／下午工作表（支援名稱：上午尖峰、下午尖峰、上午、下午、AM、PM）"
@@ -709,6 +873,7 @@ async function parseFile(file, year, q, defSpeed) {
       ? ""
       : sheetError ||
         blockIssue ||
+        implausible[0] ||
         (rows.length !== 4 ? "無法辨識完整4筆尖峰方向資料" : "速率或延滯欄位缺少數值"),
   };
 }
@@ -738,7 +903,31 @@ function upsert(rows) {
     const k = `${d.projectCode}|${d.road}|${d.direction}`;
     if (!state.limits[k]) state.limits[k] = d.limit;
   }
+  adoptDirectionNames(rows);
   rebuild();
+}
+/**
+ * 報告上寫著「方  向  往：大同路口--->中正路口」，把它拿來當方向的顯示名稱。
+ *
+ * 只在使用者還沒自己命名時才填（預設值是「方向1」「方向2」，看不出哪個方向
+ * 是哪一邊）。方向的鍵值仍然是方向1／方向2，不會因此改變，既有資料不受影響；
+ * 使用者之後在「路段管理」改成別的名稱也不會被這裡蓋掉。
+ */
+function adoptDirectionNames(rows) {
+  for (const d of rows) {
+    if (!d.directionText) continue;
+    const key = roadMetaKey(d.road, d.projectCode);
+    const meta = state.roadMeta[key] || {
+      directionA: "方向1",
+      directionB: "方向2",
+      startPeriod: "",
+      endPeriod: "",
+    };
+    const field = d.direction === "方向1" ? "directionA" : "directionB";
+    const fallback = d.direction === "方向1" ? "方向1" : "方向2";
+    if (meta[field] && meta[field] !== fallback) continue;
+    state.roadMeta[key] = { ...meta, [field]: d.directionText };
+  }
 }
 
 $("saveProject").onclick = async () => {
@@ -1255,7 +1444,7 @@ function renderDetails() {
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(directionName(x.road, x.direction, x.projectCode))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, 0)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(x.directionText || directionName(x.road, x.direction, x.projectCode))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, 0)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰明細</td></tr>';
@@ -1345,19 +1534,30 @@ $("applySpeed").onclick = async () => {
   // 速限一定是正數。`Number(i.value) || 50` 只擋得掉 0、空白與非數字：
   // 打成 -50 會照樣存進去，之後 travel / limit 變成負的比值，整條路段的
   // 服務水準無聲變成 F，而且畫面上也看不出哪裡不對。
-  const rejected = [];
-  document.querySelectorAll("[data-limit]").forEach((i) => {
+  //
+  // 而且驗證一定要「全部檢查完再寫入」。邊驗證邊寫入的話，合法的欄位已經
+  // 進了 state 並標成「已人工確認」，卻因為提早 return 而沒有 rebuild()、
+  // 沒有 save()；使用者以為整批取消了，下一次任何不相干的存檔卻會把這半套
+  // 設定固化，重新整理後 LOS 就悄悄變了。
+  const inputs = [...document.querySelectorAll("[data-limit]")];
+  const rejected = inputs.filter((i) => {
     const parsed = Number(i.value);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      rejected.push(i.dataset.limit.split("|").slice(1).join(" "));
+    return !Number.isFinite(parsed) || parsed <= 0;
+  });
+  if (rejected.length) {
+    rejected.forEach((i) => {
       i.value = state.limits[i.dataset.limit] || 50;
-      return;
-    }
-    state.limits[i.dataset.limit] = parsed;
+    });
+    return toast(
+      `速限必須大於 0，這次完全沒有變更：${rejected
+        .map((i) => i.dataset.limit.split("|").slice(1).join(" "))
+        .join("、")}`,
+    );
+  }
+  inputs.forEach((i) => {
+    state.limits[i.dataset.limit] = Number(i.value);
     state.limitConfirmed[i.dataset.limit] = true;
   });
-  if (rejected.length)
-    return toast(`速限必須大於 0，以下未儲存：${rejected.join("、")}`);
   state.details
     .filter((d) => d.projectCode === state.activeCode)
     .forEach((d) => {
@@ -1552,6 +1752,21 @@ portfolioBtn.onclick = () => {
   );
   toast("個人全部計畫包已下載");
 };
+/**
+ * 判斷一份沒有 kind 標記的 JSON 是不是「舊版備份」。
+ *
+ * 只檢查「有沒有 projects 與 details 兩個陣列」是不夠的：一個
+ * `{"projects":[],"details":[]}` 就能通過，載入後把使用者全部的資料清空，
+ * 畫面卻顯示「備份已載入」。舊版備份是把整個 state 存成 JSON，一定同時
+ * 帶著版本號與其他設定物件，而且至少有一個計畫、每個計畫都有編號。
+ */
+function looksLikeLegacyBackup(x) {
+  if (!Array.isArray(x.projects) || !Array.isArray(x.details)) return false;
+  if (!x.projects.length) return false;
+  if (!x.projects.every((p) => p && typeof p.code === "string" && p.code)) return false;
+  const bags = ["limits", "aliases", "roadMeta", "losRules"];
+  return bags.some((k) => x[k] && typeof x[k] === "object");
+}
 $("restoreFile").onchange = async (e) => {
   // 還原前先把目前狀態留一份。舊版是「邊解析邊改 state」，
   // 遇到壞掉的備份檔會在改壞之後才丟出例外，畫面只顯示「這不是有效的備份檔」，
@@ -1582,7 +1797,7 @@ $("restoreFile").onchange = async (e) => {
       else delete state.losRules[x.project.code];
     } else if (x.kind === "TLM_PORTFOLIO_PACKAGE") {
       state = { ...emptyState(), ...x, activeCode: x.projects?.[0]?.code || "", manager };
-    } else if (Array.isArray(x.projects) && Array.isArray(x.details)) {
+    } else if (looksLikeLegacyBackup(x)) {
       // 舊版備份沒有 kind 標記，只能靠形狀認。但「形狀」必須嚴格檢查：
       // 舊版是把整個 state 直接存成 JSON，一定同時帶著 projects 與 details
       // 兩個陣列。之前這裡是無條件 else，於是隨便一個 JSON（例如從別的系統
@@ -1597,7 +1812,10 @@ $("restoreFile").onchange = async (e) => {
     migrateLosRules();
     rebuild();
     await save();
-    toast("備份已載入");
+    // 把載入了什麼講清楚，使用者才看得出自己剛剛換掉了什麼。
+    toast(
+      `備份已載入：${state.projects.length} 個計畫、${state.details.length} 筆尖峰明細`,
+    );
   } catch {
     state = snapshot;
     renderAll();
@@ -1875,6 +2093,21 @@ function renderImportLog() {
     .querySelectorAll("[data-rollback]")
     .forEach((b) => (b.onclick = () => rollbackBatch(b.dataset.rollback)));
 }
+/** 清掉「已經沒有任何明細」的路段自動命名，避免留下孤兒方向名稱。 */
+function forgetOrphanDirectionNames() {
+  const alive = new Set(
+    state.details.map((d) => roadMetaKey(d.road, d.projectCode)),
+  );
+  for (const key of Object.keys(state.roadMeta || {})) {
+    if (alive.has(key)) continue;
+    const meta = state.roadMeta[key];
+    if (!meta) continue;
+    const cleared = { ...meta, directionA: "方向1", directionB: "方向2" };
+    // 只有起訖點與期間設定值得保留；全空的話整筆刪掉。
+    if (!cleared.startPeriod && !cleared.endPeriod) delete state.roadMeta[key];
+    else state.roadMeta[key] = cleared;
+  }
+}
 async function rollbackBatch(id) {
   const batch = state.imports.find((x) => x.id === id);
   if (!batch || batch.status !== "有效") return;
@@ -1908,6 +2141,11 @@ async function rollbackBatch(id) {
   state.details = [...map.values()];
   batch.status = "已復原";
   batch.revertedAt = new Date().toLocaleString("zh-TW");
+  // 匯入時會把報告上的方向文字寫進路段的方向名稱。復原之後，若這個路段
+  // 已經沒有任何明細，那組名稱就是孤兒——匯錯檔（例如被別名對應到錯的
+  // 路段）復原後，錯的方向名稱會留在路段管理裡，而且因為「已經不是預設值」
+  // 之後匯入正確檔案時也不會再被更新。
+  forgetOrphanDirectionNames();
   rebuild();
   await save();
   toast(batch.type === "delete-quarter" ? "該季度已還原" : "該匯入批次已復原");
@@ -2005,6 +2243,26 @@ function inspectHealth() {
         detail: "標點或分隔符不同，請確認是否為同一路段；可使用「路段名稱修改／合併」。",
       });
   }
+  // 方向1／方向2 是照報告裡旅次出現的先後決定的。同一個路段若在不同季度、
+  // 不同日別的報告裡把兩個方向的順序對調（調查員換方向起跑很常見），
+  // 同一個「方向1」就會對應到兩個相反的實際方向，而數字看起來都很正常。
+  // 每一列都記著報告上寫的方向文字，這裡拿來互相比對。
+  const directionTexts = {};
+  for (const d of rows) {
+    if (!d.directionText) continue;
+    const k = [d.road, d.direction].join("|");
+    (directionTexts[k] ??= new Set()).add(d.directionText);
+  }
+  for (const [key, set] of Object.entries(directionTexts))
+    if (set.size > 1) {
+      const [road, direction] = key.split("|");
+      issues.push({
+        type: "方向對應不一致",
+        period: "全部",
+        item: `${road}／${direction}`,
+        detail: `不同報告把這個方向寫成：${[...set].join("、")}。請確認各季報告的旅次順序是否一致，否則跨季比較會拿相反方向互比。`,
+      });
+    }
   const groups = {};
   for (const d of rows) {
     const k = [d.period, d.road, d.day].join("|");

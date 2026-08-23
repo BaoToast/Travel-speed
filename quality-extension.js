@@ -767,6 +767,9 @@
       "day",
       "peak",
       "direction",
+      // 報告上寫的起訖路口。只有方向1／方向2 的話，交付出去的 CSV 看不出
+      // 哪個方向是哪一邊。
+      "directionText",
       "travel",
       "running",
       "totalDelay",
