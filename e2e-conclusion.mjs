@@ -214,6 +214,30 @@ if (holidayIndex >= 0) {
   await page.waitForTimeout(300);
 }
 
+/* ── 統計範圍：只會顯示當前選項對應的那一組欄位 ── */
+for (const [kind, expect] of [
+  ["quarter", { q: true, y: false, r: false }],
+  ["year", { q: false, y: true, r: false }],
+  ["range", { q: false, y: false, r: true }],
+  ["project", { q: false, y: false, r: false }],
+]) {
+  await page.check(`#conclusionScopeKinds input[value="${kind}"]`);
+  await page.waitForTimeout(300);
+  const shown = await page.evaluate(() => ({
+    q: !document.getElementById("conclusionQuarterBox").hidden &&
+      getComputedStyle(document.getElementById("conclusionQuarterBox")).display !== "none",
+    y: !document.getElementById("conclusionYearBox").hidden &&
+      getComputedStyle(document.getElementById("conclusionYearBox")).display !== "none",
+    r: !document.getElementById("conclusionRangeBox").hidden &&
+      getComputedStyle(document.getElementById("conclusionRangeBox")).display !== "none",
+  }));
+  ok(
+    `統計範圍選「${kind}」時只顯示對應欄位`,
+    shown.q === expect.q && shown.y === expect.y && shown.r === expect.r,
+    `季度=${shown.q} 年度=${shown.y} 起訖=${shown.r}`,
+  );
+}
+
 /* ── 年度條件 ── */
 await page.check('#conclusionScopeKinds input[value="year"]');
 await page.waitForTimeout(400);

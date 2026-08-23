@@ -180,3 +180,95 @@ button,.primary,.ghost,.outline,.success{white-space:nowrap}
   column-gap: 8px;
   overflow-wrap: anywhere;
 }
+
+/*
+ * 條件卡片的版面（v2.16 修正）。
+ *
+ * 三個問題一起解：
+ * 1. 路段清單原本寫死 max-height:180px，卡片被其他欄位撐高之後，清單仍然
+ *    只佔上面一小塊，下面一大片空白。改成 flex 撐滿卡片剩下的高度。
+ * 2. 選項標籤原本是 flex-wrap，每個標籤只拿到內容寬度，
+ *    「上午尖峰」「單一季度」被擠成一行一到兩個字。改成等寬格線，
+ *    每格至少 104px，字就不會被拆開。
+ * 3. 字太小。清單與選項從 12px 調到 13px，行距放寬。
+ */
+.conclusion-field {
+  display: flex;
+  flex-direction: column;
+}
+.conclusion-radios,
+.conclusion-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 9px 12px;
+  margin-bottom: 9px;
+}
+.conclusion-radios label,
+.conclusion-checks label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  /* 短標籤不需要在字中間硬斷，欄寬夠就會自然換行 */
+  overflow-wrap: break-word;
+}
+.conclusion-list {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  /* 撐滿卡片剩下的高度，不再固定 180px */
+  flex: 1 1 auto;
+  min-height: 150px;
+  /* 路段很多時不要把整排卡片撐到上千 px 高 */
+  max-height: 420px;
+  overflow: auto;
+  padding: 2px 4px 2px 0;
+}
+.conclusion-list label {
+  font-size: 13px;
+  line-height: 1.55;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+}
+.conclusion-list input {
+  margin-top: 2px;
+  flex: none;
+}
+/* 提示文字固定在卡片最下方，清單才有辦法往下長 */
+.conclusion-field > .conclusion-hint {
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+/*
+ * 兩個修正（v2.16）。
+ *
+ * 1. 勾選框被 `.form input{width:100%;padding:11px}` 吃到，實測寬度變成 64px，
+ *    把「上午尖峰」四個字擠成兩行兩個字。條件面板裡的勾選框與圓鈕要還原成
+ *    正常大小。
+ * 2. 「季度」「年度」「起／迄」三組欄位是用 hidden 屬性切換的，但
+ *    `.conclusion-inline{display:flex}` 的優先度高過瀏覽器預設的
+ *    `[hidden]{display:none}`，於是三組會同時出現——選了「季度區間」，
+ *    上面還看得到季度與年度兩個下拉，看起來像是它們也會影響結果。
+ */
+#conclusionMain input[type="checkbox"],
+#conclusionMain input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-width: 0;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: #0f6f68;
+}
+[hidden] {
+  display: none !important;
+}
+/* 條件面板裡的文字輸入框不要被 .form input 的 margin-top 推開 */
+#conclusionMain .conclusion-actions-row input[type="text"],
+#conclusionMain .conclusion-actions-row input:not([type]) {
+  margin-top: 0;
+}
