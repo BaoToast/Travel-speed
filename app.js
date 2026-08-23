@@ -27,6 +27,12 @@ const emptyState = () => ({
 });
 let state = emptyState(),
   pending = [],
+  /**
+   * 匯入預覽裡被勾選要「批次確認」的 pending 索引。
+   * 宣告在這裡而不是靠近 UI，是因為 clearPendingPreview() 位置更前面；
+   * let 在 TDZ 內連 typeof 都會丟例外，用 typeof 當防護是沒有用的。
+   */
+  roadPicks = new Set(),
   /** 預覽當下的民國年／季度／計畫，確認寫入時一律以這一份為準 */
   pendingContext = null,
   healthIssues = [];
@@ -139,7 +145,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.12";
+document.querySelector(".brand small").textContent = "正式版 v2.13";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -150,8 +156,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.12.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.12.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.13.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.13.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -319,7 +325,9 @@ function clearPendingPreview() {
   pending = [];
   pendingContext = null;
   healthIssues = [];
+  roadPicks = new Set();
   if (typeof roadAlert !== "undefined") roadAlert.style.display = "none";
+  if (typeof roadBatchBar !== "undefined") roadBatchBar.style.display = "none";
   if ($("commit")) $("commit").disabled = true;
 }
 projectSwitch.onchange = async () => {
@@ -373,6 +381,28 @@ roadAlert.id = "roadAlert";
 roadAlert.className = "warning";
 roadAlert.style.display = "none";
 document.querySelector("#previewRows").closest(".table-wrap").before(roadAlert);
+/**
+ * 疑似新路段的「批次確認」列。
+ *
+ * 一次匯入十幾二十份檔案時，系統對每個沒見過的路段名稱都會要求確認，
+ * 使用者卻通常一眼就知道這批全部都是新路段——逐列點開下拉選單選一次，
+ * 純粹是重複勞動。這一列讓使用者勾選（或全選）之後一次處理完，
+ * 剩下真的要合併的那幾筆再自己逐一指定。
+ */
+const roadBatchBar = document.createElement("div");
+roadBatchBar.id = "roadBatchBar";
+roadBatchBar.className = "road-batch-bar";
+roadBatchBar.style.display = "none";
+roadBatchBar.innerHTML =
+  '<label class="pick-all"><input type="checkbox" id="pickAll"><span>全選待確認</span></label>' +
+  '<span id="pickCount" class="pick-count">已勾選 0 筆</span>' +
+  '<span class="pick-actions">' +
+  '<button class="primary" id="pickAsNew" disabled>勾選的確認為新路段</button>' +
+  '<select id="pickMergeTarget"></select>' +
+  '<button class="outline" id="pickAsMerge" disabled>勾選的合併至此路段</button>' +
+  "</span>";
+document.querySelector("#previewRows").closest(".table-wrap").before(roadBatchBar);
+
 const renameBtn = document.createElement("button");
 renameBtn.className = "outline";
 renameBtn.textContent = "路段名稱修改／合併";
@@ -966,6 +996,7 @@ $("preview").onclick = async () => {
   $("preview").disabled = true;
   $("previewStatus").textContent = "讀取中…";
   pending = [];
+  roadPicks = new Set();
   for (const f of files) {
     try {
       pending.push(await parseFile(f, year, q, $("defaultSpeed").value));
@@ -1034,7 +1065,51 @@ function roadDecision(x, i) {
     return `${badge}<br>${x.roadChoice ? `自動對應：${esc(x.roadChoice)}` : "使用目前正式名稱"}`;
   const known = existingRoads(),
     hint = x.roadAlert.score >= 0.55 ? `（疑似：${esc(x.roadAlert.near)}）` : "";
-  return `${badge}<br><select class="road-choice" data-pending="${i}"><option value="" ${!x.roadChoice ? "selected" : ""}>請確認${hint}</option><option value="__NEW__" ${x.roadChoice === "__NEW__" ? "selected" : ""}>確認為新路段</option>${known.map((r) => `<option value="${esc(r)}" ${x.roadChoice === r ? "selected" : ""}>合併至：${esc(r)}</option>`).join("")}</select>`;
+  // 勾選框只出現在「需要人工確認」的列；已經確認過的仍保留勾選框，
+  // 使用者改變主意時可以再批次改一次。
+  return `<label class="road-pick"><input type="checkbox" data-pick="${i}" ${roadPicks.has(i) ? "checked" : ""}>${badge}</label><br><select class="road-choice" data-pending="${i}"><option value="" ${!x.roadChoice ? "selected" : ""}>請確認${hint}</option><option value="__NEW__" ${x.roadChoice === "__NEW__" ? "selected" : ""}>確認為新路段</option>${known.map((r) => `<option value="${esc(r)}" ${x.roadChoice === r ? "selected" : ""}>合併至：${esc(r)}</option>`).join("")}</select>`;
+}
+/** 需要人工確認的 pending 索引。 */
+function pendingNeedingChoice() {
+  return pending.map((x, i) => (x.ok && x.roadAlert ? i : -1)).filter((i) => i >= 0);
+}
+function applyRoadPick(value) {
+  const picked = [...roadPicks].filter((i) => pending[i]?.roadAlert);
+  if (!picked.length) return;
+  for (const i of picked) {
+    pending[i].roadChoice = value;
+    pending[i].matchType = value === "__NEW__" ? "新路段" : "疑似相符";
+  }
+  roadPicks = new Set();
+  renderPreview();
+  toast(
+    value === "__NEW__"
+      ? `已將 ${picked.length} 筆確認為新路段`
+      : `已將 ${picked.length} 筆設定為合併至「${value}」`,
+  );
+}
+function renderRoadBatchBar() {
+  const targets = pendingNeedingChoice();
+  roadBatchBar.style.display = targets.length ? "flex" : "none";
+  if (!targets.length) {
+    roadPicks = new Set();
+    return;
+  }
+  // 勾選集合只保留仍然存在、且仍需確認的索引。
+  roadPicks = new Set([...roadPicks].filter((i) => targets.includes(i)));
+  const undecided = targets.filter((i) => !pending[i].roadChoice);
+  $("pickCount").textContent =
+    `共 ${targets.length} 筆需確認（尚未決定 ${undecided.length} 筆）｜已勾選 ${roadPicks.size} 筆`;
+  $("pickAll").checked = roadPicks.size > 0 && roadPicks.size === targets.length;
+  $("pickAll").indeterminate = roadPicks.size > 0 && roadPicks.size < targets.length;
+  $("pickAsNew").disabled = !roadPicks.size;
+  const known = existingRoads();
+  $("pickAsMerge").disabled = !roadPicks.size || !known.length;
+  const previous = $("pickMergeTarget").value;
+  $("pickMergeTarget").innerHTML = known.length
+    ? known.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("")
+    : '<option value="">目前沒有既有路段</option>';
+  if (known.includes(previous)) $("pickMergeTarget").value = previous;
 }
 function projectedId(item, r) {
   const target = item.roadChoice && item.roadChoice !== "__NEW__" ? item.roadChoice : r.road;
@@ -1072,10 +1147,32 @@ function renderPreview() {
         renderPreview();
       }),
   );
+  document.querySelectorAll("[data-pick]").forEach(
+    (box) =>
+      (box.onchange = () => {
+        const index = +box.dataset.pick;
+        if (box.checked) roadPicks.add(index);
+        else roadPicks.delete(index);
+        renderRoadBatchBar();
+      }),
+  );
+  renderRoadBatchBar();
   $("commit").disabled = !pending.some((x) => x.ok) || unchecked > 0;
   // 只要有預覽結果就可以取消，不論成功或失敗。
   if ($("cancelPreview")) $("cancelPreview").disabled = !pending.length;
 }
+$("pickAll").onchange = () => {
+  const targets = pendingNeedingChoice();
+  roadPicks = $("pickAll").checked ? new Set(targets) : new Set();
+  renderPreview();
+};
+$("pickAsNew").onclick = () => applyRoadPick("__NEW__");
+$("pickAsMerge").onclick = () => {
+  const target = $("pickMergeTarget").value;
+  if (!target) return toast("目前沒有可合併的既有路段");
+  applyRoadPick(target);
+};
+
 function remapPending(item, target) {
   if (!target || target === "__NEW__") return;
   state.aliases[`${state.activeCode}|${item.originalRoad}`] = target;
