@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8" />
-<title>交通服務水準分析系統 新手使用手冊 v2.20.1</title>
+<title>交通服務水準分析系統 新手使用手冊 v2.20.2</title>
 <style>
   :root{
     --navy:#17354d; --teal:#1f7a8c; --orange:#c9752b; --ink:#1c3348;
@@ -96,7 +96,7 @@
     </tbody>
   </table>
 
-  <p class="stamp">系統版本：v2.20.1　更新日期：2026-08-24</p>
+  <p class="stamp">系統版本：v2.20.2　更新日期：2026-08-24</p>
 </section>
 
 <!-- ══════════ 1 ══════════ -->
@@ -561,10 +561,27 @@
 </div>
 
 <!-- ══════════ 16 ══════════ -->
-<h2 class="sec"><span class="n">16.</span>本版（v2.20.1）主要變更</h2>
+<h2 class="sec"><span class="n">16.</span>本版（v2.20.2）主要變更</h2>
 
 <div class="box new">
-  <span class="t">本版（v2.20.1）：交付包可獨立驗證，並更新 Excel 讀取元件</span>
+  <span class="t">本版（v2.20.2）：Excel 解析的邊界防護，與備份包的瀏覽器相容性</span>
+  <p>這一版<strong>沒有變更任何計算規則、判定門檻或操作流程</strong>，
+  畫面行為與 v2.20.1 完全相同。兩項都是「安全與可重現性」的加強：</p>
+  <ul>
+    <li><strong>Excel 解析多了一道邊界檢查。</strong>
+    本系統的 SheetJS 已經是官方 0.20.3（安全警示的修正版），這一版再加一層：
+    解析時關掉用不到的公式、內嵌 HTML 與巨集；解析前後比對瀏覽器的內建物件，
+    一旦某個檔案真的動到它，就<strong>當場中止這次匯入</strong>並指出是哪一個
+    檔案，而不是安靜地繼續。即使日後元件版本被換回舊版，也不會無聲通過。</li>
+    <li><strong>備份包在 Windows 上更容易自行驗證。</strong>
+    測試用的瀏覽器尋找順序補上 Windows 的 Chrome 與 Edge、以及 macOS 與 Linux
+    的常見安裝位置——多數人是在自己的 Windows 電腦打開這個備份包，
+    本機已經有瀏覽器時就不必再另外下載一份。</li>
+  </ul>
+</div>
+
+<div class="box info">
+  <span class="t">v2.20.1：交付包可獨立驗證，並更新 Excel 讀取元件</span>
   <p>這一版<strong>沒有變更已確認的計算規則與操作功能</strong>。更新重點是：
   Excel 讀取元件統一為官方 SheetJS 0.20.3、加入不含正式計畫資料的匿名測試範例，
   並讓安裝、單元測試、舊版 .xls 匯入測試與瀏覽器操作測試可在交付包內自行完成。

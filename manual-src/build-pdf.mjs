@@ -5,7 +5,7 @@ import { chromePath } from "../chrome-path.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = join(here, "manual.html");
-const out = join(here, "..", "manuals", "交通服務水準分析系統_新手使用手冊_v2.20.1.pdf");
+const out = join(here, "..", "manuals", "交通服務水準分析系統_新手使用手冊_v2.20.2.pdf");
 
 const chrome = chromePath();
 const browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
@@ -24,7 +24,7 @@ await page.pdf({
   margin: { top: "20mm", bottom: "18mm", left: "16mm", right: "16mm" },
   headerTemplate: `<div style="${style}text-align:right;">交通服務水準分析系統 ｜ 新手使用手冊</div>`,
   footerTemplate:
-    `<div style="${style}text-align:center;">v2.20.1 ｜ 2026-08-24 ｜ 使用前請先下載專案包備份　　第 ` +
+    `<div style="${style}text-align:center;">v2.20.2 ｜ 2026-08-24 ｜ 使用前請先下載專案包備份　　第 ` +
     `<span class="pageNumber"></span> / <span class="totalPages"></span> 頁</div>`,
 });
 
