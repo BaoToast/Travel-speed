@@ -146,7 +146,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.1";
+document.querySelector(".brand small").textContent = "正式版 v2.20.2";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +157,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.1.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.1.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.2.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.2.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -863,9 +863,56 @@ function implausibleReason(r) {
     return `${label} 有 ${r.totalDelay.toFixed(1)} 秒延滯，旅行速率卻等於行駛速率，數值可能讀到相鄰欄位`;
   return "";
 }
+/*
+ * ────────────────────────────────────────────────────────────────
+ *  Excel 解析的邊界防護
+ * ────────────────────────────────────────────────────────────────
+ * 這一套的 SheetJS 已經是官方 0.20.3（原型污染警示的修正版），所以下面
+ * 這一層是「多一道」而不是「唯一一道」：
+ *   1. 解析時關掉用不到的路徑（公式、內嵌 HTML、VBA 巨集）。這支程式只讀
+ *      儲存格的值，那些一個都不需要，關掉就少一片攻擊面。
+ *   2. 解析前後比對 Object.prototype 的自有屬性；多出來就代表這個檔案真的
+ *      動到了原型：刪掉、中止這次匯入、並指出是哪一個檔案。安靜地清掉更
+ *      危險——使用者會以為那個檔案沒問題。
+ * 這樣即使日後 SheetJS 又退回舊版、或出現新的解析漏洞，也不會無聲通過。
+ */
+const SAFE_XLSX_READ_OPTIONS = {
+  type: "array",
+  cellFormula: false,
+  cellHTML: false,
+  bookVBA: false,
+};
+function prototypeFingerprint() {
+  return Object.getOwnPropertyNames(Object.prototype);
+}
+function detectPrototypePollution(before) {
+  const known = new Set(before);
+  const added = Object.getOwnPropertyNames(Object.prototype).filter(
+    (name) => !known.has(name),
+  );
+  for (const name of added) {
+    try {
+      delete Object.prototype[name];
+    } catch {
+      /* 刪不掉也要照樣往下報告 */
+    }
+  }
+  return added;
+}
+function assertNoPrototypePollution(before, fileLabel) {
+  const added = detectPrototypePollution(before);
+  if (!added.length) return;
+  throw new Error(
+    `「${fileLabel}」在解析過程中試圖修改瀏覽器的內建物件（${added.join("、")}），` +
+      "本次匯入已中止，系統資料沒有變動。請確認這個檔案的來源。",
+  );
+}
+
 async function parseFile(file, year, q, defSpeed) {
   const p = activeProject();
-  const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellFormula: false });
+  const fingerprint = prototypeFingerprint();
+  const wb = XLSX.read(await file.arrayBuffer(), SAFE_XLSX_READ_OPTIONS);
+  assertNoPrototypePollution(fingerprint, file.name);
   const road = roadFromFile(file.name),
     day = dayFromFile(file.name),
     morning = matrix(wb, ["上午尖峰", "上午", "AM尖峰", "AM"]),
