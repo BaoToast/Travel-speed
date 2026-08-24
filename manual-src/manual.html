@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>交通服務水準分析系統 新手使用手冊 v2.20.1</title>
+<style>
+  :root{
+    --navy:#17354d; --teal:#1f7a8c; --orange:#c9752b; --ink:#1c3348;
+    --muted:#6b7d8b; --line:#dbe4ea; --wash:#f2f7f9;
+  }
+  @page{ size:A4; margin:20mm 16mm 18mm; }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; color:var(--ink);
+    font-family:"Noto Sans CJK TC","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    font-size:10.5pt; line-height:1.75; -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4{ color:var(--navy); margin:0; }
+  p{ margin:0 0 9pt; }
+  strong{ color:var(--navy); }
+
+  .cover{ text-align:center; padding-top:12mm; page-break-after:always; }
+  .cover .kicker{ color:var(--teal); font-size:10pt; font-weight:800; letter-spacing:.22em; }
+  .cover h1{ font-size:26pt; margin:8mm 0 3mm; letter-spacing:.02em; }
+  .cover h2{ font-size:16pt; color:var(--teal); margin:0 0 6mm; }
+  .cover .lede{ color:var(--muted); font-size:11pt; margin:0 0 8mm; }
+  .cover table,.cover table th,.cover table td{ text-align:left; }
+  .cover .stamp{ color:var(--muted); font-size:10pt; margin-top:7mm; }
+
+  h2.sec{
+    font-size:15pt; margin:11mm 0 4mm; padding-bottom:2.5mm;
+    border-bottom:2px solid var(--teal); page-break-after:avoid;
+  }
+  h2.sec .n{ color:var(--teal); margin-right:3mm; }
+  h3.sub{ font-size:11.5pt; margin:6mm 0 2.5mm; color:var(--teal); page-break-after:avoid; }
+
+  table{ width:100%; border-collapse:collapse; margin:0 0 5mm; font-size:9.5pt; page-break-inside:auto; }
+  thead{ display:table-header-group; }
+  tr{ page-break-inside:avoid; }
+  th{ background:var(--teal); color:#fff; font-weight:800; text-align:left; padding:2.6mm 3mm; border:1px solid var(--teal); }
+  td{ border:1px solid var(--line); padding:2.6mm 3mm; vertical-align:top; }
+  tbody tr:nth-child(even) td{ background:#f7fbfc; }
+  td.k{ font-weight:800; color:var(--navy); white-space:nowrap; }
+
+  .box{ padding:3.5mm 4mm; margin:0 0 5mm; border-radius:2mm; page-break-inside:avoid; }
+  .box .t{ display:block; font-weight:800; margin-bottom:1.5mm; }
+  .box p:last-child{ margin-bottom:0; }
+  .box.info{ background:#ecf5f7; border-left:3px solid var(--teal); }
+  .box.info .t{ color:var(--teal); }
+  .box.warn{ background:#fdf4ea; border-left:3px solid var(--orange); }
+  .box.warn .t{ color:#9c5a12; }
+  .box.new{ background:#ecf5f7; border:1px solid var(--teal); border-left:3px solid var(--teal); }
+  .box.new .t{ color:var(--teal); }
+
+  .step{ margin:0 0 4mm; page-break-inside:avoid; }
+  .step .h{ color:var(--teal); font-weight:800; font-size:10.5pt; }
+  .step p{ margin:1mm 0 0 6mm; }
+
+  ul,ol{ margin:0 0 5mm; padding-left:6mm; }
+  li{ margin-bottom:1.6mm; }
+  .check li{ list-style:none; margin-left:-4mm; }
+  .check li::before{ content:"☐"; margin-right:2.5mm; color:var(--teal); font-weight:800; }
+
+  code{ background:var(--wash); border:1px solid var(--line); border-radius:1mm; padding:0 1.2mm; font-size:9.5pt; }
+  .btn{ display:inline-block; background:var(--wash); border:1px solid var(--line);
+        border-radius:1.4mm; padding:0 1.6mm; font-weight:700; color:var(--navy); font-size:9.5pt; }
+  .pb{ page-break-before:always; }
+</style>
+</head>
+<body>
+
+<!-- ══════════ 封面 ══════════ -->
+<section class="cover">
+  <div class="kicker">BEGINNER GUIDE</div>
+  <h1>交通服務水準分析系統</h1>
+  <h2>新手使用手冊</h2>
+  <p class="lede">完全沒有交通背景，也能從零完成匯入、核對速限、判讀服務水準與交付成果</p>
+
+  <div class="box info" style="text-align:left;max-width:150mm;margin:0 auto 7mm;">
+    <span class="t">這本手冊適合誰？</span>
+    <p>第一次接觸旅行速率調查、只會基本 Excel 操作，或剛接手每季資料整理的人。您<strong>不需要</strong>先懂交通工程，也不需要背任何公式——照順序操作即可。手冊裡出現的每一個專有名詞，都會先用白話解釋一次。</p>
+  </div>
+
+  <table style="max-width:150mm;margin:0 auto;">
+    <thead><tr><th style="width:44%">您想完成的事</th><th>手冊先看哪裡</th></tr></thead>
+    <tbody>
+      <tr><td class="k">完全沒概念，先看懂在做什麼</td><td>第 1～3 章：用途、名詞、畫面導覽</td></tr>
+      <tr><td class="k">第一次使用，想照著做一輪</td><td>第 4～7 章：快速流程、建計畫、匯入、速限</td></tr>
+      <tr><td class="k">看懂服務水準 A～F 是怎麼來的</td><td>第 8 章</td></tr>
+      <tr><td class="k">看懂彙總與圖表</td><td>第 9 章</td></tr>
+      <tr><td class="k">資料錯了要修正</td><td>第 10～11 章：維護、路段管理</td></tr>
+      <tr><td class="k">向業主說明「異常提醒」代表什麼</td><td>第 12 章：門檻的意義與建議值</td></tr>
+      <tr><td class="k">交成果給主管或業主</td><td>第 13 章：成果交付</td></tr>
+      <tr><td class="k">換電腦、備份、多人協作</td><td>第 14 章</td></tr>
+      <tr><td class="k">卡住了、數字怪怪的</td><td>第 16～18 章</td></tr>
+    </tbody>
+  </table>
+
+  <p class="stamp">系統版本：v2.20.1　更新日期：2026-08-24</p>
+</section>
+
+<!-- ══════════ 1 ══════════ -->
+<h2 class="sec"><span class="n">1.</span>先用一句話了解這個系統</h2>
+
+<div class="box info">
+  <span class="t">系統的用途</span>
+  <p>把「旅行速率調查」的原始 Excel，整理成可以長期保存、逐季比較與自動繪圖的資料庫，並依照速限自動判定每一個路段的<strong>服務水準（LOS）</strong>，最後輸出可交付的報表、圖表與成果包。</p>
+</div>
+
+<h3 class="sub">什麼是「旅行速率調查」？</h3>
+<p>就是派一輛車，在調查路段上依照一般車流的速度來回行駛數趟，記錄每一趟花了多少時間、其中有多少時間是停著不動的（等紅燈、塞車）。把這些紀錄整理起來，就能算出這條路「實際上開起來有多快」。</p>
+<p>調查通常分成<strong>上午尖峰</strong>與<strong>下午尖峰</strong>兩個時段，每個時段又分成<strong>兩個方向</strong>（例如東→西、西→東），所以一個路段、一個日別（平日或假日）會產生 <strong>4 筆</strong>資料。這 4 筆完整保存在系統裡，不會被合併掉。</p>
+
+<h3 class="sub">系統不會做的事</h3>
+<ul>
+  <li>不會自己去查公告速限。速限一律由您輸入或確認，因為它直接決定服務水準。</li>
+  <li>不會補上缺少的資料。少了就是少了，系統只會在健康檢查列出來提醒您。</li>
+  <li>不會把不同時段或不同方向的數值拼在一起（這是本系統最重要的設計原則，見第 8 章）。</li>
+  <li>自動產生的報告文字只是<strong>草稿</strong>，正式使用前一定要人工核對。</li>
+</ul>
+
+<div class="box warn">
+  <span class="t">最重要的一句話</span>
+  <p><strong>服務水準＝實際跑出來的速率 ÷ 公告速限。</strong>所以速限填錯，服務水準就一定錯。每一季匯入之後，請務必到「路段速限」核對一次。</p>
+</div>
+
+<!-- ══════════ 2 ══════════ -->
+<h2 class="sec"><span class="n">2.</span>零基礎也看得懂的 8 個名詞</h2>
+
+<table>
+  <thead><tr><th style="width:23%">名詞</th><th>白話解釋</th><th style="width:18%">常見單位</th></tr></thead>
+  <tbody>
+    <tr><td class="k">旅行速率</td><td>從路段起點開到終點，<strong>包含所有停等時間</strong>在內，平均下來的速度。這是使用者實際感受到的「這條路好不好走」。</td><td>km/h</td></tr>
+    <tr><td class="k">行駛速率</td><td>只計算<strong>車子真的在動</strong>的那段時間算出來的速度。它一定大於或等於旅行速率；兩者差距越大，代表停等越嚴重。</td><td>km/h</td></tr>
+    <tr><td class="k">路段延滯</td><td>因為路段本身的狀況（車多、路邊停車、行人）而多花的時間。</td><td>秒</td></tr>
+    <tr><td class="k">交叉口延滯</td><td>因為路口號誌、轉彎車等待而多花的時間。</td><td>秒</td></tr>
+    <tr><td class="k">總延滯</td><td><strong>路段延滯 ＋ 交叉口延滯</strong>。兩項缺一不可，只有其中一項時系統會判定為讀取失敗，不會當成 0。</td><td>秒</td></tr>
+    <tr><td class="k">公告速限</td><td>這條路法定的最高速限，例如 50 km/h。系統預設 50，<strong>務必依實際速限牌修正</strong>。</td><td>km/h</td></tr>
+    <tr><td class="k">速限比</td><td><strong>旅行速率 ÷ 公告速限</strong>。例如速限 50、實際跑 40，速限比就是 0.80。</td><td>比值（無單位）</td></tr>
+    <tr><td class="k">服務水準（LOS）</td><td>用速限比換算成 A～F 六個等級的成績。A 最順暢、F 最壅塞。詳見第 8 章。</td><td>A／B／C／D／E／F</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <span class="t">最容易搞混的兩件事</span>
+  <p><strong>一、旅行速率 ≠ 行駛速率。</strong>旅行速率含停等、行駛速率不含。報告上寫的「平均速率」如果沒說清楚是哪一種，很容易被誤解。系統一律兩個都列出來。</p>
+  <p style="margin-top:2mm"><strong>二、代表值不是平均值。</strong>系統不會把 4 筆平均起來，而是挑出<strong>最差的那一筆</strong>當代表（見第 8 章）。因為工程上關心的是最壞情況，不是平均情況。</p>
+</div>
+
+<!-- ══════════ 3 ══════════ -->
+<h2 class="sec"><span class="n">3.</span>認識畫面：它分成哪幾塊</h2>
+
+<p>畫面左邊是功能選單，右上角會顯示目前正在看哪一個<strong>計畫</strong>。所有數字都只屬於目前這個計畫。</p>
+
+<table>
+  <thead><tr><th style="width:26%">選單項目</th><th>做什麼</th></tr></thead>
+  <tbody>
+    <tr><td class="k">操作首頁</td><td>四個總覽數字與「下一步該做什麼」的提示。第一次使用從這裡開始。</td></tr>
+    <tr><td class="k">計畫設定</td><td>建立、切換與<strong>刪除</strong>計畫。</td></tr>
+    <tr><td class="k">尖峰批次匯入</td><td>一次選取同一季度的多份 Excel，先預覽再正式寫入。</td></tr>
+    <tr><td class="k">尖峰明細</td><td>每個路段、日別的 4 筆原始資料（上午／下午 × 方向1／方向2）。</td></tr>
+    <tr><td class="k">尖峰彙總</td><td>每個路段、日別挑出的那一筆代表紀錄，以及服務水準。門檻也在這裡調整。</td></tr>
+    <tr><td class="k">路段管理</td><td>統一路段正式名稱、方向名稱、檔名別名，以及合併重複路段。</td></tr>
+    <tr><td class="k">路段速限</td><td>核對每個路段每個方向的公告速限，改完按「套用並重算 LOS」。</td></tr>
+    <tr><td class="k">LOS 圖表</td><td>每個路段一張圖，看歷季平日與假日的服務水準與旅行速率變化。</td></tr>
+    <tr><td class="k">Manager 比較</td><td>管理者把各同事交來的專案包匯進來，做跨計畫比較。</td></tr>
+    <tr><td class="k">匯入紀錄</td><td>每一次匯入的紀錄，可以整批復原。</td></tr>
+    <tr><td class="k">資料維護</td><td>健康檢查、品質總覽、整季刪除重匯。</td></tr>
+    <tr><td class="k">成果交付</td><td>選定季度範圍，下載成果包 ZIP 與可編輯 Excel 圖表。</td></tr>
+    <tr><td class="k">備份與淨空</td><td>下載／載入備份、刪除計畫、清除全部資料。</td></tr>
+  </tbody>
+</table>
+
+<div class="box info">
+  <span class="t">資料存在哪裡？</span>
+  <p>存在<strong>您目前這台電腦、這個瀏覽器</strong>裡，不會上傳到任何伺服器。所以：換電腦看不到、換瀏覽器看不到、清除瀏覽器資料會不見。每完成一季，請務必下載一次專案包備份（第 14 章）。</p>
+</div>
+
+<!-- ══════════ 4 ══════════ -->
+<h2 class="sec"><span class="n">4.</span>第一次使用：10 分鐘走完一輪</h2>
+
+<div class="step"><div class="h">第 1 步　建立計畫</div><p>「計畫設定」→ 輸入計畫編號與名稱 → 按<span class="btn">儲存計畫設定</span>。</p></div>
+<div class="step"><div class="h">第 2 步　準備原始檔</div><p>把同一季度的平日、假日 Excel 放在同一個資料夾。不同季度要<strong>分開</strong>匯入。</p></div>
+<div class="step"><div class="h">第 3 步　匯入</div><p>「尖峰批次匯入」→ 填民國年與季度 → 選取多份檔案 → 按<span class="btn">讀取並預覽</span>。</p></div>
+<div class="step"><div class="h">第 4 步　核對預覽</div><p>每份正常的檔案應該顯示 <strong>4 筆</strong>、失敗 0。有「疑似新路段」要先確認是新路段還是名稱寫法不同。</p></div>
+<div class="step"><div class="h">第 5 步　寫入</div><p>按<span class="btn">確認寫入尖峰明細</span>。系統會自動建立尖峰彙總。</p></div>
+<div class="step"><div class="h">第 6 步　核對速限</div><p>「路段速限」→ 依實際速限牌修改 → 按<span class="btn">套用並重算 LOS</span>。<strong>這一步不能跳過。</strong></p></div>
+<div class="step"><div class="h">第 7 步　看結果</div><p>「尖峰彙總」看代表紀錄與服務水準，「LOS 圖表」看歷季趨勢。</p></div>
+<div class="step"><div class="h">第 8 步　健康檢查</div><p>「資料維護」→ 按<span class="btn">執行健康檢查</span>，把列出來的問題處理掉。</p></div>
+<div class="step"><div class="h">第 9 步　備份</div><p>「備份與淨空」→ <span class="btn">下載目前 Project 專案包</span>。每季都要做。</p></div>
+
+<!-- ══════════ 5 ══════════ -->
+<h2 class="sec"><span class="n">5.</span>建立與刪除計畫</h2>
+
+<h3 class="sub">建立</h3>
+<p>「計畫設定」輸入<strong>計畫編號</strong>（建議用公司既有案件編號，例如 <code>13545</code>）與<strong>計畫名稱</strong>，按<span class="btn">儲存計畫設定</span>。計畫數量沒有上限，之後從右上角的下拉選單切換。</p>
+
+<div class="box warn">
+  <span class="t">計畫編號不可以包含「｜」符號</span>
+  <p>系統內部用「計畫編號｜路段｜方向」當作設定的鍵值，編號裡若出現「|」，刪除這個計畫時會連帶清掉別的計畫的設定。系統會擋下來並提醒您。</p>
+</div>
+
+<h3 class="sub">刪除（v2.6 新增）</h3>
+<p>在「計畫設定」下方按<span class="btn">刪除計畫「編號」</span>即可。刪除前系統會：</p>
+<ol>
+  <li>顯示這個計畫底下有幾個季度、幾筆明細；</li>
+  <li><strong>自動下載一份專案包備份</strong>（誤刪還救得回來）；</li>
+  <li>刪除該計畫的全部明細、彙總、速限、別名、路段設定與報告草稿，其他計畫完全不受影響。</li>
+</ol>
+<p>如果要把這台電腦上的<strong>所有</strong>計畫清空（例如交接、重灌前），到「備份與淨空」按<span class="btn">清除這台電腦上的全部計畫</span>，系統會要求連續確認兩次。</p>
+
+<!-- ══════════ 6 ══════════ -->
+<h2 class="sec"><span class="n">6.</span>匯入原始檔</h2>
+
+<h3 class="sub">系統怎麼認得您的檔案</h3>
+<table>
+  <thead><tr><th style="width:26%">項目</th><th>系統怎麼判斷</th></tr></thead>
+  <tbody>
+    <tr><td class="k">路段名稱</td><td>取自<strong>檔名</strong>。會自動去掉開頭的案件編號、結尾的日期與「平日／假日」字樣。</td></tr>
+    <tr><td class="k">平日或假日</td><td>看檔名裡有沒有「假日」兩個字，有就是假日，沒有就當平日。</td></tr>
+    <tr><td class="k">上午／下午</td><td>看工作表名稱。支援「上午尖峰、下午尖峰、上午、下午、AM、PM」。</td></tr>
+    <tr><td class="k">方向1／方向2</td><td>同一張工作表裡的<strong>兩個</strong>「平均總旅行速率」區塊，由上而下依序為方向1、方向2。</td></tr>
+    <tr><td class="k">四個數值</td><td>平均總旅行速率、平均總行駛速率、路段延滯、交叉口延滯。四項都要讀得到才算成功。</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <span class="t">一張工作表必須剛好有兩個方向區塊</span>
+  <p>如果工作表裡多了一個「雙向平均」之類的區塊（變成三個），系統<strong>不會猜</strong>哪兩個才是方向1、方向2，會直接判定這份檔案讀取失敗。請把多餘的區塊移到別的工作表，或改用只含兩個方向的版本再匯入。這是刻意的設計：猜錯會把雙向平均當成方向1，真正最差的那個方向反而整個不見。</p>
+</div>
+
+<h3 class="sub">預覽畫面要看什麼</h3>
+<ul>
+  <li><strong>筆數：</strong>每份檔案應該是 4。不是 4 就代表工作表或欄位有問題。</li>
+  <li><strong>路段判定：</strong>完全相符（已存在）、別名相符、疑似相符（要您確認）、新路段。</li>
+  <li><strong>新增 / 重複：</strong>重複代表這一筆已經存在，會依「重複資料處理」的選擇更新或略過。</li>
+</ul>
+
+<div class="box info">
+  <span class="t">v2.6 起的三個保護</span>
+  <p><strong>一、</strong>預覽之後若又改了民國年或季度，預覽會自動失效並提醒您重新預覽，不會發生「寫進舊季度、紀錄卻寫新季度」的情形。</p>
+  <p style="margin-top:2mm"><strong>二、</strong>同一批次裡若有兩份檔案被判定成同一個路段＋日別（它們會互相覆蓋），系統會列出檔名並擋下來，請確認後分批匯入。</p>
+  <p style="margin-top:2mm"><strong>三、</strong>民國年只接受 90～200 的整數，打錯不會再產生一個清不掉的幽靈季度。</p>
+</div>
+
+<!-- ══════════ 7 ══════════ -->
+<h2 class="sec"><span class="n">7.</span>路段速限：最關鍵的一步</h2>
+
+<p>匯入後系統會自動列出每一個「路段×方向」，速限預設 <strong>50 km/h</strong>。請依實際公告速限逐一核對後，按<span class="btn">套用並重算 LOS</span>。</p>
+
+<h3 class="sub">快慢車道速限不同怎麼辦</h3>
+<p>依「調查車輛實際行駛的那條車道」的速限填寫。若調查車走的是快車道，就填快車道速限。</p>
+
+<h3 class="sub">速限有效期間（進階）</h3>
+<p>若某個路段的速限在某一季之後改了（例如 114Q3 起由 50 改成 60），可以在「路段速限」下方的<strong>速限有效期間與查證紀錄</strong>新增一個版本，填寫開始季度、資料來源、查證日期與人員。系統只會對有效期間內的季度套用該版本；期間外的季度仍使用上方表格的速限。</p>
+
+<div class="box warn">
+  <span class="t">速限沒確認會怎樣</span>
+  <p>「資料維護 → 計畫資料品質總覽」會把所有「速限未確認」的路段列出來。速限預設 50 而實際是 60 時，速限比會被高估、服務水準會顯示得比實際好，這是最容易發生也最嚴重的錯誤。</p>
+</div>
+
+<!-- ══════════ 8 ══════════ -->
+<h2 class="sec"><span class="n">8.</span>服務水準是怎麼判定的</h2>
+
+<h3 class="sub">第一步：算速限比</h3>
+<p><strong>速限比 ＝ 平均總旅行速率 ÷ 公告速限</strong>。例如速限 50 km/h、實際跑 32 km/h，速限比＝0.64。</p>
+
+<h3 class="sub">第二步：查表得到 A～F</h3>
+<table>
+  <thead><tr><th style="width:14%">等級</th><th style="width:30%">速限比</th><th>白話說明</th></tr></thead>
+  <tbody>
+    <tr><td class="k">A</td><td>0.80 以上</td><td>幾乎不受干擾，想開多快就多快</td></tr>
+    <tr><td class="k">B</td><td>0.60 以上，未滿 0.80</td><td>順暢，偶爾要減速</td></tr>
+    <tr><td class="k">C</td><td>0.50 以上，未滿 0.60</td><td>會受其他車影響，但還算穩定</td></tr>
+    <tr><td class="k">D</td><td>0.40 以上，未滿 0.50</td><td>明顯變慢，開始有壓迫感</td></tr>
+    <tr><td class="k">E</td><td>0.20 以上，未滿 0.40</td><td>接近飽和，走走停停</td></tr>
+    <tr><td class="k">F</td><td>未滿 0.20</td><td>壅塞，時常完全停止</td></tr>
+  </tbody>
+</table>
+<p>這組門檻可以在「尖峰彙總」上方依<strong>各計畫分別調整</strong>，改完按<span class="btn">套用並重新計算</span>，明細、彙總與圖表會一起重算。門檻必須由高到低排列。</p>
+
+<h3 class="sub">第三步：挑出代表紀錄</h3>
+<div class="box info">
+  <span class="t">代表值一定整筆取自同一次紀錄</span>
+  <p>一個路段、一個日別有 4 筆（上午／下午 × 方向1／方向2）。系統的做法是：</p>
+  <p style="margin-top:2mm">① 先比服務水準，取<strong>最差</strong>的那一筆；<br />② 服務水準相同時，取<strong>速限比最低</strong>的；<br />③ 再相同時，取<strong>旅行速率最低</strong>的。</p>
+  <p style="margin-top:2mm">選定之後，<strong>旅行速率、行駛速率、總延滯三個數字整筆一起帶入</strong>，絕對不會發生「速率取上午、延滯取下午」這種混用。彙總表上的「代表尖峰」「代表方向」就是告訴您這一列是哪一筆。</p>
+</div>
+
+<!-- ══════════ 9 ══════════ -->
+<h2 class="sec"><span class="n">9.</span>看懂彙總與圖表</h2>
+<ul>
+  <li><strong>尖峰明細：</strong>原始的 4 筆，用來回頭核對原始檔。</li>
+  <li><strong>尖峰彙總：</strong>每個路段日別一列，就是要放進報告的那一列。</li>
+  <li><strong>來源追溯：</strong>在「尖峰彙總」下方，可以查到每一筆是從哪個檔案、哪張工作表、哪個標籤位置讀出來的，以及是哪一個匯入批次寫進來的。數字有疑問時從這裡查最快。</li>
+  <li><strong>LOS 圖表：</strong>每個路段一張，柱高代表服務水準等級，藍色平日、橘色假日。</li>
+  <li><strong>旅行速率趨勢：</strong>同一頁下方，看的是實際速率（km/h）的變化。</li>
+</ul>
+
+<!-- ══════════ 10 ══════════ -->
+<h2 class="sec"><span class="n">10.</span>資料錯了怎麼修</h2>
+<table>
+  <thead><tr><th style="width:34%">狀況</th><th>怎麼處理</th></tr></thead>
+  <tbody>
+    <tr><td class="k">剛剛匯錯了</td><td>「匯入紀錄」找到那一批，按<span class="btn">復原此批</span>。</td></tr>
+    <tr><td class="k">整季要重做</td><td>「資料維護」選季度 → <span class="btn">備份後刪除此季度</span> → 重新匯入。</td></tr>
+    <tr><td class="k">路段名稱不一致</td><td>「路段管理」修改正式名稱，或設定檔名別名讓系統自動對應。</td></tr>
+    <tr><td class="k">同一條路被拆成兩個</td><td>「路段管理 → 合併重複路段」，會先顯示影響範圍再執行。</td></tr>
+    <tr><td class="k">速限填錯</td><td>「路段速限」改完按<span class="btn">套用並重算 LOS</span>。</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <span class="t">復原有先後順序</span>
+  <p>復原只能從<strong>最新的批次</strong>往回做。如果某一批的資料已經被後來的匯入更新過、或路段名稱已經被改名／合併過，系統會擋下來並提示您——這時請改用備份還原，不要硬做，否則會把改名前的舊路段整批復活，同一季被重複計算。</p>
+</div>
+
+<!-- ══════════ 11 ══════════ -->
+<h2 class="sec"><span class="n">11.</span>健康檢查與品質總覽</h2>
+<p>「資料維護」按<span class="btn">執行健康檢查</span>後會列出：</p>
+<ul>
+  <li><strong>異常名稱：</strong>路段名稱後面帶著日期尾碼之類的雜訊。</li>
+  <li><strong>資料組不完整：</strong>某個路段日別不是 4 筆。</li>
+  <li><strong>數值異常：</strong>速率或延滯缺值。</li>
+  <li><strong>缺少平假日：</strong>只有平日或只有假日。</li>
+  <li><strong>速限未確認：</strong>還在用預設值 50。</li>
+  <li><strong>異常變化：</strong>與前一季相比，服務水準掉級、旅行速率大幅下降或總延滯大幅增加。門檻可自行調整，這只是提醒，不會改變服務水準。</li>
+</ul>
+
+<h3 class="sub">查閱異常：季度區間與類型篩選（本版新增）</h3>
+
+<p>季度一季一季累積之後，「計畫資料品質總覽」會長到幾十上百列，整片文字看不出重點。本版在表格上方新增一組篩選，讓您直接問出想問的問題：</p>
+
+<table>
+  <thead><tr><th style="width:22%">篩選</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td class="k">起始季度／結束季度</td><td>只看某一段期間內發生過的異常，例如 114Q1～114Q4。</td></tr>
+    <tr><td class="k">類型（可複選）</td><td>四個按鈕分別是日別不完整、資料組不完整、速限未確認、異常變化，<strong>按鈕上直接標出各類型有幾筆</strong>。點一下加入篩選，再點一下取消。</td></tr>
+    <tr><td class="k">路段</td><td>只看某一條路段的問題。</td></tr>
+    <tr><td class="k">日別</td><td>只看平日或只看假日。</td></tr>
+  </tbody>
+</table>
+
+<div class="box info">
+  <span class="t">季度區間的語意：比較區間有重疊就列出</span>
+  <p>「異常變化」是<strong>相鄰兩季相比</strong>得到的結果，所以它同時牽涉到兩個季度。表格的「期間」欄現在會寫成 <strong>113Q4→114Q1</strong> 這種形式，讓您一眼看出是哪兩季在比。</p>
+  <p style="margin-top:2mm">篩選採用「只要比較區間與您選的區間有重疊就列出」：選 114Q1～114Q4 時，<strong>113Q4→114Q1 與 114Q4→115Q1 都會出現</strong>。這是刻意的——114Q1 之所以被標成異常，原因就在 113Q4→114Q1 那一次比較，把它藏起來反而查不到原因。</p>
+  <p style="margin-top:2mm">期間標成「全部」的項目（異常名稱、速限未確認）與季度無關，<strong>任何區間都會列出</strong>。</p>
+</div>
+
+<div class="box warn">
+  <span class="t">兩件要知道的事</span>
+  <p>・上方四個統計數字（缺少平假日、缺少方向／尖峰、速限未確認、異常變化）<strong>永遠是全部筆數，不隨篩選變動</strong>——那是這一季的體檢結果，不是目前畫面看了幾筆。目前顯示幾筆寫在標題右邊的「顯示 N / 共 M 項」。<br />
+  ・<strong>下載的專案包與交付檔案一律含全部項目，不受這裡的篩選影響。</strong>篩選是給人看的工具，交付檔案不該因為畫面上剛好篩了什麼而少東西。</p>
+</div>
+
+<!-- ══════════ 12 ══════════ -->
+<h2 class="sec"><span class="n">12.</span>異常提醒門檻：這些數字代表什麼、要設多少</h2>
+
+<div class="box warn">
+  <span class="t">先講清楚：這些不是法定值，也不是公路容量手冊的規定</span>
+  <p>
+    2022 年臺灣公路容量手冊規範的是<strong>容量、服務水準門檻與尖峰小時係數</strong>，
+    它<strong>沒有</strong>規定「季與季之間變動多少算異常」這種東西。所以本章的數值全部是
+    <strong>實務慣例</strong>，用途是「把值得回頭看的資料挑出來」，不是「判定交通是否受衝擊的標準」。
+  </p>
+  <p style="margin-top:2mm">
+    向業主說明時，建議這樣定位：<strong>這是資料品質的初篩門檻。超過門檻代表「這一筆需要回頭確認」，
+    不等於「交通一定變差了」。</strong>把它講成標準值，之後只要有一季正常波動超標，就會很難解釋。
+  </p>
+</div>
+
+<h3 class="sub">系統是怎麼比的</h3>
+<p>
+  以<strong>路段 × 日別</strong>分組，取每一季的<strong>代表值</strong>（同一路段同一日別有上午／下午 × 方向1／方向2
+  共 4 筆，代表值取其中最差的那一筆，見第 8 章），然後拿<strong>最新一季與前一季</strong>相比。
+  只有「連續惡化季度」這一項會往前回溯整個季度序列。
+</p>
+<p>
+  這四項<strong>只影響「優先處理清單」的排序與提醒文字，不會改變服務水準的判定</strong>，
+  也不會改變任何數值。設定位置在<span class="btn">健康檢查</span>頁的「異常提醒門檻」。
+</p>
+
+<h3 class="sub">門檻的意義與建議值</h3>
+<p>
+  下表的<strong>「提醒值」</strong>是「開始留意」的層級——超過就值得看一眼，但多半還在正常波動範圍；
+  <strong>「查證值」</strong>是「一定要回頭查原始檔」的層級。兩者都不是及格線，
+  而是<strong>把資料分成「可以直接用」與「要先確認」兩堆</strong>的分界。
+</p>
+<table>
+  <thead>
+    <tr>
+      <th style="width:20%">項目</th>
+      <th style="width:10%">系統預設</th>
+      <th style="width:10%">提醒值</th>
+      <th style="width:10%">查證值</th>
+      <th>這個數字代表什麼</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="k">旅行速率下降（%）</td><td>25</td><td>15</td><td>25</td>
+      <td>最新一季的旅行速率比前一季<strong>下降</strong>的百分比（只看下降，上升不提醒）。旅行速率是<strong>含延滯</strong>的速率，也是服務水準的分子，最貼近用路人的實際感受。下降 15% 大約是「原本 10 分鐘的行程多花 1.8 分鐘」。</td>
+    </tr>
+    <tr>
+      <td class="k">總延滯增加（%）</td><td>30</td><td>20</td><td>30</td>
+      <td>總延滯＝路段延滯＋交叉口延滯，本季比前一季<strong>增加</strong>的百分比。延滯的季節波動天生比速率大（一個號誌週期就可能差十幾秒），所以門檻通常設得比速率寬。</td>
+    </tr>
+    <tr>
+      <td class="k">LOS 下降級數</td><td>2</td><td>1</td><td>2</td>
+      <td>服務水準掉了幾級（A→C 是 2 級）。<strong>掉 1 級很可能只是剛好跨過門檻</strong>（例如速限比 0.71 掉到 0.69，B 就變成 C），實際差異很小；掉 2 級才是明顯的變化。</td>
+    </tr>
+    <tr>
+      <td class="k">連續惡化季度</td><td>2</td><td>2</td><td>3</td>
+      <td>連續幾季出現「服務水準變差<strong>或</strong>旅行速率下降」。<strong>這一項最能區分「真的在惡化」與「單季波動」</strong>——單季再大的變動都可能是天氣、施工或活動，連續兩季以上同方向才有趨勢意義。</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="box info">
+  <span class="t">預設值為什麼設得比「提醒值」寬？</span>
+  <p>
+    系統預設值（25／30／2／2）大致相當於上表的「查證值」。這是刻意的：預設只提醒<strong>真的很可疑</strong>的項目，
+    避免每季跳出一大堆警示，久了就沒有人看。如果您希望更早發現變化、願意自己篩選，
+    把前三項調成 15／20／1 就會接近「提醒值」層級。
+  </p>
+</div>
+
+<h3 class="sub">判讀原則：三句話</h3>
+<table>
+  <thead><tr><th style="width:34%">情況</th><th>該怎麼解讀</th></tr></thead>
+  <tbody>
+    <tr><td class="k">單季、單一路段超標</td><td><strong>先當成資料問題查</strong>：速限是否還停在預設值、該季是否遇到施工或活動、調查日是否特殊。不要直接寫成「交通受衝擊」。</td></tr>
+    <tr><td class="k">連續兩季以上同方向變動</td><td>這才適合在報告中寫成「該路段服務水準確實呈現下降趨勢」。</td></tr>
+    <tr><td class="k">速率下降但延滯沒增加</td><td>比較像<strong>路段本身</strong>的問題（路面、違規停車、車道縮減）；若延滯同時大幅增加，則多半是<strong>交叉口</strong>（號誌時制、轉向衝突）。</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <span class="t">如果這是特定開發案的交通衝擊評估</span>
+  <p>
+    門檻通常由審查機關另行指定（常見的做法是以<strong>尖峰小時增量車次數</strong>或固定百分比認定），
+    那份要求優先於本章的慣例值。本章的數值適用於<strong>例行的季度監測</strong>。
+  </p>
+</div>
+
+<!-- ══════════ 13 ══════════ -->
+<h2 class="sec"><span class="n">13.</span>成果交付（v2.6 改版）</h2>
+
+<div class="box new">
+  <span class="t">成果範圍現在是「一段期間」，不再限定單一季度</span>
+  <p>「成果交付」的成果範圍改成<strong>起始季度</strong>與<strong>結束季度</strong>兩個下拉選單。想交單一季就把兩個選成同一季；想交一整年就選 114Q1 到 114Q4。下方會即時顯示「本次成果範圍：114Q1-114Q4，共 4 個季度」。起訖不小心選反了，系統會自動對調，不會變成空的成果包。</p>
+</div>
+
+<p>可以再用<strong>路段</strong>與<strong>日別</strong>縮小範圍，然後勾選要放進 ZIP 的內容：尖峰明細、尖峰彙總、品質檢查、分析文字草稿。按<span class="btn">下載季度成果包 ZIP</span>，檔名會標示完整範圍（例如 <code>13545_114Q1-114Q4_成果包.zip</code>），裡面每一個檔案也都用同樣的範圍命名。</p>
+<p>右側的<strong>報告文字草稿</strong>會依目前範圍自動產生一段敘述。您可以直接修改後按<span class="btn">儲存修改</span>；v2.6 起，您手動編輯過的內容不會再被其他操作（切換計畫、儲存設定、匯入）自動覆蓋掉。</p>
+
+<div class="box warn">
+  <span class="t">自動產生的文字一定要人工核對</span>
+  <p>草稿是依彙總資料機械式產生的，它不知道現地是不是在施工、不知道調查當天有沒有事故。正式報告引用前，請務必核對原始檔、速限設定與現地情況。</p>
+</div>
+
+<!-- ══════════ 14 ══════════ -->
+<h2 class="sec"><span class="n">14.</span>備份、換電腦與多人協作</h2>
+<ul>
+  <li><strong>Project 專案包：</strong>目前這一個計畫的完整資料。每完成一季就下載一次。</li>
+  <li><strong>個人全部計畫包：</strong>這台電腦上所有計畫的完整資料。換電腦或重灌前下載。</li>
+  <li><strong>載入備份：</strong>「備份與淨空 → 選取備份檔」。v2.6 起，若檔案格式不對，系統會維持原有資料不變並提示您，不會把資料弄壞。</li>
+  <li><strong>Manager 比較：</strong>管理者把各同事交來的專案包匯進「Manager 比較」，即可跨計畫比較；同事各自的原始資料不會互相覆蓋。</li>
+</ul>
+
+<div class="box warn">
+  <span class="t">清除瀏覽器資料前一定要先備份</span>
+  <p>資料存在瀏覽器的本機資料庫。清除網站資料、使用無痕視窗、換瀏覽器或換網址，都會看不到原本的資料。這不是系統壞掉，是資料本來就只存在原本那個瀏覽器裡。</p>
+</div>
+
+<!-- ══════════ 15 ══════════ -->
+<h2 class="sec pb"><span class="n">15.</span>結論草稿產生器（本版新增）</h2>
+
+<p>左側選單新增<span class="btn">結論草稿</span>。它和第 13 章「成果交付」裡的報告文字草稿不同：
+那一份是固定格式、每一筆代表紀錄各寫一行；這一區是<strong>您自己出題、系統作答</strong>——
+想只寫「115Q2 每個路段上午尖峰的旅行速率與服務水準」可以，想寫「114 年度四季的變化」也可以。</p>
+
+<div class="box new">
+  <span class="t">「結論草稿」和「成果交付」裡的報告文字草稿，差在哪裡？</span>
+  <p>兩個都留著，因為用途不同。簡單記法：<strong>一個是交件用的，一個是您自己出題的。</strong></p>
+  <table>
+    <thead><tr><th style="width:22%"></th><th style="width:39%">成果交付 → 報告文字草稿</th><th>結論草稿（第 15 章）</th></tr></thead>
+    <tbody>
+      <tr><td class="k">用途</td><td>這次交付的<strong>說明文字</strong></td><td>您自己出題的<strong>結論</strong></td></tr>
+      <tr><td class="k">內容怎麼決定</td><td>依左邊的成果範圍（季度、路段、日別），逐筆代表紀錄各寫一行，格式固定</td><td>五組條件自己勾：範圍、尖峰、方向、日別、路段、要寫哪些數字、怎麼分段</td></tr>
+      <tr><td class="k">會不會跟著交出去</td><td><strong>會</strong>——勾了「分析文字草稿」就會放進 ZIP 成果包</td><td>不會，要自己複製或下載 .txt</td></tr>
+      <tr><td class="k">什麼時候用</td><td>季度交件、要附一份跟資料包一致的文字說明時</td><td>寫報告某一章、只需要特定幾個數字時</td></tr>
+    </tbody>
+  </table>
+  <p><strong>數字來源完全相同</strong>，都取自「尖峰明細」與彙總，不會有一邊算出不一樣的值。
+  兩份都是草稿，正式引用前都要人工核對。</p>
+</div>
+
+<h3 class="sub">五組條件</h3>
+<table>
+  <thead><tr><th style="width:22%">條件</th><th>可以選什麼</th><th style="width:30%">什麼時候用</th></tr></thead>
+  <tbody>
+    <tr><td class="k">一、統計範圍</td><td>單一季度／某一年度／季度區間／整個計畫</td><td>季報選單季；年報選年度；期末報告選整個計畫。</td></tr>
+    <tr><td class="k">二、尖峰、方向與日別</td><td>上午尖峰／下午尖峰；方向1／方向2；平日／假日</td><td>一個都不勾＝全部都寫。</td></tr>
+    <tr><td class="k">三、要寫哪些路段</td><td>逐一勾選，或按「全部路段」</td><td>只要寫其中幾條路段時用。</td></tr>
+    <tr><td class="k">四、要寫哪些數字</td><td>11 項可勾（見下表）</td><td>決定草稿「寫什麼」的關鍵。</td></tr>
+    <tr><td class="k">五、敘述方式</td><td>依路段分段／依季度分段／只寫整體；小數位數</td><td>路段多時選「依路段分段」，季度多時選「依季度分段」。</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">第四組：可以勾的 11 種數字</h3>
+<table>
+  <thead><tr><th style="width:34%">項目</th><th>寫出來長什麼樣</th></tr></thead>
+  <tbody>
+    <tr><td class="k">服務水準（A～F）</td><td>上午尖峰・方向1：服務水準 D</td></tr>
+    <tr><td class="k">旅行速率（km/h）</td><td>旅行速率 24.3 km/h</td></tr>
+    <tr><td class="k">行駛速率（km/h）</td><td>行駛速率 38.6 km/h</td></tr>
+    <tr><td class="k">總延滯（秒）</td><td>總延滯 421.0 秒</td></tr>
+    <tr><td class="k">路段延滯與交叉口延滯（秒）</td><td>路段延滯 40.0 秒、交叉口延滯 20.0 秒</td></tr>
+    <tr><td class="k">速限與速限比</td><td>速限 50 km/h、速限比 48.6%</td></tr>
+    <tr><td class="k">方向文字（報告上寫的起訖）</td><td>上午尖峰・方向1（大同路口--&gt;中正路口）</td></tr>
+    <tr><td class="k">季度之間的變動幅度</td><td>由 114Q1 至 114Q4，旅行速率由 30.0 變為 36.0 km/h，增加 20.0%；服務水準 D → C</td></tr>
+    <tr><td class="k">範圍內服務水準最差的路段</td><td>服務水準最差為 F：115Q2 中正路（平日・上午尖峰・方向1）</td></tr>
+    <tr><td class="k">範圍內旅行速率的最快／最慢</td><td>最快為⋯ 50.0 km/h，最慢為⋯ 20.0 km/h，8 筆平均⋯</td></tr>
+    <tr><td class="k">各服務水準等級的筆數統計</td><td>共 16 筆：C 級 10 筆（62.5%）、D 級 6 筆（37.5%）</td></tr>
+  </tbody>
+</table>
+
+<div class="box new">
+  <span class="t">舉一個實際的例子</span>
+  <p>「我只想知道 115Q2 每個路段上午尖峰的旅行速率與服務水準」——</p>
+  <p>統計範圍選<strong>單一季度 → 115Q2</strong>；尖峰只勾<strong>上午尖峰</strong>；
+  方向與日別、路段<strong>都不勾</strong>（＝全部）；
+  數字只勾<strong>服務水準、旅行速率</strong>；敘述方式選<strong>依路段分段</strong>。
+  按<span class="btn">產生草稿</span>，每條路段就會各成一段，只寫您要的那兩項。</p>
+</div>
+
+<div class="box warn">
+  <span class="t">草稿會擋掉不該做的比較</span>
+  <p><strong>服務水準 A～F 是等級不是數值，永遠不做平均。</strong>
+  草稿只會統計「各等級各有幾筆、佔幾 %」，不會算出「平均服務水準 C.4」這種沒有意義的數字。</p>
+  <p><strong>跨路段、跨季度只做比較，不做加總。</strong>不同路段的長度與速限不同，
+  旅行速率與延滯相加沒有意義。要比大小時草稿會寫明「各路段長度與速限不同，此處僅比較大小」。</p>
+  <p><strong>基期為 0 時不會寫成百分比。</strong>上一季總延滯是 0、這一季是 480 秒，
+  草稿會寫「總延滯由 0 秒 增為 480.0 秒」，而不是「增加 0.0%」或無限大。</p>
+  <p><strong>讀不到的欄位寫成「—」，不會當成 0。</strong>並在文末註明有幾筆、請回「尖峰明細」核對。</p>
+</div>
+
+<div class="box new">
+  <span class="t">條件可以存成範本，下次一鍵套用</span>
+  <p>設定好之後輸入名稱（例如「季報用」「年報用」），按<span class="btn">存成範本</span>。
+  之後點一下範本名稱就會把整組條件還原。範本依計畫分開存，會隨專案包一起備份。</p>
+</div>
+
+<div class="box">
+  <span class="t">三個要知道的行為</span>
+  <p>・<strong>草稿的數字＝「尖峰明細」的數字</strong>，只是依您設定的小數位數四捨五入。<br />
+  ・<strong>可以直接手改。</strong>改過之後不會自動覆蓋；按<span class="btn">重新產生</span>會先跳出確認。<br />
+  ・<strong>條件挑不到資料時會明講</strong>，不會給您一片空白。</p>
+</div>
+
+<!-- ══════════ 16 ══════════ -->
+<h2 class="sec"><span class="n">16.</span>本版（v2.20.1）主要變更</h2>
+
+<div class="box new">
+  <span class="t">本版（v2.20.1）：交付包可獨立驗證，並更新 Excel 讀取元件</span>
+  <p>這一版<strong>沒有變更已確認的計算規則與操作功能</strong>。更新重點是：
+  Excel 讀取元件統一為官方 SheetJS 0.20.3、加入不含正式計畫資料的匿名測試範例，
+  並讓安裝、單元測試、舊版 .xls 匯入測試與瀏覽器操作測試可在交付包內自行完成。
+  package.json 與 lock 檔也已同步固定套件版本，避免換一台電腦後出現依賴版本不一致。
+  發布前另以正式調查檔抽樣驗證 5 份，辨識結果均與原檔彙總數值相符。</p>
+</div>
+
+<div class="box info">
+  <span class="t">v2.19：發布前全面稽核，修正 4 項問題</span>
+  <ol>
+    <li><strong>「只寫整體結論」時勾了「各服務水準等級的筆數統計」，會讓其他六個指標變成死選項。</strong>
+    舊版是二選一：一旦勾了等級統計，就把「代表紀錄」那整段吃掉，
+    而服務水準、旅行速率、行駛速率、總延滯、延滯組成、速限與速限比、方向文字
+    這七項<strong>唯一的輸出路徑</strong>就在那一段——結果是
+    <strong>多勾一個選項反而少寫六行</strong>。現在兩者各寫各的。</li>
+    <li><strong>旅行速率長條圖把「讀不到速率」畫成 0。</strong>
+    柱高 0、柱上標「0.0」、提示寫「平日 0.000 km/h」。
+    旅行速率 0 km/h 的意思是完全動不了，會被直接誤讀成最嚴重的壅塞。
+    現在缺值留白，提示改寫「讀不到數值」。</li>
+    <li><strong>讀不到速限比時，服務水準被判成 F（最差）。</strong>
+    判定式直接比大小，而 null 會被當成 0 而一路落到 F。
+    有些畫面有防護、有些沒有（例如匯入預覽），現在守衛放在判定式本身，
+    缺值一律顯示「?」。</li>
+    <li><strong>季度成果包 ZIP 裡的 CSV 標題列沒有單位。</strong>
+    舊版直接輸出英文欄位鍵（travel、totalDelay、ratio…），
+    交付給委託單位的檔案分不出是 km/h、秒還是比值。
+    現在改為中文欄名並標明單位。</li>
+  </ol>
+</div>
+
+<div class="box info">
+  <span class="t">v2.18：兩份草稿的分工說明</span>
+  <p>「成果交付 → 報告文字草稿」與「結論草稿」各加一段說明，講清楚什麼時候該用哪一個；
+  詳細對照表見第 15 章開頭。兩個功能都保留，數字來源完全相同。</p>
+  <p><strong>v2.17：條件面板版面修正</strong></p>
+  <p><strong>v2.18 修正：</strong></p>
+  <ul>
+    <li>「要寫哪些路段」的清單原本寫死最高 180px，卡片被其他欄位撐高之後，
+    清單只佔上面一小塊、下面留一大片空白。現在會撐滿卡片剩下的高度。</li>
+    <li>勾選框被面板的通用樣式撐成 64px 寬，把「上午尖峰」四個字擠成兩行兩個字。
+    已還原成正常大小，選項改為等寬排列，字級也從 12px 調到 13px。</li>
+    <li><strong>「季度」「年度」「起／迄」三組欄位會同時出現。</strong>切換用的
+    hidden 屬性被樣式蓋掉了，選了「季度區間」還是看得到季度與年度兩個下拉，
+    看起來像是它們也會影響結果。現在只會顯示當前選項對應的那一組。</li>
+  </ul>
+  <p><strong>v2.16：新增結論草稿產生器</strong></p>
+  <p>左側選單新增<strong>結論草稿</strong>（第 15 章）。可自行勾選統計範圍
+  （單一季度／某一年度／季度區間／整個計畫）、尖峰、方向、日別、要寫哪些路段，
+  以及要寫哪些數字（服務水準、旅行速率、行駛速率、總延滯、延滯組成、速限與速限比、
+  方向文字、季度變動、最差路段、最快最慢、各等級筆數統計），再選擇依路段／依季度／只寫整體，
+  系統照條件寫出一段可直接貼進報告的中文結論。條件可存成多組範本重複使用（依計畫分開存）。</p>
+  <p>草稿的數字全部取自「尖峰明細」，只依您設定的小數位數四捨五入，不另外再算一次。
+  服務水準不做平均、跨路段不做加總、基期為 0 時寫實際數值而非百分比、
+  讀不到的欄位寫「—」而不是 0——這四條規則都寫進程式並有測試把關。</p>
+</div>
+
+<div class="box new">
+  <span class="t">v2.15：全面稽核與修正（30 項）</span>
+  <p>
+    這一版對整支程式做了一次完整稽核（計算、功能、排版三個面向），修掉 30 個問題。
+    其中<strong>四個會直接影響資料正確性</strong>，請留意：
+  </p>
+  <ul>
+    <li><strong>匯入表單會被無關的存檔動作改回上次的季度。</strong>輸入 116 年第 3 季之後，
+      去別的頁面存個路段名稱再回來，表單已經悄悄變回上次匯入的季度，接著「確認寫入」
+      就會把資料寫進<strong>錯誤的季度</strong>，而且沒有任何提示。已修正：使用者自己動過之後，
+      系統不再覆寫。</li>
+    <li><strong>還原自己匯出的專案包，會把自訂的 LOS 門檻清成預設值。</strong>
+      同一筆速限比 0.65 的紀錄，還原前是 C、還原後變成 B——整個計畫的服務水準悄悄改變，
+      畫面只說「備份已載入」。已修正。</li>
+    <li><strong>健康檢查結果會殘留到別的計畫，而且會謊稱「檢查通過」。</strong>
+      切換或新建計畫時，上一個計畫的異常項目仍留在畫面上；從來沒檢查過的計畫會顯示
+      「檢查通過，未發現異常」。已修正：沒檢查過就顯示「尚未檢查」。</li>
+    <li><strong>上一季總延滯是 0 時，變動一律被算成「增加 0.0%」。</strong>
+      0 秒→480 秒完全不會觸發提醒，而且那句「增加 0.0%」會原封不動寫進報告文字草稿。
+      已修正為「總延滯由 0 秒增為 480.0 秒」。</li>
+  </ul>
+  <p style="margin-top:2mm">
+    其他重點：設定「速限版本」不再誤把基準速限標成已人工確認（版本沒涵蓋的季度其實還在用未確認的預設值）；
+    路段速限表會標示哪些方向設有版本覆蓋、實際生效的是哪一個速限；
+    「套用並重算」改成<strong>先驗證再下載備份</strong>（以前欄位填錯也會先下載一份備份、留下一筆假的復原紀錄）；
+    改交付範圍的路段或日別不會再蓋掉手打的報告草稿；
+    「備份後修正日期尾碼」會說明有幾筆因鍵值重複被合併；
+    還原進來的資料也會檢查「旅行速率不得大於行駛速率」。
+    排版方面修掉匯入預覽把整頁撐到左右捲動、圖表卡片在多季度時撐爆格線、
+    按鈕被擠成一行一個字，以及<strong>列印時無論在哪一頁都只印出新手說明</strong>。
+  </p>
+</div>
+
+<div class="box new">
+  <span class="t">v2.14：品質總覽可以依季度區間與類型查閱異常</span>
+  <p>
+    季度累積之後「計畫資料品質總覽」會長到看不出重點。本版新增
+    <strong>起始／結束季度、類型（可複選並顯示各類型筆數）、路段、日別、尖峰</strong>五組篩選，
+    可以直接問「114Q1 到 114Q4 之間出過哪些異常」或「只看異常變化」。
+    「期間」欄改成 <strong>113Q4→114Q1</strong> 的寫法，一眼看得出是哪兩季在比；
+    季度區間採「比較區間有重疊就列出」，不會把造成異常的那一次比較藏起來。
+    上方四個統計數字仍是全部筆數，<strong>下載的專案包也一律含全部項目</strong>，不受篩選影響。
+    詳見第 11 章。
+  </p>
+</div>
+
+<div class="box new">
+  <span class="t">v2.15：疑似新路段可以批次確認</span>
+  <p>
+    一次匯入十幾二十份檔案時，系統對每一個沒見過的路段名稱都會要求確認；
+    但使用者通常一眼就知道<strong>這批全部都是新路段</strong>，逐列點開下拉選單選一次
+    純粹是重複勞動。預覽表格上方新增一列批次工具：
+  </p>
+  <ul>
+    <li><strong>全選待確認</strong>：一次勾起所有需要確認的列（也可以只勾其中幾列）。</li>
+    <li><strong>勾選的確認為新路段</strong>：把勾起來的全部設為新路段。</li>
+    <li><strong>勾選的合併至此路段</strong>：把勾起來的全部併到下拉選單指定的既有路段。</li>
+  </ul>
+  <p style="margin-top:2mm">
+    沒有勾選的列不受影響，仍然由您在該列自己的下拉選單逐一指定要合併到哪一個路段。
+    批次列也會顯示「共 N 筆需確認、尚未決定 N 筆、已勾選 N 筆」，一眼看得出還剩幾筆要處理。
+  </p>
+</div>
+
+<div class="box new">
+  <span class="t">v2.12：預覽可以取消了</span>
+  <p>
+    匯入畫面新增<strong>「取消匯入（清除預覽）」</strong>按鈕。預覽的用意就是
+    <strong>先看看有沒有問題，有問題先去修檔案再匯一次</strong>；但過去只有
+    「讀取並預覽」與「確認寫入」兩個按鈕，看到判讀失敗之後沒有任何方式把這批結果清掉，
+    畫面就一直掛著一份錯誤的預覽，也讓人不確定自己是不是已經被寫進去了。
+    現在按一次就會把預覽、狀態與已選檔案全部清乾淨，<strong>資料完全不會變動</strong>。
+  </p>
+  <p style="margin-top:2mm">
+    另外，如果您<strong>預覽之後才把檔案拿去 Excel 修正、然後直接再按一次「讀取並預覽」</strong>，
+    瀏覽器手上那個檔案參照已經失效，讀取會失敗。舊版會顯示「檔案無法開啟或格式不支援」，
+    把人引到完全錯誤的方向；現在會明確說<strong>「這個檔案在選取之後被修改過，請重新選取一次檔案再預覽」</strong>。
+    最保險的做法是：修好檔案後先按「取消匯入」，再重新選取。
+  </p>
+</div>
+
+<div class="box new">
+  <span class="t">v2.11：新增第 12 章「異常提醒門檻」</span>
+  <p>
+    新增一章專門說明<strong>異常提醒門檻的四個項目各自代表什麼、建議設多少</strong>，
+    並區分「提醒」與「查證」兩個層級，同時附上判讀原則。這一章寫成可以
+    <strong>直接拿給業主看</strong>的形式，並且明白寫出「這些不是公路容量手冊的規定值，
+    而是實務慣例」，避免日後被當成標準值引用。程式功能與計算完全沒有變動。
+  </p>
+</div>
+
+<div class="box new">
+  <span class="t">v2.10：不再綁定單一報告版型，並用 28 份真實報告驗證</span>
+  <p>
+    <strong>1. 一張尖峰工作表裡有很多趟旅次也讀得懂。</strong>實際收到的調查表，
+    一張「上午尖峰」工作表裡會有 <strong>6 趟旅次</strong>（每個方向 3 趟）上下疊在一起，
+    每一趟的高度還不一樣（實測有 37、40、61 列三種）；平均速率印在該趟的最後一列，
+    延滯表則在該趟的上方。舊版是用「上一個平均速率標籤」當界線去猜，
+    <strong>方向2 的延滯會整組讀不到</strong>，14 份檔案全部匯不進來。
+    現在改成先找「旅次編號」把工作表切成一趟一塊（沒有旅次編號時改用重複出現的標題列），
+    再在各自的區塊內讀取，與版面高度完全無關。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>2. 方向名稱直接採用報告上寫的起訖路口。</strong>報告裡的
+    「方　向　往：大同路口---&gt;中正路口」會自動變成該方向的顯示名稱（您已自行命名的不會被覆蓋），
+    明細表不再只顯示「方向1／方向2」。若不同季度的報告把兩個方向的順序對調，
+    資料品質檢查會列出「方向對應不一致」並顯示各自的文字，避免跨季比較時拿相反方向互比。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>3. 新增一條物理常識檢查。</strong>旅行速率是「含延滯」的速率、行駛速率是「不含延滯」的，
+    所以旅行速率不可能大於行駛速率；有延滯時一定嚴格小於。
+    這條檢查能擋掉「讀到隔壁欄位」這一整類錯誤——那類錯誤最麻煩的地方在於數字看起來很正常，
+    只是屬於別的欄位。實測：把原始檔的旅行速率格清空（公式沒有快取值時就長這樣），
+    舊版會往右掃過「平均總行駛速率」這個標題、把行駛速率當成旅行速率讀進來，
+    服務水準直接差兩級卻毫無提示；現在會明確報錯。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>4. 匯入失敗時看得到真正的原因。</strong>診斷訊息過去放在函式屬性上，
+    讀完下午那張表就會把上午的訊息洗掉，而上午永遠先解析——等於<strong>問題出在上午尖峰時，
+    永遠只看得到「無法辨識完整4筆」這句最籠統的話</strong>。現在兩張表的原因都會列出來。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>5. 空殼備份也擋得住。</strong>v2.9 擋掉了「隨便一個 JSON」，
+    但 <code>{"projects":[],"details":[]}</code> 這種空殼仍會通過，一樣把全部計畫清空還顯示「備份已載入」。
+    現在要求備份必須真的帶著計畫與設定；載入成功時也會告訴您載入了幾個計畫、幾筆明細。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>6. 速限有一格填錯時，整批都不會變更。</strong>v2.9 是邊檢查邊寫入，
+    合法的欄位已經寫進設定並標成「已人工確認」，卻因為提早中斷而沒有重算、也沒有存檔；
+    使用者以為整批取消了，下一次任何不相干的存檔卻會把這半套設定固化，重新整理後服務水準就變了。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>驗證方式：</strong>兩種報告版型共 <strong>28 份真實檔案</strong>，
+    系統讀出來的四個數值（平均總旅行速率、平均總行駛速率、路段延滯、交叉口延滯）
+    與<strong>報告自己附的「延滯統計表」逐格比對，28 份全部完全相符</strong>。
+  </p>
+</div>
+
+<div class="box info">
+  <span class="t">關於「不限報告格式」的實際範圍</span>
+  <p>
+    系統現在不再依賴「數值在第幾列」這種版面假設，但仍然需要報告裡有這些<strong>文字標籤</strong>才找得到數值：
+    「平均總旅行速率」「平均總行駛速率」「路段延滯」「交叉口延滯」，
+    以及名稱含「上午／下午」（或 AM／PM）的工作表。方向文字則看「方　向　往：」。
+    若某份報告改用別的用詞，系統會<strong>明確告訴您缺了什麼</strong>，不會自己猜一個數字填進去。
+    遇到讀不進來的新版型，把檔案給我們就能再加上對應。
+  </p>
+</div>
+
+<div class="box info">
+  <span class="t">v2.9：全面除錯</span>
+  <p>
+    <strong>1. 誤選一般 JSON 檔不會再清空全部資料。</strong>「還原備份」如果選到的不是備份檔（例如從別的系統匯出的設定檔），
+    舊版只要它是一個 JSON 物件就會照樣載入，展開後計畫變成空的、完整性檢查也通過，接著存檔就把您<strong>全部的計畫洗掉</strong>。
+    本版會嚴格檢查備份檔的形狀，認不出來就直接拒絕，原有資料完全不動。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>2. 標題裡的時段字樣不會再被當成速率。</strong>像「平均總旅行速率（07:30~08:30）」這種只有標題、數值在旁邊欄位的寫法，
+    舊版會把「08:<strong>30</strong>」的 30 讀成速率，整份資料的服務水準全部變成 F。本版要求冒號前面不能是數字才算「標籤自帶數值」。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>3. 方向2 不會再沿用方向1 的行駛速率與交叉口延滯。</strong>舊版是用「上一個速率標籤的下一列」當方向區塊的起點，
+    但方向1 的延滯表若排在它自己的速率標籤下方，就同時落在方向2 的區塊裡，於是<strong>兩個方向拿到一模一樣的數字卻毫無警告</strong>。
+    本版改成「離哪個方向的速率標籤最近就屬於誰」，不論延滯表排在標籤上面或下面都判得對。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>4. Excel 圖表的季度排序修正。</strong>匯出的可編輯圖表用字串排序季度，民國 99 年跨到 100 年時
+    「100Q1」會被排到「99Q3」前面，整段趨勢看起來像倒著走。本版依民國年與季別的實際大小排序。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>5. 服務水準圖表的 F 級不再是零高度。</strong>圖表樣式是靠字串置換微調的，其中兩段比對的字串跟實際產出的內容對不上、等於整段沒有執行：
+    座標軸最小值仍停在 1，<strong>服務水準 F（值＝1）的長條高度變成 0</strong>，看起來像「這一季沒有資料」；數值刻度也沒關掉，軸上同時出現 1~6 的數字和 A~F 的標籤。
+    本版已修正，並改為<strong>置換失敗就直接報錯</strong>，避免以後又默默失效。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>6. 匯入預覽會套用速限版本。</strong>舊版預覽只看基本速限，設過速限版本的路段，預覽的服務水準和寫入後的結果會不一樣。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>7. 速限不接受 0 或負數。</strong>舊版打成 -50 會照樣存進去，比值變成負的，整條路段無聲掉到 F。速限版本也一併加上檢查。
+  </p>
+  <p style="margin-top:2mm">
+    <strong>8. 報告草稿不會再「看起來不見了」。</strong>草稿是以「計畫｜交付範圍」為鍵儲存的，切換計畫再切回來時範圍常常回到預設值，
+    看到的就是重新產生的草稿。本版會在文字框下方列出本計畫其他已儲存的草稿，一鍵載回。
+  </p>
+</div>
+
+<div class="box info">
+  <span class="t">v2.8 修正：網站顯示的版本永遠停在上一版</span>
+  <p>
+    版本字樣被兩個檔案各寫了一次，而後載入的那一個會把先寫上的蓋回舊版號。結果是「檔案全部更新了、網站也部署成功了，畫面卻永遠顯示上一版」，
+    而且怎麼清瀏覽器快取都沒用——因為根本不是快取問題。本版改為<strong>全站只有一個地方</strong>寫入版本字樣，並新增自動檢查確保程式、網頁與手冊檔名的版本三者一致。
+  </p>
+</div>
+
+<div class="box info">
+  <span class="t">v2.7 修正：匯出的 Excel 圖表在 Excel 開啟時會要求「修復」，修復後圖表全部消失</span>
+  <p>
+    「LOS 圖表」頁下載的可編輯圖表檔（旅行速率趨勢圖、LOS 趨勢圖），內部的圖表描述有幾處欄位順序不符合 Excel 的檔案規格。Excel 開檔時會判定檔案毀損、跳出<strong>「我們發現…部分內容有問題。您要我們盡可能嘗試復原嗎？」</strong>，按「是」之後 Excel 會把整張圖表丟掉，所以使用者看到的是<strong>只有數字、沒有任何圖</strong>。
+  </p>
+  <p style="margin-top:2mm">
+    本版已依 ECMA-376（Excel 的檔案規格）修正四處：座標軸的格線位置、刻度單位位置、最大／最小值順序，以及長條圖的間距欄位位置。修正後 Excel 可直接開啟，圖表完整顯示、也仍然可以編輯。並新增自動檢查，往後每次改版都會驗證匯出檔的結構是否合規。
+  </p>
+</div>
+
+<h3 class="sub">v2.6 主要變更</h3>
+<table>
+  <thead><tr><th style="width:34%">項目</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td class="k">可以刪除整個計畫</td><td>「計畫設定」新增刪除按鈕，刪除前自動下載備份；「備份與淨空」另有「清除全部計畫」。</td></tr>
+    <tr><td class="k">成果範圍可跨季度</td><td>改成起訖兩個下拉，可交付 114Q1～114Q4 這樣的區間。</td></tr>
+    <tr><td class="k">新手使用手冊</td><td>就是您正在看的這一份，同時提供 PDF 與可編輯 Word。</td></tr>
+    <tr><td class="k">修正 Excel 讀取</td><td>標題含數字（例如「方向1平均總旅行速率：」）不再被誤讀成速率；行駛速率不再抓到隔壁方向的值；延滯只在自己的區塊內尋找；總延滯缺一項時判定為讀取失敗而不是當成 0。</td></tr>
+    <tr><td class="k">修正資料安全</td><td>壞掉的備份檔不會再破壞現有資料；預覽後改季度會自動失效；同批重複檔案會被擋下；切換或刪除計畫時預覽會清空。</td></tr>
+    <tr><td class="k">修正速限與期間</td><td>刪除速限版本後會正確退回基本速限；路段改名時速限版本一併搬移；99→100 年的期間排序不再顛倒。</td></tr>
+    <tr><td class="k">離線可用</td><td>Excel 與壓縮元件改為隨網站一起提供，不再依賴外部網路，公司網路擋掉外部來源時也能正常匯入與匯出。</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════ 16 ══════════ -->
+<h2 class="sec"><span class="n">17.</span>常見問題</h2>
+<table>
+  <thead><tr><th style="width:34%">問題</th><th>可能原因與處理</th></tr></thead>
+  <tbody>
+    <tr><td class="k">預覽顯示「無法辨識完整4筆」</td><td>工作表名稱不是支援的寫法，或某個方向的區塊缺數值。先用 Excel 打開、重新計算並存檔，再匯入。</td></tr>
+    <tr><td class="k">預覽顯示「速率或延滯欄位缺少數值」</td><td>四項數值中有讀不到的。最常見是總延滯只有其中一項——這是刻意判定為失敗，避免總延滯被嚴重低估。</td></tr>
+    <tr><td class="k">服務水準比預期好很多</td><td>幾乎都是速限沒改，還停在預設的 50。到「路段速限」核對。</td></tr>
+    <tr><td class="k">彙總的代表方向每季都不一樣</td><td>正常。代表值取最差的那一筆，哪一個尖峰或方向最差本來就會變。</td></tr>
+    <tr><td class="k">換電腦後看不到資料</td><td>資料存在原本那台電腦的瀏覽器。請在原電腦下載專案包，到新電腦載入。</td></tr>
+    <tr><td class="k">按了下載卻沒有反應</td><td>先看畫面下方的提示訊息。若顯示「儲存失敗」，代表瀏覽器儲存空間不足或處於無痕模式。</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════ 17 ══════════ -->
+<h2 class="sec"><span class="n">18.</span>每季作業檢查表</h2>
+<ul class="check">
+  <li>每份檔案都是 4 筆，失敗 0</li>
+  <li>沒有未確認的疑似新路段</li>
+  <li>路段速限已逐一核對並按過「套用並重算 LOS」</li>
+  <li>健康檢查三項為 0，品質總覽已處理</li>
+  <li>彙總的代表尖峰、代表方向與三個數值來自同一筆</li>
+  <li>LOS 圖表的路段數與實際調查數相符</li>
+  <li>已下載 Project 專案包備份</li>
+  <li>成果包已確認範圍正確，報告文字已人工核對</li>
+</ul>
+
+<!-- ══════════ 18 ══════════ -->
+<h2 class="sec"><span class="n">19.</span>最後提醒</h2>
+<div class="box warn">
+  <span class="t">系統會協助整理與檢查，但不取代專業判斷</span>
+  <p>看到警示不要只按掉；看到與以往不同的數字，也不要直接改成舊數值。請回頭查原始調查檔、現場紀錄與採用的速限，確認差異是真的交通變化，還是匯入或設定出了問題。</p>
+</div>
+<p>建議把這本手冊、每季的專案包備份，以及該季採用的速限依據放在同一個受控資料夾。這樣接手的人可以知道資料怎麼產生、用的是哪一版系統、採用什麼速限，以及出問題時怎麼還原。</p>
+
+</body>
+</html>

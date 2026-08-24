@@ -1,0 +1,6 @@
+node_modules/
+test-fixtures/
+playwright-report/
+test-results/
+qa-*/
+*.log

@@ -7,13 +7,14 @@
  *    （最重要的一項——報告寫錯數字比程式當掉嚴重）
  *  ・手改之後不會被無聲覆蓋；條件範本存得起來、重新整理後還在
  *
- * 用的是真實調查檔（speed-samples），不是合成測資。
+ * 使用交付包自行建立的匿名調查版型，不含任何正式計畫或使用者資料。
  */
 import { createServer } from "node:http";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { launchOptions } from "./chrome-path.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TYPES = {
@@ -45,19 +46,21 @@ const ok = (label, condition, detail = "") => {
   if (!condition) problems.push(label + (detail ? ` — ${detail}` : ""));
 };
 
-const SAMPLE_DIR = join(here, "..", "speed-samples");
+const SAMPLE_DIR = join(here, "test-fixtures");
 if (!existsSync(SAMPLE_DIR)) {
-  console.log("⚠️  找不到 speed-samples，略過端對端檢查");
+  console.log("❌ 找不到匿名回歸測資，請先執行 npm run fixtures");
   server.close();
-  process.exit(0);
+  process.exit(1);
 }
 /* 挑同一路段的平日與假日各一份，才驗得到日別條件。 */
-const files = readdirSync(SAMPLE_DIR).filter((name) => /台1中山路國昌路民強街路口/.test(name));
+const files = readdirSync(SAMPLE_DIR).filter((name) => /報告測試路段/.test(name));
+if (files.length !== 2) {
+  console.log(`❌ 匿名結論測資應有平日、假日各一份，目前為 ${files.length} 份`);
+  server.close();
+  process.exit(1);
+}
 
-const browser = await chromium.launch({
-  executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-  args: ["--no-sandbox"],
-});
+const browser = await chromium.launch(launchOptions());
 const context = await browser.newContext();
 const page = await context.newPage();
 const errors = [];

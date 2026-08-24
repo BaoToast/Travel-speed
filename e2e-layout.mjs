@@ -13,6 +13,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { launchOptions } from "./chrome-path.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TYPES = {
@@ -38,10 +39,7 @@ const ok = (label, condition, detail = "") => {
 
 const WIDTHS = [640, 760, 900, 1024, 1180, 1280, 1440, 1680, 1920];
 
-const browser = await chromium.launch({
-  executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-  args: ["--no-sandbox"],
-});
+const browser = await chromium.launch(launchOptions());
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 const page = await context.newPage();
 const errors = [];
@@ -50,9 +48,9 @@ page.on("dialog", (d) => d.accept());
 await page.goto(base, { waitUntil: "networkidle" });
 
 /* 先灌一點資料進去，空畫面量不到東西。 */
-const SAMPLE_DIR = join(here, "..", "speed-samples");
+const SAMPLE_DIR = join(here, "test-fixtures");
 if (existsSync(SAMPLE_DIR)) {
-  const files = readdirSync(SAMPLE_DIR).filter((n) => /台1中山路國昌路民強街路口/.test(n));
+  const files = readdirSync(SAMPLE_DIR).filter((n) => /報告測試路段/.test(n));
   await page.evaluate(() => document.querySelector('[data-view="setup"]').click());
   await page.fill("#projectCode", "LAY");
   await page.fill("#projectName", "排版量測計畫");
