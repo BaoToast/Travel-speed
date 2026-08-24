@@ -246,3 +246,56 @@ test("標頭一定寫明不可加總與不可平均的規則", () => {
   assert.match(text, /跨路段、跨季度只做比較，不做加總/);
   assert.match(text, /服務水準 A～F 是等級不是數值，不做平均/);
 });
+
+/*
+ * 「只寫整體結論」＋勾「各服務水準等級的筆數統計」時，原本會把代表紀錄那一段
+ * 整個吃掉，導致 los / travel / running / totalDelay / delayParts / limit /
+ * directionText 七個指標全部變成死選項——多勾一個選項反而少寫六行。
+ */
+test("整體模式下勾了等級統計，其他指標仍然要寫出來（不可變成死選項）", () => {
+  const rows = [row({ los: "D", travel: 23.4, totalDelay: 120 }), row({ los: "E" })];
+  const text = buildSpeedConclusion(
+    rows,
+    cond({
+      grouping: "overall",
+      metrics: ["losCount", "los", "travel", "totalDelay", "limit"],
+    }),
+    META,
+  );
+  assert.match(text, /D 級 1 筆/);
+  assert.match(text, /代表紀錄/);
+  assert.match(text, /服務水準 D/);
+  assert.match(text, /旅行速率 23\.4 km\/h/);
+  assert.match(text, /總延滯 120\.0 秒/);
+});
+
+test("整體模式下每一個指標單獨勾選也都要有輸出（逐一檢查沒有死選項）", () => {
+  const rows = [
+    row({ period: "114Q1", los: "D", travel: 30, totalDelay: 100 }),
+    row({ period: "114Q2", los: "C", travel: 36, totalDelay: 80 }),
+    row({ period: "114Q2", road: "中正路", los: "F", travel: 12 }),
+  ];
+  const base = cond({ metrics: [], grouping: "overall" });
+  const empty = buildSpeedConclusion(rows, base, META);
+  for (const metric of SPEED_CONCLUSION_METRICS) {
+    const text = buildSpeedConclusion(rows, { ...base, metrics: [metric.key] }, META);
+    assert.notEqual(
+      text,
+      empty,
+      `「只寫整體結論」下勾「${metric.label}」必須有變化，否則就是死選項`,
+    );
+    /* 和等級統計一起勾時也不可以互相吃掉 */
+    const withCount = buildSpeedConclusion(
+      rows,
+      { ...base, metrics: ["losCount", metric.key] },
+      META,
+    );
+    const countOnly = buildSpeedConclusion(rows, { ...base, metrics: ["losCount"] }, META);
+    if (metric.key !== "losCount")
+      assert.notEqual(
+        withCount,
+        countOnly,
+        `「等級統計 ＋ ${metric.label}」必須比只勾等級統計多寫東西`,
+      );
+  }
+});

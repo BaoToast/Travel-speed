@@ -453,11 +453,20 @@
       });
     } else {
       heading("整體結果");
+      /*
+       * 這裡原本是 if(losCount) ... else { 代表紀錄 + describeRow }，
+       * 也就是「勾了等級統計」就把代表紀錄整段吃掉。
+       * 而 describeRow 是 los / travel / running / totalDelay / delayParts /
+       * limit / directionText 這七個指標**唯一**的輸出路徑，結果變成
+       * 「多勾一個選項反而少寫六行」——那七個全都成了死選項。
+       * 兩者互不衝突，應該各寫各的。
+       */
       if (wants("losCount")) Array.prototype.push.apply(out, describeLosCount(rows));
-      else {
-        var first = rows[0];
+      var first = rows[0];
+      var rowLines = describeRow(first, c);
+      if (rowLines.length) {
         out.push("　代表紀錄：" + first.period + "　" + first.road + "（" + first.day + "）");
-        Array.prototype.push.apply(out, describeRow(first, c));
+        Array.prototype.push.apply(out, rowLines);
         if (rows.length > 1)
           out.push(
             "　（範圍內共 " +

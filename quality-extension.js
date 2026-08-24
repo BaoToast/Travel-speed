@@ -846,9 +846,34 @@
       "sourceHash",
       "importBatch",
     ];
-    return [fields.join(","), ...rows.map((x) => fields.map((k) => csvCell(x[k])).join(","))].join(
-      "\r\n",
-    );
+    /*
+     * 標題列要用看得懂的中文欄名並且**標單位**。
+     * 舊版直接把英文欄位鍵 join 出去，交付給委託單位的 CSV 分不出
+     * travel 是 km/h、totalDelay 是秒、ratio 是比值還是百分比。
+     * 畫面上（setHeaders）本來就是標了單位的，這裡對齊同一套。
+     */
+    const labels = {
+      period: "季度",
+      road: "路段",
+      day: "日別",
+      peak: "尖峰時段",
+      direction: "方向",
+      directionText: "方向起訖",
+      travel: "旅行速率（km/h）",
+      running: "行駛速率（km/h）",
+      totalDelay: "總延滯（秒）",
+      limit: "速限（km/h）",
+      ratio: "速限比（比值，0～1）",
+      los: "服務水準（A～F）",
+      sourceFile: "來源檔案",
+      sourceSheet: "來源工作表",
+      sourceHash: "來源雜湊",
+      importBatch: "匯入批次",
+    };
+    return [
+      fields.map((k) => csvCell(labels[k] || k)).join(","),
+      ...rows.map((x) => fields.map((k) => csvCell(x[k])).join(",")),
+    ].join("\r\n");
   }
   q("downloadQuarterPack").onclick = async () => {
     const range = deliveryRange();

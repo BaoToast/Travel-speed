@@ -146,7 +146,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.18";
+document.querySelector(".brand small").textContent = "正式版 v2.19";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +157,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.18.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.18.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.19.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.19.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -540,8 +540,28 @@ function rulesFor(code = state.activeCode) {
   return { ...DEFAULT_LOS_RULE, ...(state.losRules?.[code] || {}) };
 }
 function losOf(r, code = state.activeCode) {
+  /*
+   * 讀不到速限比時要回「?」，不是 F。
+   * 舊寫法直接比大小，而 null >= 0.8 會因為 Number(null) === 0 而為 false，
+   * 一路落到最後的 "F"——**缺值被判成最差等級**。呼叫端有的有防護
+   * （d.ratio == null ? "?" : …），有的沒有；沒防護的那幾處（例如匯入預覽
+   * 的 remapPending）就會在畫面上把「讀不到旅行速率」的那一筆標成 F。
+   * 守衛放在這裡，六個呼叫端一次都對。
+   */
+  if (r == null || r === "" || !Number.isFinite(Number(r))) return "?";
+  const value = Number(r);
   const x = rulesFor(code);
-  return r >= x.A ? "A" : r >= x.B ? "B" : r >= x.C ? "C" : r >= x.D ? "D" : r >= x.E ? "E" : "F";
+  return value >= x.A
+    ? "A"
+    : value >= x.B
+      ? "B"
+      : value >= x.C
+        ? "C"
+        : value >= x.D
+          ? "D"
+          : value >= x.E
+            ? "E"
+            : "F";
 }
 const losRank = { A: 6, B: 5, C: 4, D: 3, E: 2, F: 1 };
 function matrix(wb, names) {
@@ -1759,11 +1779,21 @@ function renderTravelCharts(rows, gridId) {
     card.className = "chart-card";
     card.innerHTML = `<h3>${esc(road)}｜旅行速率</h3><div class="bars speed-bars"><div class="speed-y-title">平均總旅行速率（km/h）</div><div class="y-axis">${ticks.map((t, i) => `<span style="top:${i * 25}%">${fmt(t, 1)}</span>`).join("")}</div>${periods
       .map((p) => {
+        /*
+         * 「有這筆紀錄，但速率讀不到」和「速率是 0」必須分開。
+         * 舊寫法是 Number(w?.travel) || 0，null 會折成 0，而柱子的
+         * data-value 判斷的是 w（紀錄存在）不是 w.travel（數值存在），
+         * 於是缺值走進了「有值」那條路：柱高 0、柱上標「0.0」、
+         * 提示寫「平日 0.000 km/h」。旅行速率 0 km/h 的意思是完全動不了，
+         * 會被直接誤讀成最嚴重的壅塞。缺值要留白，不是畫成 0。
+         */
         const w = own.find((x) => x.period === p && x.day === "平日"),
           h = own.find((x) => x.period === p && x.day === "假日"),
-          wv = Number(w?.travel) || 0,
-          hv = Number(h?.travel) || 0;
-        return `<div class="bar-group"><i class="bar weekday speed-bar" data-value="${w ? fmt(wv, 1) : ""}" title="平日 ${w ? fmt(wv, 3) : "—"} km/h" style="height:${(wv / max) * 100}%"></i><i class="bar holiday speed-bar" data-value="${h ? fmt(hv, 1) : ""}" title="假日 ${h ? fmt(hv, 3) : "—"} km/h" style="height:${(hv / max) * 100}%"></i><small>${p}</small></div>`;
+          hasW = w != null && w.travel != null && Number.isFinite(Number(w.travel)),
+          hasH = h != null && h.travel != null && Number.isFinite(Number(h.travel)),
+          wv = hasW ? Number(w.travel) : null,
+          hv = hasH ? Number(h.travel) : null;
+        return `<div class="bar-group"><i class="bar weekday speed-bar" data-value="${hasW ? fmt(wv, 1) : ""}" title="平日 ${hasW ? fmt(wv, 3) + " km/h" : "讀不到數值"}" style="height:${hasW ? (wv / max) * 100 : 0}%"></i><i class="bar holiday speed-bar" data-value="${hasH ? fmt(hv, 1) : ""}" title="假日 ${hasH ? fmt(hv, 3) + " km/h" : "讀不到數值"}" style="height:${hasH ? (hv / max) * 100 : 0}%"></i><small>${p}</small></div>`;
       })
       .join(
         "",
