@@ -1,5 +1,15 @@
 # 交通服務水準分析系統－GitHub Pages 發布說明
 
+## v2.20.3 結論草稿的條件範本納入備份範圍
+
+- 未變更任何服務水準門檻、代表紀錄選取、總延滯計算或操作功能。
+- `projectPackage()` 與「個人全部計畫包」補上 `conclusionTemplates`；
+  匯入專案包時把該計畫的條件範本寫回 `state.conclusionTemplates[計畫代碼]`。
+- 只有備份檔實際帶著 `conclusionTemplates` 陣列時才覆蓋，避免匯入舊版包時
+  把本機既有的範本抹成 `undefined`。
+- 新增 `backup-completeness.test.mjs`（4 項）：以清單比對確認匯出／匯入
+  兩端都收齊使用者自訂的設定，日後新增設定卻忘了收進備份會在這裡失敗。
+
 ## v2.20.2 Excel 解析的邊界防護
 
 - 未變更任何服務水準門檻、代表紀錄選取、總延滯計算或操作功能；畫面行為與 v2.20.1 相同。

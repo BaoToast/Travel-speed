@@ -146,7 +146,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.2";
+document.querySelector(".brand small").textContent = "正式版 v2.20.3";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +157,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.2.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.2.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.3.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.3.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -1952,6 +1952,15 @@ function projectPackage() {
     anomalyRule: state.anomalyRules[p.code] || null,
     reportDrafts,
     losRule: rulesFor(p.code),
+    /*
+     * 結論草稿的「條件範本」也要跟著專案包走。
+     *
+     * 它存在 state.conclusionTemplates[計畫代碼]，本機是有存的，
+     * 但**匯出的專案包原本沒有收**——使用者在 A 電腦存好幾組常用條件，
+     * 帶到 B 電腦匯入之後範本一個都不在，而畫面只會說匯入成功。
+     * 那些條件是使用者自己一項一項勾出來的，重建很花時間。
+     */
+    conclusionTemplates: (state.conclusionTemplates || {})[p.code] || [],
   };
 }
 function downloadProjectPackage(note = true) {
@@ -1994,6 +2003,8 @@ portfolioBtn.onclick = () => {
         reportDrafts: state.reportDrafts,
         operations: state.operations,
         losRules: state.losRules,
+        /* 條件範本（依計畫代碼分組），理由同 projectPackage。 */
+        conclusionTemplates: state.conclusionTemplates || {},
       },
       null,
       2,
@@ -2054,6 +2065,13 @@ $("restoreFile").onchange = async (e) => {
        */
       if (x.losRule) state.losRules[x.project.code] = x.losRule;
       else delete state.losRules[x.project.code];
+      /*
+       * 條件範本：專案包裡有就帶進來。沒有（舊版的專案包）就維持這台電腦
+       * 原本的，不要清空——把使用者已經存好的範本刪掉比不還原更糟。
+       */
+      state.conclusionTemplates = state.conclusionTemplates || {};
+      if (Array.isArray(x.conclusionTemplates))
+        state.conclusionTemplates[x.project.code] = x.conclusionTemplates;
     } else if (x.kind === "TLM_PORTFOLIO_PACKAGE") {
       state = { ...emptyState(), ...x, activeCode: x.projects?.[0]?.code || "", manager };
     } else if (looksLikeLegacyBackup(x)) {

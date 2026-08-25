@@ -30,7 +30,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = join(here, "manual.html");
-const out = join(here, "..", "manuals", "交通服務水準分析系統_新手使用手冊_v2.20.2.docx");
+const out = join(here, "..", "manuals", "交通服務水準分析系統_新手使用手冊_v2.20.3.docx");
 
 const NAVY = "17324D";
 const TEAL = "148C8C";
@@ -426,7 +426,7 @@ for (const block of blocks) {
 
 const doc = new Document({
   creator: "全日交通量及車種組成",
-  title: "交通服務水準分析系統 新手使用手冊 v2.20.2",
+  title: "交通服務水準分析系統 新手使用手冊 v2.20.3",
   description: "適合完全沒有交通背景的新手，從匯入、檢查、分析到報表輸出與備份。",
   styles: {
     default: {
@@ -480,7 +480,7 @@ const doc = new Document({
               spacing: { before: 0 },
               children: [
                 new TextRun({
-                  text: "v2.20.2 ｜ 2026-08-24 ｜ 使用前請先下載專案包備份　　第 ",
+                  text: "v2.20.3 ｜ 2026-08-24 ｜ 使用前請先下載專案包備份　　第 ",
                   font: FONT,
                   size: 15,
                   color: MUTED,
