@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** 封面戳記長這樣：`系統版本：v2.20.4　更新日期：2026-08-26` */
+/** 封面戳記長這樣：`系統版本：v2.20.5　更新日期：2026-08-26` */
 const STAMP = /系統版本：\s*v([\d.]+)\s*[\s　]*更新日期：\s*(\d{4}-\d{2}-\d{2})/;
 
 /**
