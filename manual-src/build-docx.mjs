@@ -8,6 +8,7 @@ import { chromium } from "playwright";
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { manualRelease, footerPrefix, manualBaseName } from "./release.mjs";
 import {
   AlignmentType,
   BorderStyle,
@@ -30,7 +31,9 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = join(here, "manual.html");
-const out = join(here, "..", "manuals", "交通服務水準分析系統_新手使用手冊_v2.20.3.docx");
+/* 版號與日期一律取自 manual.html 的封面戳記，這裡不寫死（見 release.mjs）。 */
+const release = manualRelease();
+const out = join(here, "..", "manuals", `${manualBaseName(release)}.docx`);
 
 const NAVY = "17324D";
 const TEAL = "148C8C";
@@ -426,7 +429,7 @@ for (const block of blocks) {
 
 const doc = new Document({
   creator: "全日交通量及車種組成",
-  title: "交通服務水準分析系統 新手使用手冊 v2.20.3",
+  title: `交通服務水準分析系統 新手使用手冊 v${release.version}`,
   description: "適合完全沒有交通背景的新手，從匯入、檢查、分析到報表輸出與備份。",
   styles: {
     default: {
@@ -480,7 +483,7 @@ const doc = new Document({
               spacing: { before: 0 },
               children: [
                 new TextRun({
-                  text: "v2.20.3 ｜ 2026-08-24 ｜ 使用前請先下載專案包備份　　第 ",
+                  text: footerPrefix(release),
                   font: FONT,
                   size: 15,
                   color: MUTED,

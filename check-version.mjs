@@ -82,6 +82,41 @@ for (const [, version, ext] of manualRefs) {
 const strays = manuals.filter((n) => !n.includes(`_v${shown}.`));
 ok("manuals 目錄沒有殘留舊版手冊", strays.length === 0, strays.join("、"));
 
+// 6b) 手冊的版號與日期：只能有一個來源，而且要和 app.js 對得上
+/*
+ * v2.20.3 出過事：手冊封面戳記寫「更新日期：2026-08-25」，每一頁頁尾卻印
+ * 「2026-08-24」。因為兩支產生程式各自把版號與日期寫死，升版時用字串取代去改，
+ * 比對不到就靜靜失敗——而**日期完全沒有人在看**，版號檢查照樣全綠。
+ *
+ * 現在頁尾與檔名都由 manual.html 的封面戳記推導（見 manual-src/release.mjs），
+ * 結構上不可能不一致。這裡把剩下的那一段接起來：戳記要等於 app.js 的版號，
+ * 並確認那兩支產生程式裡真的沒有寫死的版號或日期可以漏改。
+ */
+const manualSrc = ["manual-src/build-pdf.mjs", "manual-src/build-docx.mjs"];
+const stampSource = read("manual-src/manual.html");
+const stamp = stampSource.match(
+  /系統版本：\s*v([\d.]+)\s*[\s　]*更新日期：\s*(\d{4}-\d{2}-\d{2})/,
+);
+ok("manual.html 找得到版本戳記", Boolean(stamp), stamp ? `v${stamp[1]}／${stamp[2]}` : "");
+ok(
+  "手冊封面戳記的版號與程式寫入的相同",
+  Boolean(stamp) && stamp[1] === shown,
+  `手冊 v${stamp?.[1]} vs 顯示 v${shown}`,
+);
+for (const name of manualSrc) {
+  const body = read(name);
+  const hardcoded = [
+    ...body.matchAll(/v\d+\.\d+(?:\.\d+)?\s*｜/g),
+    ...body.matchAll(/\d{4}-\d{2}-\d{2}/g),
+    ...body.matchAll(/新手使用手冊_v\d+\.\d+(?:\.\d+)?/g),
+  ].map((m) => m[0]);
+  ok(
+    `${name} 沒有寫死版號或日期（必須取自封面戳記）`,
+    hardcoded.length === 0,
+    hardcoded.join("、"),
+  );
+}
+
 // 7) 任何原始檔都不該再出現舊版號
 const olderPattern = new RegExp(`v(?!${shown.replaceAll(".", "\\.")})\\d+\\.\\d+(?:\\.\\d+)?`, "g");
 for (const name of [...scripts, "index.html"]) {
