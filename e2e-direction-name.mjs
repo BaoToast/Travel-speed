@@ -285,6 +285,52 @@ ok("Manager 比較顯示專案包裡的方向名稱", managerText.includes(NAME_
 ok("Manager 比較沒有殘留裸的方向鍵值", !BARE_KEY.test(managerText),
   (managerText.match(BARE_KEY)?.[0] || "").trim());
 
+/*
+ * ── 使用者回報：Manager 比較裡「方向1／方向2 混雜著改好的名稱」──
+ *
+ * 成因是 roadMeta 的項目「存在」不等於「取過名字」：設定路段有效期間時會寫進
+ * { directionA: "方向1", directionB: "方向2", startPeriod, endPeriod }，那是佔位值。
+ * 舊寫法只要包裡有項目就用包裡的，於是佔位值擋掉了本機真正取好的名稱，
+ * 同一個計畫裡有些路段顯示名稱、有些顯示鍵值。
+ */
+const mgrMix = await page.evaluate(() => {
+  const CODE = "MIXCODE";
+  const roadNamed = "示範路A(起~迄)";
+  const roadPlaceholder = "示範路B(起~迄)";
+  const roadNoMeta = "示範路C(起~迄)";
+  const roads = [roadNamed, roadPlaceholder, roadNoMeta];
+  const mk = (road, dir) => ({ projectCode: CODE, projectName: "混雜測試", period: "111Q3",
+    road, day: "平日", peak: "上午尖峰", direction: dir, travel: 31.1, totalDelay: 318, los: "B" });
+  const summaries = [];
+  roads.forEach((r) => { summaries.push(mk(r, "方向1")); summaries.push(mk(r, "方向2")); });
+  state.manager = [{ kind: "TLM_PROJECT_PACKAGE", project: { code: CODE, name: "混雜測試" },
+    summaries, details: [], importedAt: "2026-08-27",
+    roadMeta: {
+      /* 匯出當時已經取好名字 */
+      [`${CODE}|${roadNamed}`]: { directionA: "南-北(北上)", directionB: "北-南(南下)", startPeriod: "", endPeriod: "" },
+      /* 匯出當時只設定過有效期間，名字還是佔位值 */
+      [`${CODE}|${roadPlaceholder}`]: { directionA: "方向1", directionB: "方向2", startPeriod: "111Q3", endPeriod: "112Q1" },
+      /* roadNoMeta 完全沒有項目 */
+    } }];
+  /* 本機這個計畫三個路段都已經改好名字 */
+  roads.forEach((r) => {
+    state.roadMeta[`${CODE}|${r}`] = { directionA: "南-北(北上)", directionB: "北-南(南下)", startPeriod: "", endPeriod: "" };
+  });
+  return managerAllRows()
+    .filter((r) => r.projectCode === CODE)
+    .map((r) => `${r.road}|${r.direction}|${managerDirectionName(r)}`);
+});
+ok(
+  "Manager 比較不會被「有項目但沒名字」的佔位值擋住本機取好的名稱",
+  mgrMix.length === 6 && mgrMix.every((x) => !/\|方向[12]$/.test(x)),
+  mgrMix.filter((x) => /\|方向[12]$/.test(x)).join("、") || mgrMix[0],
+);
+ok(
+  "專案包裡有取過名字時，優先採用包裡的（那是資料提供者自己的命名）",
+  mgrMix[0].endsWith("南-北(北上)"),
+  mgrMix[0],
+);
+
 ok("沒有 JS 例外", errors.length === 0, errors.slice(0, 2).join(" | "));
 
 await browser.close();

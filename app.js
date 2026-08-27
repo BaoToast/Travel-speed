@@ -146,7 +146,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.6";
+document.querySelector(".brand small").textContent = "正式版 v2.20.8";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +157,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.6.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.6.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.8.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.8.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -1441,12 +1441,41 @@ function rowDirectionName(row) {
   const name = directionName(row.road, row.direction, row.projectCode);
   return name === row.direction ? row.directionText || name : name;
 }
+/**
+ * 這一份 roadMeta 到底有沒有「真的取過名字」。
+ *
+ * ⚠️ 「有沒有這個項目」不等於「有沒有取過名字」。roadMeta 的項目可能只是設定
+ * 路段有效期間時順手建立的，內容是
+ * `{ directionA: "方向1", directionB: "方向2", startPeriod, endPeriod }`
+ * ——那兩個是**佔位值**，不是使用者取的名稱。
+ */
+function hasRealDirectionName(meta, direction) {
+  if (!meta) return false;
+  const name = directionNameFrom(meta, direction);
+  return !!name && name !== direction;
+}
+/*
+ * Manager 比較的資料來自專案包，命名跟著那個包走，不在本機的 state.roadMeta 裡。
+ *
+ * ⚠️ 判斷順序不能寫成「包裡有項目就用包裡的」。使用者實際遇到的畫面是：同一個
+ * 計畫裡有些路段顯示「南-北(北上)」、有些還是「方向1」。成因就是這個——匯出專案包
+ * 的當下，某些路段的 roadMeta 只是設定有效期間時建立的佔位項目，名字還是「方向1」；
+ * 那個項目是「有值」的，於是擋掉了本機同一個計畫真正取好的名稱。
+ *
+ * 正確的規則是**挑真的有名字的那一份**：
+ *   1. 專案包裡有取過名字 → 用它（那是資料提供者自己的命名，最準）
+ *   2. 否則看本機同一個計畫有沒有取過（同一台電腦既是 Project 又是 Manager 很常見）
+ *   3. 都沒有 → 顯示鍵值
+ */
 function managerDirectionName(row) {
   const key = `${row.projectCode}|${row.road}`;
-  return directionNameFrom(
-    (row.packageRoadMeta && row.packageRoadMeta[key]) || state.roadMeta[key],
-    row.direction,
-  );
+  const fromPackage = row.packageRoadMeta ? row.packageRoadMeta[key] : null;
+  const fromLocal = state.roadMeta[key];
+  if (hasRealDirectionName(fromPackage, row.direction))
+    return directionNameFrom(fromPackage, row.direction);
+  if (hasRealDirectionName(fromLocal, row.direction))
+    return directionNameFrom(fromLocal, row.direction);
+  return directionNameFrom(fromPackage || fromLocal, row.direction);
 }
 function projectAliases() {
   const prefix = `${state.activeCode}|`;

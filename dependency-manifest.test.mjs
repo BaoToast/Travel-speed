@@ -113,6 +113,13 @@ test("完整驗證會先建立匿名測資，而且不依賴交付包外部資�
   }
 });
 
+test("交付包不可再帶入已過時的 GPT Site 交接說明", async () => {
+  await assert.rejects(
+    access(new URL("給Claude的交接說明_v2.20.1.md", root)),
+    "舊交接說明仍宣稱 GPT Site 維持原網址，會誤導後續維護",
+  );
+});
+
 test("瀏覽器與測試端使用同一版 SheetJS 0.20.3", async () => {
   const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
   assert.match(pkg.devDependencies.xlsx, /xlsx-0\.20\.3/, "測試端 SheetJS 不是 0.20.3");
