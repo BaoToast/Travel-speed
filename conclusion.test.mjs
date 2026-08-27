@@ -299,3 +299,95 @@ test("整體模式下每一個指標單獨勾選也都要有輸出（逐一檢�
       );
   }
 });
+
+/*
+ * ── 方向顯示名稱（v2.20.6）──
+ *
+ * 使用者在「路段管理 → 方向顯示名稱」替路段的方向命名之後，草稿寫的必須是
+ * 那個名稱。v2.20.5 這裡全部直接印 row.direction，於是明細、彙總、速限表
+ * 顯示新名稱，草稿卻還是「方向1／方向2」——同一份資料兩種寫法。
+ *
+ * 鍵值（row.direction）不能被換掉：條件範本存的是鍵值，換掉會讓使用者
+ * 已經存好的範本全部篩不到資料。
+ */
+test("代表紀錄那一行寫的是方向顯示名稱，不是鍵值", () => {
+  const text = buildSpeedConclusion(
+    [row({ directionLabel: "東-西(西行)" })],
+    cond({ metrics: ["los"] }),
+    META,
+  );
+  assert.match(text, /上午尖峰・東-西\(西行\)/);
+  assert.doesNotMatch(text, /上午尖峰・方向1/);
+});
+
+test("沒有 directionLabel 時維持鍵值（舊資料照舊，行為不變）", () => {
+  const text = buildSpeedConclusion([row()], cond({ metrics: ["los"] }), META);
+  assert.match(text, /上午尖峰・方向1/);
+});
+
+test("統計範圍那一行的方向也寫名稱", () => {
+  const text = buildSpeedConclusion(
+    [
+      row({ direction: "方向1", directionLabel: "東-西(西行)" }),
+      row({ direction: "方向2", directionLabel: "西-東(東行)" }),
+    ],
+    cond({ metrics: ["los"] }),
+    META,
+  );
+  assert.match(text, /方向：東-西\(西行\)、西-東\(東行\)。/);
+  assert.doesNotMatch(text, /方向：方向1/);
+});
+
+test("季度變動幅度、最差路段、最快最慢三段都寫名稱", () => {
+  const rows = [
+    row({ period: "115Q1", directionLabel: "東-西(西行)", travel: 20, los: "E" }),
+    row({ period: "115Q2", directionLabel: "東-西(西行)", travel: 30, los: "C" }),
+  ];
+  const text = buildSpeedConclusion(
+    rows,
+    cond({ metrics: ["los", "growth", "worst", "extremes"] }),
+    META,
+  );
+  // 變動幅度（跨季度那一行）、最差路段、最快最慢三段都要在
+  assert.match(text, /由 115Q1 至 115Q2/);
+  assert.match(text, /服務水準最差的路段/);
+  assert.match(text, /旅行速率的最快與最慢/);
+  // 三段各自寫的方向都必須是名稱
+  assert.match(text, /・上午尖峰・東-西\(西行\)：由 115Q1 至 115Q2/);
+  assert.match(text, /服務水準最差為 E：[^\n]*・東-西\(西行\)）/);
+  assert.match(text, /旅行速率最快為[^\n]*・東-西\(西行\)）/);
+  assert.doesNotMatch(text, /・方向1/);
+});
+
+test("方向文字與顯示名稱相同時不會括號重複一次", () => {
+  const same = "大同路口--->中正路口";
+  const text = buildSpeedConclusion(
+    [row({ directionLabel: same, directionText: same })],
+    cond({ metrics: ["directionText"] }),
+    META,
+  );
+  assert.doesNotMatch(text, /大同路口--->中正路口（大同路口--->中正路口）/);
+  assert.match(text, /上午尖峰・大同路口--->中正路口。/);
+});
+
+test("方向文字與顯示名稱不同時，兩個都要寫出來", () => {
+  const text = buildSpeedConclusion(
+    [row({ directionLabel: "東-西(西行)" })],
+    cond({ metrics: ["directionText"] }),
+    META,
+  );
+  assert.match(text, /東-西\(西行\)（大同路口--->中正路口）/);
+});
+
+test("方向篩選用的是鍵值，取了顯示名稱也不受影響", () => {
+  const rows = [
+    row({ direction: "方向1", directionLabel: "東-西(西行)" }),
+    row({ direction: "方向2", directionLabel: "西-東(東行)" }),
+  ];
+  assert.equal(selectSpeedConclusionRows(rows, cond({ directions: ["方向1"] })).length, 1);
+  // 用顯示名稱當條件應該篩不到——證明鍵值沒有被顯示名稱取代。
+  assert.equal(
+    selectSpeedConclusionRows(rows, cond({ directions: ["東-西(西行)"] })).length,
+    0,
+  );
+});

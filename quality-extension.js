@@ -1020,8 +1020,40 @@
   let conclusionEdited = false;
   let conclusionOwner = null;
 
+  /*
+   * 結論草稿的每一行都要寫方向。conclusion.js 是純組字模組，拿不到 state，
+   * 所以顯示名稱在這裡先解析好，多帶一個 directionLabel 欄位進去。
+   *
+   * 篩選條件（conclusionCondition.directions）仍然存鍵值「方向1／方向2」，
+   * 已經存好的條件範本不受影響，路段改名也不會讓舊範本失效。
+   */
   function conclusionRows() {
-    return activeRows();
+    return activeRows().map((row) => ({
+      ...row,
+      directionLabel: rowDirectionName(row),
+    }));
+  }
+
+  /*
+   * 方向勾選框的標籤。
+   *
+   * 名稱是「每個路段各自命名」的，而這個勾選框是跨路段的篩選條件，
+   * 所以不能直接拿某一個路段的名稱當標籤。全部路段都叫同一個名字時才寫出來，
+   * 有不一樣的就老實說「各路段名稱不同」——寧可寫得長一點，也不要挑一個
+   * 名稱出來，讓使用者以為篩的只有那個路段。
+   */
+  function directionChoiceLabel(rows, direction) {
+    const names = [
+      ...new Set(
+        rows
+          .filter((row) => row.direction === direction)
+          .map((row) => directionName(row.road, row.direction, row.projectCode)),
+      ),
+    ];
+    if (!names.length || (names.length === 1 && names[0] === direction))
+      return direction;
+    if (names.length === 1) return `${direction}／${names[0]}`;
+    return `${direction}（各路段名稱不同）`;
   }
 
   function conclusionTemplates() {
@@ -1032,14 +1064,18 @@
     return state.conclusionTemplates[key];
   }
 
-  function checkboxGroup(host, values, selected, onToggle) {
+  /*
+   * labelOf 只換顯示字，勾選送回去的永遠是 values 裡的原值（篩選鍵值）。
+   * 兩者一定要分開，否則路段一改名，使用者存好的條件範本就全部篩不到資料。
+   */
+  function checkboxGroup(host, values, selected, onToggle, labelOf) {
     if (!host) return;
     host.innerHTML = values
       .map(
         (value, index) =>
           `<label><input type="checkbox" data-index="${index}" ${
             selected.indexOf(value) >= 0 ? "checked" : ""
-          }>${safe(value)}</label>`,
+          }>${safe(labelOf ? labelOf(value) : value)}</label>`,
       )
       .join("");
     host.querySelectorAll("input").forEach((input) => {
@@ -1104,6 +1140,7 @@
         toggleIn(conclusionCondition.directions, value);
         renderConclusion();
       },
+      (value) => directionChoiceLabel(rows, value),
     );
     checkboxGroup(
       q("conclusionDays"),

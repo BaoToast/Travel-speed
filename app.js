@@ -146,7 +146,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.5";
+document.querySelector(".brand small").textContent = "正式版 v2.20.6";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +157,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.5.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.5.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.6.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.6.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -427,7 +427,7 @@ roadAdminButton.onclick = () => go("roadadmin");
 const roadAdminSection = document.createElement("section");
 roadAdminSection.id = "roadadmin";
 roadAdminSection.className = "view";
-roadAdminSection.innerHTML = `<div class="title"><div><span class="eyebrow">ROAD DIRECTORY</span><h2>路段管理</h2><p>集中管理正式名稱、方向名稱、檔名別名與重複路段。合併前會先顯示影響範圍。</p></div><button class="outline" id="roadAdminBackup">下載合併前備份</button></div><div class="metrics compact road-metrics"><article><span>正式路段</span><b id="roadCount">0</b></article><article><span>檔名別名</span><b id="aliasCount">0</b></article><article><span>涵蓋季度</span><b id="roadPeriodCount">0</b></article></div><div class="road-admin-grid"><article class="panel form"><h3>修改正式名稱</h3><label>目前路段<select id="renameRoad"></select></label><label>新的正式名稱<input id="formalRoadName" placeholder="例如：中正一路（民族路～民權路）"></label><button class="primary full" id="previewRename">預覽修改影響</button></article><article class="panel form"><h3>方向顯示名稱</h3><label>路段<select id="directionRoad"></select></label><div class="row"><label>方向A名稱<input id="directionA" placeholder="例如：東→西"></label><label>方向B名稱<input id="directionB" placeholder="例如：西→東"></label></div><button class="primary full" id="saveDirections">儲存方向名稱</button></article><article class="panel form"><h3>設定檔名別名</h3><label>檔名中可能出現的名稱<input id="aliasName" placeholder="例如：中正路"></label><label>自動對應正式路段<select id="aliasTarget"></select></label><button class="primary full" id="addAlias">新增或更新別名</button></article><article class="panel form"><h3>合併重複路段</h3><label>來源路段<select id="mergeSource"></select></label><label>合併至<select id="mergeTarget"></select></label><button class="outline full" id="previewMerge">顯示合併影響</button></article></div><div id="roadImpact" class="panel impact-panel"><b>尚未預覽修改</b><p>請先選擇路段並按「預覽」，系統不會立即改動資料。</p><button class="danger-button" id="confirmRoadChange" disabled>備份後確認執行</button></div><div class="panel"><div class="panel-head"><div><h3>正式路段清冊</h3><small>方向名稱只改變顯示，不改變原始方向鍵值。</small></div></div><div class="table-wrap"><table><thead><tr><th>正式路段</th><th>方向A</th><th>方向B</th><th>季度</th><th>明細筆數</th><th>別名數</th></tr></thead><tbody id="roadAdminRows"></tbody></table></div></div><div class="panel"><div class="panel-head"><div><h3>檔名別名清冊</h3><small>匯入時若檔名符合別名，會自動併入指定正式路段。</small></div></div><div class="table-wrap"><table><thead><tr><th>檔名別名</th><th>對應正式路段</th><th>操作</th></tr></thead><tbody id="aliasRows"></tbody></table></div></div>`;
+roadAdminSection.innerHTML = `<div class="title"><div><span class="eyebrow">ROAD DIRECTORY</span><h2>路段管理</h2><p>集中管理正式名稱、方向名稱、檔名別名與重複路段。合併前會先顯示影響範圍。</p></div><button class="outline" id="roadAdminBackup">下載合併前備份</button></div><div class="metrics compact road-metrics"><article><span>正式路段</span><b id="roadCount">0</b></article><article><span>檔名別名</span><b id="aliasCount">0</b></article><article><span>涵蓋季度</span><b id="roadPeriodCount">0</b></article></div><div class="road-admin-grid"><article class="panel form"><h3>修改正式名稱</h3><label>目前路段<select id="renameRoad"></select></label><label>新的正式名稱<input id="formalRoadName" placeholder="例如：中正一路（民族路～民權路）"></label><button class="primary full" id="previewRename">預覽修改影響</button></article><article class="panel form"><h3>方向顯示名稱</h3><label>路段<select id="directionRoad"></select></label><div class="row"><label>方向1名稱<input id="directionA" placeholder="例如：東→西"></label><label>方向2名稱<input id="directionB" placeholder="例如：西→東"></label></div><button class="primary full" id="saveDirections">儲存方向名稱</button></article><article class="panel form"><h3>設定檔名別名</h3><label>檔名中可能出現的名稱<input id="aliasName" placeholder="例如：中正路"></label><label>自動對應正式路段<select id="aliasTarget"></select></label><button class="primary full" id="addAlias">新增或更新別名</button></article><article class="panel form"><h3>合併重複路段</h3><label>來源路段<select id="mergeSource"></select></label><label>合併至<select id="mergeTarget"></select></label><button class="outline full" id="previewMerge">顯示合併影響</button></article></div><div id="roadImpact" class="panel impact-panel"><b>尚未預覽修改</b><p>請先選擇路段並按「預覽」，系統不會立即改動資料。</p><button class="danger-button" id="confirmRoadChange" disabled>備份後確認執行</button></div><div class="panel"><div class="panel-head"><div><h3>正式路段清冊</h3><small>方向名稱只改變顯示，不改變原始方向鍵值；命名後全站（明細、彙總、速限、Manager 比較、報告與結論草稿、CSV）都會改用新名稱。</small></div></div><div class="table-wrap"><table><thead><tr><th>正式路段</th><th>方向1</th><th>方向2</th><th>季度</th><th>明細筆數</th><th>別名數</th></tr></thead><tbody id="roadAdminRows"></tbody></table></div></div><div class="panel"><div class="panel-head"><div><h3>檔名別名清冊</h3><small>匯入時若檔名符合別名，會自動併入指定正式路段。</small></div></div><div class="table-wrap"><table><thead><tr><th>檔名別名</th><th>對應正式路段</th><th>操作</th></tr></thead><tbody id="aliasRows"></tbody></table></div></div>`;
 document.querySelector("#speed").before(roadAdminSection);
 const roadPeriodPanel = document.createElement("article");
 roadPeriodPanel.className = "panel form road-period-panel";
@@ -1401,13 +1401,52 @@ function roadIsActive(road, period, code = state.activeCode) {
     (startIndex < 0 || p >= startIndex) && (endIndex < 0 || p <= endIndex)
   );
 }
+/*
+ * 方向的顯示名稱只有這一支可以決定，全站每一個要把方向寫給人看的地方
+ * ——畫面表格、下拉與勾選框、CSV、結論草稿、報告草稿、健康檢查說明——
+ * 都必須走這裡。
+ *
+ * 之前有一半的地方直接印 row.direction，結果使用者替路段命名之後，
+ * 明細與速限表顯示新名稱、Manager 比較與結論草稿卻還是「方向1／方向2」，
+ * 同一份資料在同一個系統裡有兩種寫法，看的人無從判斷哪一個才對。
+ *
+ * 鍵值永遠是「方向1」「方向2」（原始報告就是這樣寫的），不會因為改名而變動；
+ * 這裡只換顯示字。沒有自訂名稱時就回鍵值本身。
+ */
+function directionNameFrom(meta, direction) {
+  if (direction === "方向1") return (meta && meta.directionA) || "方向1";
+  if (direction === "方向2") return (meta && meta.directionB) || "方向2";
+  return direction;
+}
 function directionName(road, direction, code = state.activeCode) {
-  const m = roadMeta(road, code);
-  return direction === "方向1"
-    ? m.directionA || "方向1"
-    : direction === "方向2"
-      ? m.directionB || "方向2"
-      : direction;
+  return directionNameFrom(roadMeta(road, code), direction);
+}
+/*
+ * Manager 比較的資料來自別人的專案包，命名是跟著那個包走的，
+ * 不在本機的 state.roadMeta 裡。先讀包內的 roadMeta，讀不到才退回本機
+ * （同一台電腦同時是 Project 又是 Manager 時會用到）。
+ */
+/*
+ * 一筆明細要顯示的方向。
+ *
+ * 使用者在「路段管理」設的名稱**永遠優先**。原本尖峰明細寫的是
+ * `x.directionText || directionName(...)`，也就是報告上的起訖文字排在前面，
+ * 於是使用者改名之後，彙總與速限表換了、明細沒換——同一個方向在相鄰兩張表
+ * 上有兩個名字。
+ *
+ * 沒有設定名稱時（例如很舊的備份還原進來，roadMeta 是空的）才退回報告上的
+ * 起訖文字，那比「方向1」有用；兩者都沒有就是鍵值本身。
+ */
+function rowDirectionName(row) {
+  const name = directionName(row.road, row.direction, row.projectCode);
+  return name === row.direction ? row.directionText || name : name;
+}
+function managerDirectionName(row) {
+  const key = `${row.projectCode}|${row.road}`;
+  return directionNameFrom(
+    (row.packageRoadMeta && row.packageRoadMeta[key]) || state.roadMeta[key],
+    row.direction,
+  );
 }
 function projectAliases() {
   const prefix = `${state.activeCode}|`;
@@ -1672,7 +1711,7 @@ function renderDetails() {
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(x.directionText || directionName(x.road, x.direction, x.projectCode))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, Number.isInteger(Number(x.limit)) ? 0 : 1)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, Number.isInteger(Number(x.limit)) ? 0 : 1)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰明細</td></tr>';
@@ -1890,7 +1929,19 @@ function csv(rows, name) {
   );
 }
 $("exportDetail").onclick = () =>
-  csv(state.details.filter((x) => x.projectCode === state.activeCode));
+  csv(
+    /*
+     * CSV 是照欄位原樣倒出去的，direction 一定是鍵值（方向1／方向2）。
+     * 交出去的檔案只有鍵值，收的人看不出哪個方向是哪一邊，所以另外補一欄
+     * 顯示名稱。鍵值那一欄保留不動，既有的比對流程不受影響。
+     */
+    state.details
+      .filter((x) => x.projectCode === state.activeCode)
+      .map((x) => ({
+        ...x,
+        directionLabel: directionName(x.road, x.direction, x.projectCode),
+      })),
+  );
 /**
  * 觸發瀏覽器下載。
  * 連結一定要先掛進文件再點擊：部分瀏覽器對「沒有掛進 DOM」的 <a> 會忽略
@@ -2195,6 +2246,15 @@ $("managerFiles").onchange = async (e) => {
                 project,
                 details: (p.details || []).filter((x) => x.projectCode === project.code),
                 summaries: (p.summaries || []).filter((x) => x.projectCode === project.code),
+                /*
+                 * 組合包原本只拆 details 與 summaries，roadMeta 整份被丟掉——
+                 * 一次匯入多個計畫時，方向名稱一個都不會出現，而畫面只會說匯入成功。
+                 */
+                roadMeta: Object.fromEntries(
+                  Object.entries(p.roadMeta || {}).filter(([k]) =>
+                    k.startsWith(`${project.code}|`),
+                  ),
+                ),
               }))
             : [p];
       for (const pack of packs) {
@@ -2249,7 +2309,12 @@ function syncOptions(id, items, allLabel) {
 }
 function managerAllRows() {
   return state.manager.flatMap((p) =>
-    (p.summaries || []).map((x) => ({ ...x, packageProject: p.project })),
+    (p.summaries || []).map((x) => ({
+      ...x,
+      packageProject: p.project,
+      // 方向名稱是跟著專案包走的，這裡不接起來，Manager 就永遠只看得到鍵值。
+      packageRoadMeta: p.roadMeta || null,
+    })),
   );
 }
 function managerFilteredRows() {
@@ -2338,7 +2403,7 @@ function renderManager() {
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(x.direction)}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(managerDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="9" class="empty">目前篩選條件沒有資料</td></tr>';
@@ -2560,7 +2625,7 @@ function inspectHealth() {
         road: d.road,
         day: d.day,
         peak: d.peak,
-        item: `${d.road}／${d.day}／${d.peak}／${d.direction}`,
+        item: `${d.road}／${d.day}／${d.peak}／${directionName(d.road, d.direction, d.projectCode)}`,
         detail: "旅行速率、行駛速率、總延滯或速限包含空白、零值或無效數值。",
       });
     /*
@@ -2580,7 +2645,7 @@ function inspectHealth() {
         road: d.road,
         day: d.day,
         peak: d.peak,
-        item: `${d.road}／${d.day}／${d.peak}／${d.direction}`,
+        item: `${d.road}／${d.day}／${d.peak}／${directionName(d.road, d.direction, d.projectCode)}`,
         detail: `旅行速率 ${fmt(d.travel, 1)} km/h 大於行駛速率 ${fmt(d.running, 1)} km/h，物理上不可能（旅行速率含停等時間）。常見原因是讀到隔壁欄位，請核對原始報告。`,
       });
   }

@@ -153,6 +153,25 @@
     });
   }
 
+  /*
+   * 方向要寫「使用者替這個路段取的名稱」，不是鍵值。
+   * app.js 在餵資料進來之前已經把名稱解析好放在 directionLabel；
+   * 這支模組不碰 state，也不做解析，沒有 directionLabel（例如單元測試直接
+   * 餵舊格式的列）就照原本的鍵值寫，行為不變。
+   */
+  function dirLabel(row) {
+    return row.directionLabel || row.direction;
+  }
+
+  function uniqueDirections(rows) {
+    var seen = [];
+    for (var i = 0; i < rows.length; i += 1) {
+      var name = dirLabel(rows[i]);
+      if (seen.indexOf(name) < 0) seen.push(name);
+    }
+    return seen;
+  }
+
   function uniqueBy(rows, field) {
     var seen = [];
     for (var i = 0; i < rows.length; i += 1)
@@ -170,8 +189,15 @@
       "　　" +
       row.peak +
       "・" +
-      row.direction +
-      (wants("directionText") && row.directionText ? "（" + row.directionText + "）" : "") +
+      dirLabel(row) +
+      /*
+       * 沒有命名時，方向的顯示名稱本來就會退回報告上的起訖文字，
+       * 這時候再括號補一次，會寫成「甲路口--->乙路口（甲路口--->乙路口）」。
+       * 只有兩者真的不同才補。
+       */
+      (wants("directionText") && row.directionText && row.directionText !== dirLabel(row)
+        ? "（" + row.directionText + "）"
+        : "") +
       "：";
     var parts = [];
     if (wants("los")) parts.push("服務水準 " + (row.los || "?"));
@@ -219,7 +245,7 @@
       var first = group[0];
       var last = group[group.length - 1];
       var label =
-        "　" + first.road + "（" + first.day + "）・" + first.peak + "・" + first.direction + "：";
+        "　" + first.road + "（" + first.day + "）・" + first.peak + "・" + dirLabel(first) + "：";
       var speed = changeText(first.travel, last.travel, "旅行速率", digits, "km/h");
       var delay = changeText(first.totalDelay, last.totalDelay, "總延滯", digits, "秒");
       lines.push(
@@ -295,7 +321,7 @@
         same
           .slice(0, 5)
           .map(function (row) {
-            return row.period + " " + row.road + "（" + row.day + "・" + row.peak + "・" + row.direction + "）";
+            return row.period + " " + row.road + "（" + row.day + "・" + row.peak + "・" + dirLabel(row) + "）";
           })
           .join("、") +
         (same.length > 5 ? " 等 " + same.length + " 筆" : "") +
@@ -316,7 +342,7 @@
         return sum + Number(row.travel);
       }, 0) / points.length;
     var name = function (row) {
-      return row.period + " " + row.road + "（" + row.day + "・" + row.peak + "・" + row.direction + "）";
+      return row.period + " " + row.road + "（" + row.day + "・" + row.peak + "・" + dirLabel(row) + "）";
     };
     return [
       "　旅行速率最快為 " +
@@ -391,7 +417,7 @@
         "；尖峰：" +
         uniqueBy(rows, "peak").join("、") +
         "；方向：" +
-        uniqueBy(rows, "direction").join("、") +
+        uniqueDirections(rows).join("、") +
         "。",
     );
     out.push(

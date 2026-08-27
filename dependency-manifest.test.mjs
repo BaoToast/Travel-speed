@@ -119,3 +119,95 @@ test("瀏覽器與測試端使用同一版 SheetJS 0.20.3", async () => {
   const vendor = await readFile(new URL("vendor/xlsx.full.min.js", root), "utf8");
   assert.match(vendor, /0\.20\.3/, "瀏覽器端 SheetJS 不是 0.20.3");
 });
+
+/*
+ * 方向顯示名稱：不准再有「直接把鍵值印給人看」的地方（v2.20.6）。
+ *
+ * 這是原始碼層級的守門檢查，補端對端測不到的角落（例如健康檢查的問題說明，
+ * 要湊出資料異常才會出現）。判斷方式是：只要一段字串是要寫給人看的
+ * ——HTML 的 <td>、健康檢查的 item、CSV 欄位——裡面就不可以出現裸的
+ * `.direction`，必須先過 directionName／rowDirectionName／managerDirectionName。
+ *
+ * 鍵值本身的用途（組 id、組速限 key、分組、篩選）不在此限，那些不是給人看的。
+ */
+test("要顯示給人看的方向一律走顯示名稱解析，不直接印鍵值", async () => {
+  const offenders = [];
+  for (const file of ["app.js", "quality-extension.js"]) {
+    const source = await readFile(new URL(file, root), "utf8");
+    source.split("\n").forEach((line, index) => {
+      /* 只看「這一行同時是輸出字串」的情況。 */
+      const rendersToUser =
+        /<t[dh]>/.test(line) || /\bitem:\s*`/.test(line) || /安全|說明|草稿/.test(line);
+      if (!rendersToUser) return;
+      if (/\$\{(?:esc\()?\s*(?:x|d|row|r)\.direction\s*[,)}]/.test(line))
+        offenders.push(`${file}:${index + 1}：${line.trim().slice(0, 110)}`);
+    });
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "以下位置直接把方向鍵值印給使用者看：\n" + offenders.join("\n"),
+  );
+});
+
+test("方向的用詞全站統一為「方向1／方向2」，不再混用「方向A／方向B」", async () => {
+  const offenders = [];
+  for (const file of ["app.js", "index.html", "quality-extension.js", "conclusion.js"]) {
+    const source = await readFile(new URL(file, root), "utf8");
+    source.split("\n").forEach((line, index) => {
+      /* directionA／directionB 是儲存欄位名，不能改（改了舊備份還原不回來）；
+         這裡擋的是寫給人看的中文字樣。 */
+      const text = line.replace(/direction[AB]/g, "");
+      if (/方向[AB]/.test(text))
+        offenders.push(`${file}:${index + 1}：${line.trim().slice(0, 110)}`);
+    });
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "以下位置還在用「方向A／方向B」的說法：\n" + offenders.join("\n"),
+  );
+});
+
+test("directionName 是唯一的方向顯示名稱來源，且鍵值不會被改寫", async () => {
+  const source = await readFile(new URL("app.js", root), "utf8");
+  assert.match(source, /function directionNameFrom\(meta, direction\)/);
+  assert.match(source, /function directionName\(road, direction/);
+  assert.match(source, /function rowDirectionName\(row\)/);
+  assert.match(source, /function managerDirectionName\(row\)/);
+  /* 命名只寫進 roadMeta，永遠不可以去改明細的 direction 欄位。 */
+  assert.doesNotMatch(source, /\.direction\s*=\s*(?!\w*Key)[^=]/);
+});
+
+test("Manager 匯入會把專案包裡的方向名稱一起接進來", async () => {
+  const source = await readFile(new URL("app.js", root), "utf8");
+  assert.match(source, /packageRoadMeta:\s*p\.roadMeta/);
+  /* 組合包（一次多個計畫）原本整份丟掉 roadMeta。 */
+  assert.match(source, /roadMeta:\s*Object\.fromEntries\(/);
+});
+
+test("有 .gitattributes 且關閉換行轉換", async () => {
+  /*
+   * 在 Windows 上取出時 Git 預設會把文字檔轉成 CRLF。姊妹系統實測過後果：
+   * 備份 ZIP 裡每個文字檔都變 CRLF，檔案內容不再等於它自己的雜湊檔名，
+   * 而網站照樣跑得動，完全看不出來。本專案的交付包實測也有 19 個 CRLF 檔。
+   */
+  const text = await readFile(new URL(".gitattributes", root), "utf8");
+  assert.match(text, /^\*\s+-text\s*$/m, ".gitattributes 必須包含 `* -text`");
+});
+
+test("交付的原始碼裡沒有 CRLF", async () => {
+  const offenders = [];
+  for (const file of [
+    "app.js",
+    "conclusion.js",
+    "quality-extension.js",
+    "excel-export.js",
+    "index.html",
+    "package.json",
+  ]) {
+    const text = await readFile(new URL(file, root), "utf8");
+    if (text.includes("\r\n")) offenders.push(file);
+  }
+  assert.deepEqual(offenders, [], "以下檔案含 CRLF：" + offenders.join("、"));
+});
