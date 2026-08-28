@@ -167,6 +167,26 @@ for (const [label, view, selector] of surfaces) {
     (text.match(BARE_KEY)?.[0] || "").trim());
 }
 
+/* Project 的兩個搜尋框也必須吃得到畫面上顯示的方向名稱。 */
+for (const [label, view, input, rows] of [
+  ["尖峰明細", "detail", "#detailSearch", "#detailRows"],
+  ["尖峰彙總", "summary", "#summarySearch", "#summaryRows"],
+]) {
+  await page.evaluate((v) => document.querySelector(`nav [data-view="${v}"]`).click(), view);
+  await page.waitForTimeout(400);
+  await page.fill(input, NAME_1);
+  await page.waitForTimeout(300);
+  const byDirection = (await page.innerText(rows)).replace(/\s+/g, " ").trim();
+  ok(`${label}搜尋框搜得到畫面上顯示的方向名稱`, byDirection.includes(NAME_1),
+    byDirection.slice(0, 80));
+  await page.fill(input, "報告測試路段");
+  await page.waitForTimeout(300);
+  const byRoad = (await page.innerText(rows)).replace(/\s+/g, " ").trim();
+  ok(`${label}原本用路段名稱搜尋仍然有效`, byRoad.includes("報告測試路段"),
+    byRoad.slice(0, 80));
+  await page.fill(input, "");
+}
+
 /* ── 結論草稿產生器：勾選框標籤 ＋ 產生出來的草稿 ── */
 await page.evaluate(() => document.querySelector('[data-view="conclusion"]').click());
 await page.waitForTimeout(800);
@@ -284,6 +304,39 @@ ok("Manager 比較顯示專案包裡的方向名稱", managerText.includes(NAME_
   managerText.replace(/\s+/g, " ").slice(0, 120));
 ok("Manager 比較沒有殘留裸的方向鍵值", !BARE_KEY.test(managerText),
   (managerText.match(BARE_KEY)?.[0] || "").trim());
+
+/*
+ * 搜尋框是這一族缺陷的最後一個出口：畫面上印著正式名稱，
+ * 把它打進搜尋框卻得到「目前篩選條件沒有資料」——因為那個名稱是從
+ * 專案包的 roadMeta 即時解出來的，不在被比對的欄位裡。
+ */
+{
+  const beforeRows = (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim();
+  await page.fill("#managerSearch", NAME_1);
+  await page.waitForTimeout(400);
+  const hit = (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim();
+  ok(
+    "Manager 搜尋框搜得到畫面上顯示的方向名稱",
+    hit.includes(NAME_1) && !/目前篩選條件沒有資料/.test(hit),
+    `搜「${NAME_1}」→ ${hit.slice(0, 80) || "（空）"}`,
+  );
+  /* 原本搜得到的欄位不可以因此變成搜不到（這是「多加一項」不是「換一套」）。 */
+  await page.fill("#managerSearch", "報告測試路段");
+  await page.waitForTimeout(400);
+  const byRoad = (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim();
+  ok("原本用路段名稱搜得到的仍然搜得到", byRoad.includes("報告測試路段"),
+    byRoad.slice(0, 60));
+  /* 內部物件不可以再讓「object」搜到全部資料。 */
+  await page.fill("#managerSearch", "object");
+  await page.waitForTimeout(400);
+  const byObject = (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim();
+  ok("搜「object」不會列出全部資料（內部物件已排除）",
+    /目前篩選條件沒有資料/.test(byObject),
+    byObject.slice(0, 60));
+  await page.fill("#managerSearch", "");
+  await page.waitForTimeout(300);
+  ok("清空搜尋後資料回來", (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim() === beforeRows);
+}
 
 /* Manager 的 CSV 也是給人閱讀的交付物，不能畫面是正式名稱、匯出卻退回鍵值。 */
 const managerCsvText = await page.evaluate(async () => {

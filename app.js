@@ -146,7 +146,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.10";
+document.querySelector(".brand small").textContent = "正式版 v2.20.12";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +157,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.10.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.10.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.12.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.12.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -1764,11 +1764,22 @@ $("previewMerge").onclick = () =>
 function losChip(l) {
   return `<span class="los los-${String(l).toLowerCase()}">${esc(l)}</span>`;
 }
+/**
+ * 建立人員可搜尋的文字，只納入純量欄位，避免內部物件被轉成
+ * "[object Object]"；方向則另外加入畫面實際顯示的名稱。
+ */
+function rowSearchText(row, directionLabel) {
+  const values = Object.values(row).filter(
+    (value) => ["string", "number", "boolean"].includes(typeof value),
+  );
+  if (directionLabel) values.push(directionLabel);
+  return values.join(" ");
+}
 function renderDetails() {
   const q = normalize($("detailSearch")?.value || ""),
     code = state.activeCode;
   const rows = state.details.filter(
-    (x) => x.projectCode === code && (!q || normalize(Object.values(x).join(" ")).includes(q)),
+    (x) => x.projectCode === code && (!q || normalize(rowSearchText(x, rowDirectionName(x))).includes(q)),
   );
   $("detailCount").textContent = `${rows.length} 筆`;
   $("detailRows").innerHTML = rows.length
@@ -1784,7 +1795,7 @@ function renderSummaries() {
   const q = normalize($("summarySearch")?.value || ""),
     code = state.activeCode;
   const rows = state.summaries.filter(
-    (x) => x.projectCode === code && (!q || normalize(Object.values(x).join(" ")).includes(q)),
+    (x) => x.projectCode === code && (!q || normalize(rowSearchText(x, rowDirectionName(x))).includes(q)),
   );
   $("summaryCount").textContent = `${rows.length} 筆`;
   $("summaryRows").innerHTML = rows.length
@@ -2389,6 +2400,31 @@ function managerAllRows() {
     })),
   );
 }
+/**
+ * 一列在 Manager 搜尋框裡可以被搜到的文字。
+ *
+ * 舊版是 `Object.values(x).join(" ")`，有兩個問題：
+ *
+ * 1. **畫面上顯示的方向名稱搜不到。** 那個名稱是 managerDirectionName()
+ *    從專案包的 roadMeta 解出來的，而 roadMeta 掛在 packageRoadMeta 這個
+ *    **物件**上；Object.values(...).join(" ") 會把物件變成 "[object Object]"，
+ *    名稱根本不在可搜尋的字串裡。使用者畫面上看到「南-北(北上)」，
+ *    搜它卻得到「目前篩選條件沒有資料」。
+ * 2. 反過來，packageProject 與 packageRoadMeta 兩個內部物件讓「object」
+ *    這個字可以搜到全部資料。
+ *
+ * 這和方向名稱那一系列是同一族缺陷：**畫面顯示 X、功能操作 Y**。
+ * 尖峰明細、尖峰彙總、Manager 比較的顯示，以及尖峰明細與 Manager 的匯出 CSV
+ * 都已經在前幾版陸續修過；v2.20.12 再把三個搜尋入口統一。
+ *
+ * 這裡是「原有的可搜尋欄位**再加上**顯示名稱」，不是改成「只搜畫面上的欄位」
+ * ——有些欄位（例如站號、資料別）沒有印在表格上但一直搜得到，
+ * 縮小範圍會拿掉使用者既有的用法。
+ */
+function managerSearchText(row) {
+  const { packageProject, packageRoadMeta, ...rest } = row;
+  return rowSearchText(rest, managerDirectionName(row));
+}
 function managerFilteredRows() {
   const all = managerAllRows(),
     project = $("managerProjectFilter").value,
@@ -2402,7 +2438,7 @@ function managerFilteredRows() {
       (!period || x.period === period) &&
       (!day || x.day === day) &&
       (!los || x.los === los) &&
-      (!q || normalize(Object.values(x).join(" ")).includes(q)),
+      (!q || normalize(managerSearchText(x)).includes(q)),
   );
 }
 function renderManagerCharts(rows) {

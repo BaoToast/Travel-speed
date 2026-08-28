@@ -1,6 +1,6 @@
 {
   "name": "travel-speed",
-  "version": "2.20.10",
+  "version": "2.20.12",
   "private": true,
   "description": "交通服務水準分析系統（純靜態網站：HTML + CSS + 原生 JavaScript，無框架、無建置步驟）",
   "scripts": {
