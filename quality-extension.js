@@ -203,7 +203,7 @@
           ),
           w = rows[0];
         return w
-          ? `<tr><td>${safe(item.road)}</td><td>${safe(item.day)}</td><td>${safe(w.peak)}</td><td>${safe(directionName(item.road, w.direction, w.projectCode))}</td><td>${fmt(w.travel, 2)}</td><td>${fmt(w.running, 2)}</td><td>${fmt(w.totalDelay, 2)}</td><td>${losChip(w.los)}</td><td>${safe(w.sourceSheet || "—")}</td></tr>`
+          ? `<tr><td>${safe(item.road)}</td><td>${safe(item.day)}</td><td>${safe(w.peak)}</td><td>${safe(rowDirectionName(w))}</td><td>${fmt(w.travel, 2)}</td><td>${fmt(w.running, 2)}</td><td>${fmt(w.totalDelay, 2)}</td><td>${losChip(w.los)}</td><td>${safe(w.sourceSheet || "—")}</td></tr>`
           : "";
       })
       .join("");
@@ -265,7 +265,7 @@
           .slice(0, 500)
           .map(
             (x) =>
-              `<tr><td>${safe(x.period)}<br>${safe(x.road)}／${safe(x.day)}</td><td>${safe(x.peak)}／${safe(directionName(x.road, x.direction, x.projectCode))}</td><td>${safe(x.sourceFile || x.source || "舊資料未記錄")}</td><td>${safe(x.sourceSheet || "舊資料未記錄")}</td><td>${safe((x.sourceRefs || []).join("、") || "舊資料未記錄")}</td><td>${safe(x.importBatch || "—")}<br><small>${safe(x.sourceHash || "—")}</small></td></tr>`,
+              `<tr><td>${safe(x.period)}<br>${safe(x.road)}／${safe(x.day)}</td><td>${safe(x.peak)}／${safe(rowDirectionName(x))}</td><td>${safe(x.sourceFile || x.source || "舊資料未記錄")}</td><td>${safe(x.sourceSheet || "舊資料未記錄")}</td><td>${safe((x.sourceRefs || []).join("、") || "舊資料未記錄")}</td><td>${safe(x.importBatch || "—")}<br><small>${safe(x.sourceHash || "—")}</small></td></tr>`,
           )
           .join("")
       : '<tr><td colspan="6" class="empty">沒有符合的來源紀錄</td></tr>';
@@ -287,7 +287,7 @@
           const p = k.split("|"),
             dir = p.pop(),
             road = p.pop();
-          return `<option value="${safe(k)}">${safe(road)}／${safe(directionName(road, dir, state.activeCode))}</option>`;
+          return `<option value="${safe(k)}">${safe(road)}／${safe(directionNameFor(road, dir))}</option>`;
         })
         .join("") || '<option value="">尚無路段</option>';
     if (keys.includes(old)) q("versionLimitKey").value = old;
@@ -300,7 +300,7 @@
             const p = v.k.split("|"),
               dir = p.pop(),
               road = p.pop();
-            return `<tr><td>${safe(road)}／${safe(directionName(road, dir, state.activeCode))}</td><td>${v.speed} km/h</td><td>${safe(v.start)}～${safe(v.end || "持續")}</td><td>${safe(v.source || "—")}</td><td>${safe(v.checked || "—")}／${safe(v.by || "—")}</td><td><button class="outline" data-remove-version="${safe(v.k)}" data-version-id="${safe(v.id)}">刪除</button></td></tr>`;
+            return `<tr><td>${safe(road)}／${safe(directionNameFor(road, dir))}</td><td>${v.speed} km/h</td><td>${safe(v.start)}～${safe(v.end || "持續")}</td><td>${safe(v.source || "—")}</td><td>${safe(v.checked || "—")}／${safe(v.by || "—")}</td><td><button class="outline" data-remove-version="${safe(v.k)}" data-version-id="${safe(v.id)}">刪除</button></td></tr>`;
           })
           .join("")
       : '<tr><td colspan="6" class="empty">尚未設定期間版本，沿用上方路段速限</td></tr>';
@@ -744,7 +744,7 @@
           pctText(prev.totalDelay, x.totalDelay, "總延滯");
       }
       lines.push(
-        `${x.period} ${x.road}（${x.day}）服務水準為 ${x.los}，代表紀錄為${x.peak}${directionName(x.road, x.direction, x.projectCode)}，旅行速率 ${fmt(x.travel, 1)} km/h、總延滯 ${fmt(x.totalDelay, 1)} 秒；${change}。`,
+        `${x.period} ${x.road}（${x.day}）服務水準為 ${x.los}，代表紀錄為${x.peak}${rowDirectionName(x)}，旅行速率 ${fmt(x.travel, 1)} km/h、總延滯 ${fmt(x.totalDelay, 1)} 秒；${change}。`,
       );
     }
     lines.push("本段文字由系統依彙總資料自動產生，正式引用前應核對原始檔、速限設定及現地情況。");
@@ -1047,7 +1047,7 @@
       ...new Set(
         rows
           .filter((row) => row.direction === direction)
-          .map((row) => directionName(row.road, row.direction, row.projectCode)),
+          .map((row) => rowDirectionName(row)),
       ),
     ];
     if (!names.length || (names.length === 1 && names[0] === direction))

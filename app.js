@@ -146,7 +146,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.8";
+document.querySelector(".brand small").textContent = "正式版 v2.20.10";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +157,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.8.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.8.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.10.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.10.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -174,7 +174,7 @@ managerButton.onclick = () => go("manager");
 const managerSection = document.createElement("section");
 managerSection.id = "manager";
 managerSection.className = "view";
-managerSection.innerHTML = `<div class="title"><div><span class="eyebrow">MANAGER EDITION</span><h2>跨計畫比較</h2><p>由各同事匯出 Project 專案包，再由管理者匯入；相同計畫編號會更新，不會重複累加。</p></div><label class="primary upload">匯入 Project 專案包<input id="managerFiles" type="file" multiple accept=".json"></label></div><div class="metrics"><article><span>已載入計畫</span><b id="managerProjects">0</b><small>專案包</small></article><article><span>篩選後資料</span><b id="managerRecords">0</b><small>路段日別彙總</small></article><article><span>篩選後路段</span><b id="managerRoads">0</b><small>計畫內去除重複</small></article><article><span>資料期間</span><b id="managerPeriod">—</b><small>篩選結果</small></article></div><div class="panel"><div class="panel-head"><div><h3>已匯入 Project 專案包</h3><small>可個別移除，不影響同事原始 Project</small></div><button class="outline" id="clearManager">全部清除</button></div><div class="table-wrap"><table><thead><tr><th>計畫編號</th><th>計畫名稱</th><th>彙總筆數</th><th>匯入／更新時間</th><th>操作</th></tr></thead><tbody id="managerPackageRows"></tbody></table></div></div><div class="panel manager-data"><div class="manager-filters"><select id="managerProjectFilter"><option value="">全部計畫</option></select><select id="managerPeriodFilter"><option value="">全部季度</option></select><select id="managerDayFilter"><option value="">全部日別</option><option>平日</option><option>假日</option></select><select id="managerLosFilter"><option value="">全部 LOS</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select><input id="managerSearch" placeholder="搜尋路段或計畫"><button class="outline" id="resetManagerFilters">清除篩選</button><button class="primary" id="exportManager">匯出篩選結果</button></div><div class="table-wrap"><table><thead><tr><th>計畫</th><th>期間</th><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>總延滯</th><th>LOS</th></tr></thead><tbody id="managerRows"></tbody></table></div></div><div class="title manager-chart-title"><div><span class="eyebrow">MANAGER CHARTS</span><h2>計畫全路段 LOS 趨勢</h2><p>先於上方選擇一個計畫，再依目前季度、日別及 LOS 篩選產生每路段一張圖。</p></div></div><div id="managerChartHint" class="panel empty-block">請先選擇一個計畫，避免一次載入過多圖表。</div><div id="managerChartGrid" class="chart-grid"></div>`;
+managerSection.innerHTML = `<div class="title"><div><span class="eyebrow">MANAGER EDITION</span><h2>跨計畫比較</h2><p>由各同事匯出 Project 專案包，再由管理者匯入；相同計畫編號會更新，不會重複累加。</p></div><label class="primary upload">匯入 Project 專案包<input id="managerFiles" type="file" multiple accept=".json"></label></div><div class="metrics"><article><span>已載入計畫</span><b id="managerProjects">0</b><small>專案包</small></article><article><span>篩選後資料</span><b id="managerRecords">0</b><small>路段日別彙總</small></article><article><span>篩選後路段</span><b id="managerRoads">0</b><small>計畫內去除重複</small></article><article><span>資料期間</span><b id="managerPeriod">—</b><small>篩選結果</small></article></div><div class="panel"><div class="panel-head"><div><h3>已匯入 Project 專案包</h3><small>可個別移除，不影響同事原始 Project</small></div><button class="outline" id="clearManager">全部清除</button></div><div class="table-wrap"><table><thead><tr><th>計畫編號</th><th>計畫名稱</th><th>彙總筆數</th><th>匯入／更新時間</th><th>操作</th></tr></thead><tbody id="managerPackageRows"></tbody></table></div></div><div id="managerStaleHint" class="panel manager-stale hidden"></div><div class="panel manager-data"><div class="manager-filters"><select id="managerProjectFilter"><option value="">全部計畫</option></select><select id="managerPeriodFilter"><option value="">全部季度</option></select><select id="managerDayFilter"><option value="">全部日別</option><option>平日</option><option>假日</option></select><select id="managerLosFilter"><option value="">全部 LOS</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select><input id="managerSearch" placeholder="搜尋路段或計畫"><button class="outline" id="resetManagerFilters">清除篩選</button><button class="primary" id="exportManager">匯出篩選結果</button></div><div class="table-wrap"><table><thead><tr><th>計畫</th><th>期間</th><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>總延滯</th><th>LOS</th></tr></thead><tbody id="managerRows"></tbody></table></div></div><div class="title manager-chart-title"><div><span class="eyebrow">MANAGER CHARTS</span><h2>計畫全路段 LOS 趨勢</h2><p>先於上方選擇一個計畫，再依目前季度、日別及 LOS 篩選產生每路段一張圖。</p></div></div><div id="managerChartHint" class="panel empty-block">請先選擇一個計畫，避免一次載入過多圖表。</div><div id="managerChartGrid" class="chart-grid"></div>`;
 document.querySelector("#backup").before(managerSection);
 const projectSpeedTitle = document.createElement("div");
 projectSpeedTitle.className = "title speed-chart-title";
@@ -1437,9 +1437,51 @@ function directionName(road, direction, code = state.activeCode) {
  * 沒有設定名稱時（例如很舊的備份還原進來，roadMeta 是空的）才退回報告上的
  * 起訖文字，那比「方向1」有用；兩者都沒有就是鍵值本身。
  */
+/**
+ * 一筆紀錄要顯示的方向名稱——**全系統只有這一支**。
+ *
+ * 順序：專案包裡取過的名字 → 本機取過的名字 → 報告上的「方向往」文字 → 鍵值。
+ *
+ * 第三段（directionText）是獨立的一致性修正：同一筆資料在
+ * 尖峰明細與 Manager 不應出現不同方向名稱。使用者當時看到舊名稱的真正原因
+ * 是 Manager 仍保留舊專案包，並非這個備援邏輯。
+ * 前兩次分別修好了「讓所有畫面都用同一支解析名字」與「佔位值擋住本機取好的名字」，
+ * 但 Manager 比較與尖峰彙總等處**少了報告文字這一層備援**，而尖峰明細有。
+ * 結果同一個計畫、同一張表裡，報告有寫「方向往」的路段顯示成「南-北(北上)」，
+ * 沒寫的顯示成「方向1」——看起來就像「有些改到、有些沒改到」。
+ * 事實上兩者都沒有被使用者命名過，差別只在報告上有沒有那行字。
+ *
+ * packageMeta 只有 Manager 比較會傳（資料來自別人的專案包，命名跟著包走）。
+ */
+function displayDirectionName(row, packageMeta) {
+  const key = roadMetaKey(row.road, row.projectCode);
+  const fromPackage = packageMeta ? packageMeta[key] : null;
+  const fromLocal = state.roadMeta[key];
+  if (hasRealDirectionName(fromPackage, row.direction))
+    return directionNameFrom(fromPackage, row.direction);
+  if (hasRealDirectionName(fromLocal, row.direction))
+    return directionNameFrom(fromLocal, row.direction);
+  // 兩邊都沒取過名字：報告上的「方向往：大同路口--->中正路口」比裸的「方向1」有用得多。
+  if (row.directionText) return row.directionText;
+  return directionNameFrom(fromPackage || fromLocal, row.direction);
+}
 function rowDirectionName(row) {
-  const name = directionName(row.road, row.direction, row.projectCode);
-  return name === row.direction ? row.directionText || name : name;
+  return displayDirectionName(row, null);
+}
+/**
+ * 只知道「路段＋方向」、手上沒有整筆紀錄時用這一支（路段速限表、速限未確認、
+ * 速限版本清單）。它自己去 details 找一筆同路段同方向的紀錄，好讓報告上的
+ * 「方向往」文字也能當備援——否則使用者在「路段速限」看到的永遠是裸的
+ * 「方向1／方向2」，而那正是他要去改名字的畫面，最需要看得懂哪個方向是哪一邊。
+ */
+function directionNameFor(road, direction, code = state.activeCode) {
+  const sample = state.details.find(
+    (d) => d.projectCode === code && d.road === road && d.direction === direction,
+  );
+  return displayDirectionName(
+    sample || { road, direction, projectCode: code, directionText: "" },
+    null,
+  );
 }
 /**
  * 這一份 roadMeta 到底有沒有「真的取過名字」。
@@ -1468,14 +1510,7 @@ function hasRealDirectionName(meta, direction) {
  *   3. 都沒有 → 顯示鍵值
  */
 function managerDirectionName(row) {
-  const key = `${row.projectCode}|${row.road}`;
-  const fromPackage = row.packageRoadMeta ? row.packageRoadMeta[key] : null;
-  const fromLocal = state.roadMeta[key];
-  if (hasRealDirectionName(fromPackage, row.direction))
-    return directionNameFrom(fromPackage, row.direction);
-  if (hasRealDirectionName(fromLocal, row.direction))
-    return directionNameFrom(fromLocal, row.direction);
-  return directionNameFrom(fromPackage || fromLocal, row.direction);
+  return displayDirectionName(row, row.packageRoadMeta || null);
 }
 function projectAliases() {
   const prefix = `${state.activeCode}|`;
@@ -1756,7 +1791,7 @@ function renderSummaries() {
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(directionName(x.road, x.direction, x.projectCode))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td><b>${fmt(x.totalDelay, 3)}</b></td><td>${fmt(x.ratio, 3)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td><b>${fmt(x.totalDelay, 3)}</b></td><td>${fmt(x.ratio, 3)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰彙總</td></tr>';
@@ -1833,7 +1868,7 @@ function renderLimits() {
                 .map((v) => `${esc(String(v.from || "起始"))}起 ${esc(String(v.limit))} km/h`)
                 .join("、")}）；下方欄位是未被版本涵蓋的季度所使用的基準速限。</div>`
             : "";
-          return `<tr><td>${esc(road)}</td><td>${esc(directionName(road, direction, state.activeCode))}</td><td><input class="speed-input" data-limit="${esc(k)}" type="number" min="1" value="${state.limits[k] || 50}">${versionNote}</td><td>${state.limitConfirmed[k] ? '<span class="status-ok">已人工確認</span>' : '<span class="status-warn">預設值，未確認</span>'}</td></tr>`;
+          return `<tr><td>${esc(road)}</td><td>${esc(directionNameFor(road, direction))}</td><td><input class="speed-input" data-limit="${esc(k)}" type="number" min="1" value="${state.limits[k] || 50}">${versionNote}</td><td>${state.limitConfirmed[k] ? '<span class="status-ok">已人工確認</span>' : '<span class="status-warn">預設值，未確認</span>'}</td></tr>`;
         })
         .join("")
     : '<tr><td colspan="4" class="empty">目前計畫匯入資料後會自動建立路段方向</td></tr>';
@@ -1968,7 +2003,7 @@ $("exportDetail").onclick = () =>
       .filter((x) => x.projectCode === state.activeCode)
       .map((x) => ({
         ...x,
-        directionLabel: directionName(x.road, x.direction, x.projectCode),
+        directionLabel: rowDirectionName(x),
       })),
   );
 /**
@@ -2325,7 +2360,15 @@ $("clearManager").onclick = async () => {
 };
 $("exportManager").onclick = () =>
   csv(
-    managerFilteredRows().map(({ packageProject, ...row }) => row),
+    /*
+     * Manager 畫面已經使用專案包的方向顯示名稱，匯出檔也必須一致。
+     * direction 原始鍵值仍保留，另加 directionLabel 供人閱讀；
+     * packageRoadMeta 只是畫面解析用的內部物件，不應出現在 CSV。
+     */
+    managerFilteredRows().map(({ packageProject, packageRoadMeta, ...row }) => ({
+      ...row,
+      directionLabel: managerDirectionName({ ...row, packageRoadMeta }),
+    })),
     `Manager_篩選結果_${new Date().toISOString().slice(0, 10)}.csv`,
   );
 function syncOptions(id, items, allLabel) {
@@ -2394,6 +2437,108 @@ function renderManagerCharts(rows) {
   }
   renderTravelCharts(rows, "managerSpeedTrendGrid");
 }
+/*
+ * ── Manager 比較不會自動同步目前的 Project ──────────────────────────────────
+ *
+ * 這是設計上的分工：Manager 收的是**別人交來的專案包**，一份包就是一次交付，
+ * 不會因為對方後來又改了什麼就跟著變。
+ *
+ * 但同一台電腦同時當 Project 又當 Manager 時（最常見的用法），這個分工會變成陷阱：
+ * 使用者在 Project 改好方向名稱，切到 Manager 卻還看到舊的，畫面上沒有任何線索
+ * 說明「你看的是 8/27 匯入的那一份」。實際發生過——使用者與我為此各查了三輪，
+ * 最後才發現要重新匯出再匯入，程式其實一直是對的。
+ *
+ * 所以：本機同一個計畫代碼的內容如果和 Manager 裡那份包不一樣，就明講出來。
+ * 只提醒，不自動同步——自動同步會讓「這份包是誰、什麼時候交的」這件事失去意義。
+ */
+function managerFingerprint(summaries, roadMeta) {
+  const s = (summaries || [])
+    /*
+     * 指紋不只比畫面上的幾個數字。Manager 匯出的是整筆代表紀錄，
+     * 只要會影響分析或顯示的內容改了，就應提醒重新匯出專案包。
+     * 特別是 directionText：它已納入方向名稱備援，若不比對，
+     * Project 的報告方向文字已更新時，Manager 仍不會顯示過期提醒。
+     */
+    .map((x) =>
+      [
+        x.period,
+        x.road,
+        x.day,
+        x.peak,
+        x.direction,
+        x.directionText,
+        x.travel,
+        x.running,
+        x.roadDelay,
+        x.intersectionDelay,
+        x.totalDelay,
+        x.limit,
+        x.ratio,
+        x.los,
+        x.detailCount,
+      ].join("|"),
+    )
+    .sort()
+    .join("\n");
+  const meta = roadMeta || {};
+  const m = Object.keys(meta)
+    .sort()
+    .map((k) => `${k}=${meta[k]?.directionA || ""}/${meta[k]?.directionB || ""}`)
+    .join("\n");
+  return `${s}\n--\n${m}`;
+}
+
+/** 本機也有、而且內容和 Manager 裡那份包不一樣的計畫。 */
+function managerStaleProjects() {
+  return state.manager
+    .filter((p) => p.project?.code && state.projects.some((x) => x.code === p.project.code))
+    .filter((p) => {
+      const code = p.project.code;
+      const localSummaries = state.summaries.filter((x) => x.projectCode === code);
+      const localMeta = Object.fromEntries(
+        Object.entries(state.roadMeta).filter(([k]) => k.startsWith(`${code}|`)),
+      );
+      return (
+        managerFingerprint(localSummaries, localMeta) !==
+        managerFingerprint(p.summaries, p.roadMeta)
+      );
+    })
+    .map((p) => p.project);
+}
+
+function renderManagerStaleHint() {
+  const box = $("managerStaleHint");
+  if (!box) return;
+  const stale = managerStaleProjects();
+  if (!stale.length) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  box.classList.remove("hidden");
+  /*
+   * 一行講完。Manager 不自動同步的來龍去脈寫在手冊第 16 章，畫面上不重述——
+   * 使用者要的是「怎麼回事、怎麼辦」，不是一段說明文。
+   *
+   * ⚠️ 名稱來自各自匯入的專案包，長度與數量都不受控：
+   * 實測 8 個計畫一起過期會變成 166 字，一個委託案全名就可能有 40 字。
+   * 所以最多列兩個、單一名稱過長就截斷，其餘用「等 N 個計畫」帶過——
+   * 完整清單就在上方「已匯入 Project 專案包」那張表裡，不需要在提示裡重印。
+   */
+  // 超過兩個時只列一個就好——完整清單就在上方「已匯入 Project 專案包」那張表裡，
+  // 提示的用途是「讓你知道有這回事」，不是取代那張表。
+  const SHOW = stale.length > 2 ? 1 : 2;
+  const short = (t) => (t.length > 22 ? `${t.slice(0, 22)}…` : t);
+  const names = stale
+    .slice(0, SHOW)
+    .map((p) => esc(short(`${p.code} ${p.name}`)))
+    .join("、");
+  const more = stale.length > SHOW ? ` 等 ${stale.length} 個計畫` : "";
+  box.innerHTML =
+    `<b>⚠️ ${names}${more}：本機內容較新</b>` +
+    `<p>Manager 顯示的是匯入當時的專案包。重新匯出並匯入即可更新（詳見手冊第 16 章）。</p>`;
+}
+
 function renderManager() {
   const all = managerAllRows(),
     projectBefore = $("managerProjectFilter").value;
@@ -2428,6 +2573,7 @@ function renderManager() {
         )
         .join("")
     : '<tr><td colspan="5" class="empty">尚未匯入 Project 專案包</td></tr>';
+  renderManagerStaleHint();
   $("managerRows").innerHTML = rows.length
     ? rows
         .map(
@@ -2654,7 +2800,7 @@ function inspectHealth() {
         road: d.road,
         day: d.day,
         peak: d.peak,
-        item: `${d.road}／${d.day}／${d.peak}／${directionName(d.road, d.direction, d.projectCode)}`,
+        item: `${d.road}／${d.day}／${d.peak}／${rowDirectionName(d)}`,
         detail: "旅行速率、行駛速率、總延滯或速限包含空白、零值或無效數值。",
       });
     /*
@@ -2674,7 +2820,7 @@ function inspectHealth() {
         road: d.road,
         day: d.day,
         peak: d.peak,
-        item: `${d.road}／${d.day}／${d.peak}／${directionName(d.road, d.direction, d.projectCode)}`,
+        item: `${d.road}／${d.day}／${d.peak}／${rowDirectionName(d)}`,
         detail: `旅行速率 ${fmt(d.travel, 1)} km/h 大於行駛速率 ${fmt(d.running, 1)} km/h，物理上不可能（旅行速率含停等時間）。常見原因是讀到隔壁欄位，請核對原始報告。`,
       });
   }
@@ -2720,7 +2866,7 @@ function inspectHealth() {
         type: "速限未確認",
         period: "全部",
         road: meta.road,
-        item: `${meta.road}／${directionName(meta.road, meta.direction)}`,
+        item: `${meta.road}／${directionNameFor(meta.road, meta.direction)}`,
         detail: `目前使用預設 ${state.limits[key] || 50} km/h，請至「路段速限」人工核對後按套用。`,
       });
   for (const road of roads)

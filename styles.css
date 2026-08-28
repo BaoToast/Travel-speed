@@ -272,3 +272,14 @@ button,.primary,.ghost,.outline,.success{white-space:nowrap}
 #conclusionMain .conclusion-actions-row input:not([type]) {
   margin-top: 0;
 }
+
+/* Manager 比較：本機內容與匯入的專案包不一致時的提示。
+   用警示色但不是錯誤——這不是壞掉，是「你看的是舊的那一份」。 */
+.manager-stale {
+  border-left: 4px solid #d97706;
+  background: #fffbeb;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+}
+.manager-stale b { color: #92400e; margin-right: 8px; }
+.manager-stale p { display: inline; margin: 0; font-size: 13px; }

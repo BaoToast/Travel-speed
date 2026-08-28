@@ -285,6 +285,30 @@ ok("Manager 比較顯示專案包裡的方向名稱", managerText.includes(NAME_
 ok("Manager 比較沒有殘留裸的方向鍵值", !BARE_KEY.test(managerText),
   (managerText.match(BARE_KEY)?.[0] || "").trim());
 
+/* Manager 的 CSV 也是給人閱讀的交付物，不能畫面是正式名稱、匯出卻退回鍵值。 */
+const managerCsvText = await page.evaluate(async () => {
+  let captured = "";
+  const original = URL.createObjectURL;
+  URL.createObjectURL = function (blob) {
+    captured = blob;
+    return original.call(URL, blob);
+  };
+  document.getElementById("exportManager").click();
+  await new Promise((r) => setTimeout(r, 400));
+  URL.createObjectURL = original;
+  return captured ? await captured.text() : "";
+});
+ok(
+  "Manager 匯出 CSV 有方向顯示名稱",
+  managerCsvText.includes(NAME_1) || managerCsvText.includes(NAME_2),
+  `${managerCsvText.length} 字`,
+);
+ok(
+  "Manager CSV 保留原始鍵值，但不匯出內部 packageRoadMeta 物件",
+  /directionLabel/.test(managerCsvText) && /direction/.test(managerCsvText)
+    && /\u65b9向1/.test(managerCsvText) && !/packageRoadMeta/.test(managerCsvText),
+);
+
 /*
  * ── 使用者回報：Manager 比較裡「方向1／方向2 混雜著改好的名稱」──
  *
@@ -330,6 +354,138 @@ ok(
   mgrMix[0].endsWith("南-北(北上)"),
   mgrMix[0],
 );
+
+/*
+ * ── 獨立重現的方向文字備援不一致（v2.20.9）──
+ *
+ * 這是查證過程中另外重現的真實缺陷，不是使用者當時看到舊名稱的成因：
+ * 兩邊都**沒有人取過名字**，但報告上寫了「方向往：本工西路--->岡山路」。
+ * 尖峰明細會退回那行文字，Manager 比較與尖峰彙總卻直接印裸的「方向1」。
+ * 於是同一張表裡，報告有寫方向往的路段看起來「有改到」，沒寫的看起來「沒改到」
+ * ——實際上兩者都沒被命名過，差別只在報告上有沒有那行字。
+ */
+const mgrText = await page.evaluate(() => {
+  const CODE = "TEXTCODE";
+  const withText = "有方向往的路段(起~迄)";
+  const noText = "沒有方向往的路段(起~迄)";
+  const mk = (road, dir, text) => ({ projectCode: CODE, projectName: "文字備援測試",
+    period: "111Q3", road, day: "平日", peak: "下午尖峰", direction: dir,
+    travel: 23.1, totalDelay: 300, los: "D", directionText: text });
+  const summaries = [
+    mk(withText, "方向1", "本工西路--->岡山路"),
+    mk(withText, "方向2", "岡山路--->本工西路"),
+    mk(noText, "方向1", ""),
+    mk(noText, "方向2", ""),
+  ];
+  state.manager = [{ kind: "TLM_PROJECT_PACKAGE", project: { code: CODE, name: "文字備援測試" },
+    summaries, details: summaries.map((x) => ({ ...x })), importedAt: "2026-08-28", roadMeta: {} }];
+  /* 本機也沒有任何命名——這就是使用者的實際情況 */
+  return managerAllRows()
+    .filter((r) => r.projectCode === CODE)
+    .map((r) => `${r.road}|${r.direction}|${managerDirectionName(r)}`);
+});
+ok(
+  "Manager 比較會退回報告上的「方向往」文字，不會只印裸的方向1／方向2",
+  mgrText.filter((x) => x.startsWith("有方向往")).every((x) => !/\|方向[12]$/.test(x)),
+  mgrText.filter((x) => x.startsWith("有方向往")).join("、"),
+);
+ok(
+  "Manager 與尖峰明細對同一筆紀錄顯示同一個名稱（不可以一邊有備援、一邊沒有）",
+  await page.evaluate(() => {
+    const rows = managerAllRows().filter((r) => r.projectCode === "TEXTCODE");
+    return rows.every((r) => managerDirectionName(r) === rowDirectionName(r));
+  }),
+);
+ok(
+  "報告真的沒寫方向往時，仍然老實顯示方向1／方向2（不可以憑空生一個名字）",
+  mgrText.filter((x) => x.startsWith("沒有方向往")).every((x) => /\|方向[12]$/.test(x)),
+  mgrText.filter((x) => x.startsWith("沒有方向往")).join("、"),
+);
+
+/*
+ * ── Manager 內容過期提示（v2.20.9）──
+ *
+ * 起因：使用者在 Project 改好方向名稱，切到 Manager 卻還是舊的，
+ * 因為 Manager 顯示的是當初匯入的那份專案包，不會自動同步。
+ * 畫面上原本沒有任何線索，使用者與我為此各查了三輪。
+ * 現在本機內容與包內不一致時會明講；一致時**不可以**跳出來吵人。
+ */
+const stale = await page.evaluate(() => {
+  const CODE = "STALECODE";
+  const road = "示範路S(起~迄)";
+  const mk = (dir) => ({ projectCode: CODE, projectName: "過期測試", period: "111Q3",
+    road, day: "平日", peak: "上午尖峰", direction: dir, travel: 30, totalDelay: 300, los: "C" });
+  state.projects = [...state.projects.filter((p) => p.code !== CODE), { code: CODE, name: "過期測試" }];
+  state.summaries = [...state.summaries.filter((x) => x.projectCode !== CODE), mk("方向1"), mk("方向2")];
+  state.roadMeta[`${CODE}|${road}`] = { directionA: "南下", directionB: "北上", startPeriod: "", endPeriod: "" };
+  const pkgNow = JSON.parse(JSON.stringify({
+    summaries: state.summaries.filter((x) => x.projectCode === CODE),
+    roadMeta: { [`${CODE}|${road}`]: state.roadMeta[`${CODE}|${road}`] },
+  }));
+  // 情境一：包和本機一致 → 不該提示
+  state.manager = [{ kind: "TLM_PROJECT_PACKAGE", project: { code: CODE, name: "過期測試" },
+    details: [], importedAt: "2026-08-28", ...pkgNow }];
+  const same = managerStaleProjects().map((p) => p.code);
+  // 情境二：報告上的方向文字改了 → 應該提示
+  state.summaries.find((x) => x.projectCode === CODE && x.direction === "方向1").directionText = "甲端--->乙端";
+  const afterDirectionText = managerStaleProjects().map((p) => p.code);
+  state.summaries.find((x) => x.projectCode === CODE && x.direction === "方向1").directionText = "";
+  // 情境三：本機之後改了方向名稱 → 應該提示
+  state.roadMeta[`${CODE}|${road}`] = { directionA: "北上", directionB: "南下", startPeriod: "", endPeriod: "" };
+  const afterRename = managerStaleProjects().map((p) => p.code);
+  renderManager();
+  const shown = !document.getElementById("managerStaleHint").classList.contains("hidden");
+  const text = document.getElementById("managerStaleHint").innerText;
+  // 情境四：本機沒有這個計畫（真的是同事交來的包）→ 不該提示
+  state.projects = state.projects.filter((p) => p.code !== CODE);
+  const notMine = managerStaleProjects().map((p) => p.code);
+  return { same, afterDirectionText, afterRename, shown, text, notMine };
+});
+ok("內容一致時不會跳出提示（不可以沒事吵人）", stale.same.length === 0, stale.same.join("、"));
+ok("報告方向文字變更後會提示 Manager 專案包已過期",
+  stale.afterDirectionText.includes("STALECODE"), stale.afterDirectionText.join("、"));
+ok("本機改過方向名稱之後會提示該計畫已過期", stale.afterRename.includes("STALECODE"), stale.afterRename.join("、"));
+ok("提示會實際顯示在畫面上", stale.shown);
+ok("提示簡短，但講得出計畫、狀況與該怎麼做",
+  /本機內容較新/.test(stale.text) && /重新匯出/.test(stale.text)
+  && /STALECODE/.test(stale.text) && stale.text.replace(/\s+/g, " ").length <= 90,
+  `${stale.text.replace(/\s+/g, " ")}（${stale.text.replace(/\s+/g, " ").length} 字）`);
+
+/*
+ * 計畫名稱來自各自匯入的專案包——長度與數量都不受控。
+ * 實測：8 個計畫一起過期原本會變成 166 字，一個委託案全名就可能 40 字。
+ * 使用者要的是「畫面上重點摘要就好，免得版面很醜」，所以這裡釘住上限。
+ */
+const staleCap = await page.evaluate(() => {
+  const seed = (list) => {
+    state.projects = list.map(([code, name]) => ({ code, name }));
+    state.summaries = []; state.roadMeta = {}; state.manager = [];
+    list.forEach(([code, name]) => {
+      const row = { projectCode: code, projectName: name, period: "111Q3", road: `${code}路`,
+        day: "平日", peak: "上午尖峰", direction: "方向1", travel: 30, totalDelay: 300, los: "C" };
+      state.summaries.push(row);
+      state.roadMeta[`${code}|${code}路`] = { directionA: "新", directionB: "新", startPeriod: "", endPeriod: "" };
+      state.manager.push({ kind: "TLM_PROJECT_PACKAGE", project: { code, name },
+        summaries: [{ ...row }], details: [], importedAt: "2026-08-28",
+        roadMeta: { [`${code}|${code}路`]: { directionA: "舊", directionB: "舊", startPeriod: "", endPeriod: "" } } });
+    });
+    renderManager();
+    return document.getElementById("managerStaleHint").innerText.replace(/\s+/g, " ");
+  };
+  return {
+    長名稱: seed([["C1234", "交通部鐵道局中部工程分局嘉義市區鐵路高架化計畫第三工區周界環境監測委託服務案"]]),
+    八個: seed(Array.from({ length: 8 }, (_, i) => [`D${1000 + i}`, `示範計畫第${i + 1}標`])),
+  };
+});
+ok("單一計畫名稱過長會截斷，不會撐爆版面",
+  staleCap.長名稱.length <= 90 && staleCap.長名稱.includes("…"),
+  `${staleCap.長名稱.slice(0, 46)}…（${staleCap.長名稱.length} 字）`);
+ok("多個計畫一起過期時只列一個，其餘用「等 N 個計畫」帶過",
+  staleCap.八個.length <= 90 && /等 8 個計畫/.test(staleCap.八個),
+  `${staleCap.八個.slice(0, 46)}…（${staleCap.八個.length} 字）`);
+ok("提示裡的計畫名稱來自匯入的專案包，程式沒有寫死任何一個",
+  staleCap.長名稱.includes("C1234") && staleCap.八個.includes("D1000"));
+ok("本機沒有的計畫（真的是同事交來的包）不會被誤判為過期", stale.notMine.length === 0, stale.notMine.join("、"));
 
 ok("沒有 JS 例外", errors.length === 0, errors.slice(0, 2).join(" | "));
 
