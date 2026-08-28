@@ -146,7 +146,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.12";
+document.querySelector(".brand small").textContent = "正式版 v2.20.13";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +157,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.12.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.12.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.13.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.13.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -1769,9 +1769,24 @@ function losChip(l) {
  * "[object Object]"；方向則另外加入畫面實際顯示的名稱。
  */
 function rowSearchText(row, directionLabel) {
-  const values = Object.values(row).filter(
-    (value) => ["string", "number", "boolean"].includes(typeof value),
-  );
+  const scalar = (v) => ["string", "number", "boolean"].includes(typeof v);
+  const values = [];
+  Object.values(row).forEach((value) => {
+    if (scalar(value)) {
+      values.push(value);
+    } else if (Array.isArray(value) && value.every(scalar)) {
+      /*
+       * ⚠️ 陣列不可以跟著物件一起丟掉。
+       *
+       * 會被轉成 "[object Object]" 的是**物件**；純量陣列的 toString 是有意義的
+       * 文字，而且本來就搜得到——sourceRefs（每個數字來自原始 Excel 哪幾格，
+       * 例如「平均總旅行速率:A7,路段延滯:A3」）就是陣列。把它一起濾掉的話，
+       * 稽核時想用儲存格位置或欄位標題回頭找是哪幾列，會查不到任何東西，
+       * 而且畫面上不會有任何跡象說明為什麼搜不到。
+       */
+      values.push(value.join(" "));
+    }
+  });
   if (directionLabel) values.push(directionLabel);
   return values.join(" ");
 }
@@ -2415,7 +2430,8 @@ function managerAllRows() {
  *
  * 這和方向名稱那一系列是同一族缺陷：**畫面顯示 X、功能操作 Y**。
  * 尖峰明細、尖峰彙總、Manager 比較的顯示，以及尖峰明細與 Manager 的匯出 CSV
- * 都已經在前幾版陸續修過；v2.20.12 再把三個搜尋入口統一。
+ * 都已經在前幾版陸續修過；前一版把三個搜尋入口統一，本版再修好它順手
+ * 把純量陣列（sourceRefs）也一起濾掉的問題。
  *
  * 這裡是「原有的可搜尋欄位**再加上**顯示名稱」，不是改成「只搜畫面上的欄位」
  * ——有些欄位（例如站號、資料別）沒有印在表格上但一直搜得到，

@@ -187,6 +187,32 @@ for (const [label, view, input, rows] of [
   await page.fill(input, "");
 }
 
+/*
+ * 搜尋範圍不可以**縮**。
+ *
+ * 「只收純量、避免 [object Object]」這條規則如果連陣列一起濾掉，
+ * sourceRefs（每個數字來自原始 Excel 哪幾格）就整個搜不到了——
+ * 稽核時想用儲存格位置或欄位標題回頭找是哪幾列，會查不到任何東西，
+ * 而且畫面上不會有任何跡象說明為什麼。這一項就是守著那條界線：
+ * 物件要濾掉，純量陣列要留著。
+ */
+for (const [label, view, input, count] of [
+  ["尖峰明細", "detail", "#detailSearch", "#detailCount"],
+  ["尖峰彙總", "summary", "#summarySearch", "#summaryCount"],
+]) {
+  await page.evaluate((v) => document.querySelector(`nav [data-view="${v}"]`).click(), view);
+  await page.waitForTimeout(400);
+  for (const [q, what] of [["平均總旅行速率", "原始欄位標題"], ["A16", "儲存格位置"]]) {
+    await page.fill(input, q);
+    await page.waitForTimeout(300);
+    const n = (await page.innerText(count)).trim();
+    ok(`${label}仍然可以用來源${what}搜尋（sourceRefs 是陣列，不可以跟物件一起濾掉）`,
+      !/^0\s*筆/.test(n), `搜「${q}」→ ${n}`);
+  }
+  await page.fill(input, "");
+  await page.waitForTimeout(200);
+}
+
 /* ── 結論草稿產生器：勾選框標籤 ＋ 產生出來的草稿 ── */
 await page.evaluate(() => document.querySelector('[data-view="conclusion"]').click());
 await page.waitForTimeout(800);
