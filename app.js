@@ -23,6 +23,12 @@ const emptyState = () => ({
   losRules: {},
   imports: [],
   last: { year: "", quarter: "2", time: "" },
+  /*
+   * 期別要顯示成「季別」還是「實際調查月份」。
+   * **只影響畫面上的文字**——分組、排序、鍵值、計算與匯出的數值一律仍以
+   * period（115Q1）為準。存進 state 是為了重新整理後還記得使用者的選擇。
+   */
+  periodDisplay: "quarter",
   manager: [],
 });
 let state = emptyState(),
@@ -35,6 +41,8 @@ let state = emptyState(),
   roadPicks = new Set(),
   /** 預覽當下的民國年／季度／計畫，確認寫入時一律以這一份為準 */
   pendingContext = null,
+  /** 本次預覽的調查日期／期別比對結果；只作提示，不影響寫入的任何數值 */
+  pendingPeriodChecks = [],
   healthIssues = [];
 const $ = (id) => document.getElementById(id),
   esc = (s) =>
@@ -146,7 +154,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.13";
+document.querySelector(".brand small").textContent = "正式版 v2.20.16";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -157,8 +165,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.13.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.13.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.16.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.16.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -320,11 +328,39 @@ const projectSwitch = document.createElement("select");
 projectSwitch.id = "projectSwitch";
 projectSwitch.className = "project-switch";
 document.querySelector("header .blank-badge").before(projectSwitch);
+/*
+ * 期別顯示切換：季別（115Q1）⇄ 實際調查月份（115年2、3月）。
+ * 只換畫面上的文字；分組、排序、計算與匯出的數值一律不受影響。
+ */
+const periodDisplayButton = document.createElement("button");
+periodDisplayButton.type = "button";
+periodDisplayButton.id = "periodDisplayToggle";
+periodDisplayButton.className = "period-display-toggle";
+periodDisplayButton.dataset.testid = "period-display-toggle";
+periodDisplayButton.onclick = async () => {
+  state.periodDisplay = state.periodDisplay === "month" ? "quarter" : "month";
+  renderPeriodDisplayToggle();
+  await save();
+  renderAll();
+};
+document.querySelector("header .blank-badge").before(periodDisplayButton);
+function renderPeriodDisplayToggle() {
+  const labels = globalThis.PeriodDate.PERIOD_DISPLAY_LABELS;
+  const mode = state.periodDisplay === "month" ? "month" : "quarter";
+  periodDisplayButton.textContent = `期別顯示：${labels[mode]}`;
+  periodDisplayButton.classList.toggle("is-on", mode === "month");
+  const has = anySurveyDate();
+  periodDisplayButton.disabled = !has;
+  periodDisplayButton.title = has
+    ? "切換期別顯示方式：季別（115Q1）／實際調查月份（115年2、3月）。只換顯示文字，不影響分組與計算。"
+    : "目前的資料沒有調查日期可用，無法顯示調查月份。重新匯入原始檔之後就會有。";
+}
 function clearPendingPreview() {
   // 預覽結果只對「預覽當下的那個計畫」有效。切換計畫、刪除計畫或全部清除之後
   // 若還留著，按下確認寫入會把資料寫到別的計畫，甚至寫進已經不存在的計畫。
   pending = [];
   pendingContext = null;
+  pendingPeriodChecks = [];
   healthIssues = [];
   /*
    * healthChecked 也要跟著清掉。
@@ -908,11 +944,80 @@ function assertNoPrototypePollution(before, fileLabel) {
   );
 }
 
+/*
+ * ── 調查日期 × 期別 ─────────────────────────────────────────
+ *
+ * 從表頭讀出調查日期，交給 period-date.js 判斷是不是和使用者選的季度相符。
+ * 這一段**完全獨立於 parsePeakSheet／matrix**：它自己開活頁簿掃表頭前 12 列，
+ * 不經過任何一條讀速率、延滯或 LOS 的路徑，所以不可能改到任何數值。
+ *
+ * 不看固定欄位位置——各家報表的日期欄擺放都不一樣（實測看過
+ * 上午!AB3、統計表 (1)!B2 這兩種）。
+ */
+function surveyDateFromWorkbook(wb) {
+  const cells = [];
+  for (const name of wb.SheetNames) {
+    const sheet = wb.Sheets[name];
+    if (!sheet || !sheet["!ref"]) continue;
+    let range;
+    try {
+      range = XLSX.utils.decode_range(sheet["!ref"]);
+    } catch {
+      continue;
+    }
+    for (let r = range.s.r; r <= Math.min(range.e.r, 12); r++)
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const address = XLSX.utils.encode_cell({ r, c });
+        const cell = sheet[address];
+        if (!cell) continue;
+        const text = String(cell.w ?? cell.v ?? "").trim();
+        if (text) cells.push({ text, sheet: name, cell: address });
+      }
+  }
+  return globalThis.PeriodDate.findSurveyDate(cells);
+}
+
+/*
+ * 期別在畫面上要顯示成什麼：季別（115Q1）或實際調查月份（115年2、3月）。
+ * **只換顯示的文字**——分組、排序、鍵值、計算與匯出的數值一律仍以 period 為準。
+ */
+function periodLabelFromRows(period, rows) {
+  if (state.periodDisplay !== "month") return period;
+  const dates = (rows || [])
+    .filter((x) => x.period === period && x.surveyDate)
+    .map((x) => x.surveyDate);
+  return globalThis.PeriodDate.periodDisplayLabel(period, dates, "month");
+}
+/** 目前 Project 的期別顯示，只能採用目前計畫自己的原始明細日期。 */
+function projectPeriodLabel(period, projectCode = state.activeCode) {
+  return periodLabelFromRows(
+    period,
+    state.details.filter((x) => x.projectCode === projectCode),
+  );
+}
+/** Manager 顯示的是匯入當時的專案包，月份也必須取自同一份包。 */
+function managerPeriodLabel(period, projectCode) {
+  const pack = state.manager.find((x) => x.project?.code === projectCode);
+  const source = pack?.details?.length ? pack.details : pack?.summaries || [];
+  return periodLabelFromRows(period, source);
+}
+/** 有沒有任何一筆讀得到調查日期——都沒有就把切換鈕停用並說明原因。 */
+function anySurveyDate() {
+  return (
+    state.details.some((x) => x.surveyDate) ||
+    state.manager.some((pack) =>
+      [...(pack.details || []), ...(pack.summaries || [])].some((x) => x.surveyDate),
+    )
+  );
+}
+
 async function parseFile(file, year, q, defSpeed) {
   const p = activeProject();
   const fingerprint = prototypeFingerprint();
   const wb = XLSX.read(await file.arrayBuffer(), SAFE_XLSX_READ_OPTIONS);
   assertNoPrototypePollution(fingerprint, file.name);
+  /* 表頭調查日期。只作顯示與期別檢查用，不參與任何速率、延滯或 LOS 計算。 */
+  const surveyDateFound = surveyDateFromWorkbook(wb);
   const road = roadFromFile(file.name),
     day = dayFromFile(file.name),
     morning = matrix(wb, ["上午尖峰", "上午", "AM尖峰", "AM"]),
@@ -960,6 +1065,8 @@ async function parseFile(file, year, q, defSpeed) {
       ratio: r.travel == null ? null : r.travel / limit,
       los: r.travel == null ? "?" : losOf(r.travel / limit),
       source: file.name,
+      /* 只作顯示用；rowKey 與 id 都不含它，覆蓋判斷完全不受影響。 */
+      surveyDate: surveyDateFound ? surveyDateFound.iso : "",
     });
   }
   const complete =
@@ -976,6 +1083,7 @@ async function parseFile(file, year, q, defSpeed) {
     road,
     day,
     rows,
+    surveyDateFound,
     ok,
     error: ok
       ? ""
@@ -1107,6 +1215,18 @@ $("preview").onclick = async () => {
   // 使用者若在預覽後才改民國年或季度，舊版會把資料寫進「預覽時的季度」，
   // 卻把「改過的季度」記進匯入紀錄，兩邊不一致而且完全看不出來。
   pendingContext = { year, quarter: q, projectCode: state.activeCode };
+  /*
+   * 調查日期 × 期別。判斷邏輯在 period-date.js（三支程式同一份）。
+   * 這裡只算結果，**不阻擋**——讀不到日期只提醒，對不起來才在按
+   *「確認寫入」時多問一次。
+   */
+  pendingPeriodChecks = pending.map((item) =>
+    globalThis.PeriodDate.checkPeriodAgainstDate(
+      `${year}Q${q}`,
+      item.surveyDateFound || null,
+      item.file,
+    ),
+  );
   analyzeRoads();
   $("preview").disabled = false;
   renderPreview();
@@ -1149,6 +1269,39 @@ for (const id of ["rocYear", "quarter"])
   $(id).addEventListener("input", () => {
     importPeriodTouched = true;
   });
+/*
+ * 匯入預覽上方的調查日期提示。
+ * 紅底＝日期與所選季度對不起來（按「確認寫入」時會再問一次）；
+ * 黃底＝有檔案讀不到日期（**不阻擋**，提醒使用者自行確認）。
+ */
+function renderPeriodDateAlert() {
+  const box = $("periodDateAlert");
+  if (!box) return;
+  const bad = pendingPeriodChecks.filter((x) => x.status === "mismatch");
+  const unknownNote = globalThis.PeriodDate.periodUnknownNotice(pendingPeriodChecks);
+  if (!bad.length && !unknownNote) {
+    box.hidden = true;
+    box.innerHTML = "";
+    box.classList.remove("period-date-alert-bad");
+    return;
+  }
+  box.hidden = false;
+  box.classList.toggle("period-date-alert-bad", bad.length > 0);
+  const period = pendingContext ? `${pendingContext.year}Q${pendingContext.quarter}` : "";
+  box.innerHTML =
+    (bad.length
+      ? `<strong>⚠️ 有 ${bad.length} 份檔案的調查日期與你選的「${esc(period)}」不一致</strong><ul>` +
+        bad
+          .map(
+            (x) =>
+              `<li><b>${esc(x.file)}</b>：檔案裡是 ${esc(x.date)}（屬 ${esc(x.dateLabel)}），你選的是 ${esc(x.periodLabel)}。<small>來源 ${esc(x.source)}「${esc(x.raw)}」</small></li>`,
+          )
+          .join("") +
+        `</ul><small>按「確認寫入尖峰明細」時會再問一次；確認無誤才會以你選的季度寫入。</small>`
+      : "") +
+    (unknownNote ? `<p class="period-date-unknown">${esc(unknownNote)}</p>` : "");
+}
+
 function matchBadge(type) {
   const cls =
     { 完全相符: "exact", 別名相符: "alias", 疑似相符: "possible", 新路段: "new" }[type] || "new";
@@ -1227,6 +1380,7 @@ function renderPreview() {
   $("errorBadge").style.color = errors || unchecked ? "#bd463d" : "#168466";
   $("previewStatus").textContent =
     `成功 ${pending.length - errors}，失敗 ${errors}｜新增 ${dup.added}，重複 ${dup.updated}`;
+  renderPeriodDateAlert();
   $("previewRows").innerHTML =
     pending
       .map(
@@ -1304,6 +1458,16 @@ $("commit").onclick = async () => {
     return toast(
       `這幾份檔案被判定為同一個路段與日別，會互相覆蓋，請確認後分批匯入：${collided.join("、")}`,
     );
+  /*
+   * 調查日期與所選季度對不起來時，寫入前顯眼提示並要求二次確認。
+   * 只比對這次真的會寫入的檔案；讀不到日期一律**不阻擋**。
+   */
+  const writingFiles = new Set(good.map((x) => x.file));
+  const dateProblems = pendingPeriodChecks.filter(
+    (x) => x.status === "mismatch" && writingFiles.has(x.file),
+  );
+  if (dateProblems.length && !confirm(globalThis.PeriodDate.periodMismatchPrompt(dateProblems)))
+    return;
   const all = good.flatMap((x) => x.rows),
     before = new Map(state.details.map((x) => [x.id, x])),
     policy = $("duplicatePolicy").value,
@@ -1768,7 +1932,7 @@ function losChip(l) {
  * 建立人員可搜尋的文字，只納入純量欄位，避免內部物件被轉成
  * "[object Object]"；方向則另外加入畫面實際顯示的名稱。
  */
-function rowSearchText(row, directionLabel) {
+function rowSearchText(row, directionLabel, displayedPeriod = "") {
   const scalar = (v) => ["string", "number", "boolean"].includes(typeof v);
   const values = [];
   Object.values(row).forEach((value) => {
@@ -1788,20 +1952,23 @@ function rowSearchText(row, directionLabel) {
     }
   });
   if (directionLabel) values.push(directionLabel);
+  if (displayedPeriod) values.push(displayedPeriod);
   return values.join(" ");
 }
 function renderDetails() {
   const q = normalize($("detailSearch")?.value || ""),
     code = state.activeCode;
   const rows = state.details.filter(
-    (x) => x.projectCode === code && (!q || normalize(rowSearchText(x, rowDirectionName(x))).includes(q)),
+    (x) =>
+      x.projectCode === code &&
+      (!q || normalize(rowSearchText(x, rowDirectionName(x), projectPeriodLabel(x.period, code))).includes(q)),
   );
   $("detailCount").textContent = `${rows.length} 筆`;
   $("detailRows").innerHTML = rows.length
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, Number.isInteger(Number(x.limit)) ? 0 : 1)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(projectPeriodLabel(x.period, code))}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, Number.isInteger(Number(x.limit)) ? 0 : 1)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰明細</td></tr>';
@@ -1810,14 +1977,16 @@ function renderSummaries() {
   const q = normalize($("summarySearch")?.value || ""),
     code = state.activeCode;
   const rows = state.summaries.filter(
-    (x) => x.projectCode === code && (!q || normalize(rowSearchText(x, rowDirectionName(x))).includes(q)),
+    (x) =>
+      x.projectCode === code &&
+      (!q || normalize(rowSearchText(x, rowDirectionName(x), projectPeriodLabel(x.period, code))).includes(q)),
   );
   $("summaryCount").textContent = `${rows.length} 筆`;
   $("summaryRows").innerHTML = rows.length
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td><b>${fmt(x.totalDelay, 3)}</b></td><td>${fmt(x.ratio, 3)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(projectPeriodLabel(x.period, code))}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td><b>${fmt(x.totalDelay, 3)}</b></td><td>${fmt(x.ratio, 3)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰彙總</td></tr>';
@@ -1938,7 +2107,7 @@ $("applySpeed").onclick = async () => {
   await save();
   toast("目前計畫的速限已人工確認，LOS 已重新計算");
 };
-function renderTravelCharts(rows, gridId) {
+function renderTravelCharts(rows, gridId, labelPeriod = projectPeriodLabel) {
   const grid = $(gridId);
   grid.innerHTML = "";
   const roads = [...new Set(rows.map((x) => x.road))];
@@ -1969,7 +2138,7 @@ function renderTravelCharts(rows, gridId) {
           hasH = h != null && h.travel != null && Number.isFinite(Number(h.travel)),
           wv = hasW ? Number(w.travel) : null,
           hv = hasH ? Number(h.travel) : null;
-        return `<div class="bar-group"><i class="bar weekday speed-bar" data-value="${hasW ? fmt(wv, 1) : ""}" title="平日 ${hasW ? fmt(wv, 3) + " km/h" : "讀不到數值"}" style="height:${hasW ? (wv / max) * 100 : 0}%"></i><i class="bar holiday speed-bar" data-value="${hasH ? fmt(hv, 1) : ""}" title="假日 ${hasH ? fmt(hv, 3) + " km/h" : "讀不到數值"}" style="height:${hasH ? (hv / max) * 100 : 0}%"></i><small>${p}</small></div>`;
+        return `<div class="bar-group"><i class="bar weekday speed-bar" data-value="${hasW ? fmt(wv, 1) : ""}" title="平日 ${hasW ? fmt(wv, 3) + " km/h" : "讀不到數值"}" style="height:${hasW ? (wv / max) * 100 : 0}%"></i><i class="bar holiday speed-bar" data-value="${hasH ? fmt(hv, 1) : ""}" title="假日 ${hasH ? fmt(hv, 3) + " km/h" : "讀不到數值"}" style="height:${hasH ? (hv / max) * 100 : 0}%"></i><small>${esc(labelPeriod(p))}</small></div>`;
       })
       .join(
         "",
@@ -1995,7 +2164,7 @@ function renderCharts() {
       .map((p) => {
         const w = rows.find((x) => x.period === p && x.day === "平日"),
           h = rows.find((x) => x.period === p && x.day === "假日");
-        return `<div class="bar-group"><i class="bar weekday" data-los="${w?.los || ""}" title="平日 ${w?.los || "—"}" style="height:${((losRank[w?.los] || 0) / 6) * 100}%"></i><i class="bar holiday" data-los="${h?.los || ""}" title="假日 ${h?.los || "—"}" style="height:${((losRank[h?.los] || 0) / 6) * 100}%"></i><small>${p}</small></div>`;
+        return `<div class="bar-group"><i class="bar weekday" data-los="${w?.los || ""}" title="平日 ${w?.los || "—"}" style="height:${((losRank[w?.los] || 0) / 6) * 100}%"></i><i class="bar holiday" data-los="${h?.los || ""}" title="假日 ${h?.los || "—"}" style="height:${((losRank[h?.los] || 0) / 6) * 100}%"></i><small>${esc(projectPeriodLabel(p, code))}</small></div>`;
       })
       .join(
         "",
@@ -2439,7 +2608,11 @@ function managerAllRows() {
  */
 function managerSearchText(row) {
   const { packageProject, packageRoadMeta, ...rest } = row;
-  return rowSearchText(rest, managerDirectionName(row));
+  return rowSearchText(
+    rest,
+    managerDirectionName(row),
+    managerPeriodLabel(row.period, row.projectCode),
+  );
 }
 function managerFilteredRows() {
   const all = managerAllRows(),
@@ -2480,14 +2653,16 @@ function renderManagerCharts(rows) {
       .map((p) => {
         const w = own.find((x) => x.period === p && x.day === "平日"),
           h = own.find((x) => x.period === p && x.day === "假日");
-        return `<div class="bar-group"><i class="bar weekday" data-los="${w?.los || ""}" title="平日 ${w?.los || "—"}" style="height:${((losRank[w?.los] || 0) / 6) * 100}%"></i><i class="bar holiday" data-los="${h?.los || ""}" title="假日 ${h?.los || "—"}" style="height:${((losRank[h?.los] || 0) / 6) * 100}%"></i><small>${p}</small></div>`;
+        return `<div class="bar-group"><i class="bar weekday" data-los="${w?.los || ""}" title="平日 ${w?.los || "—"}" style="height:${((losRank[w?.los] || 0) / 6) * 100}%"></i><i class="bar holiday" data-los="${h?.los || ""}" title="假日 ${h?.los || "—"}" style="height:${((losRank[h?.los] || 0) / 6) * 100}%"></i><small>${esc(managerPeriodLabel(p, project))}</small></div>`;
       })
       .join(
         "",
       )}</div><div class="chart-legend"><i style="background:#247db4"></i>平日<i style="background:#e88943"></i>假日　資料柱上方為LOS等級</div>`;
     grid.append(card);
   }
-  renderTravelCharts(rows, "managerSpeedTrendGrid");
+  renderTravelCharts(rows, "managerSpeedTrendGrid", (period) =>
+    managerPeriodLabel(period, project),
+  );
 }
 /*
  * ── Manager 比較不會自動同步目前的 Project ──────────────────────────────────
@@ -2519,6 +2694,7 @@ function managerFingerprint(summaries, roadMeta) {
         x.peak,
         x.direction,
         x.directionText,
+        x.surveyDate,
         x.travel,
         x.running,
         x.roadDelay,
@@ -2630,7 +2806,7 @@ function renderManager() {
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(x.period)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(managerDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(managerPeriodLabel(x.period, x.projectCode))}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(managerDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="9" class="empty">目前篩選條件沒有資料</td></tr>';
@@ -3214,6 +3390,7 @@ $("cleanSuffix").onclick = async () => {
   );
 };
 function renderAll() {
+  renderPeriodDisplayToggle();
   const p = activeProject(),
     ownDetails = state.details.filter((x) => x.projectCode === state.activeCode),
     ownSummary = state.summaries.filter((x) => x.projectCode === state.activeCode),

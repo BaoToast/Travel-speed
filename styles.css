@@ -283,3 +283,20 @@ button,.primary,.ghost,.outline,.success{white-space:nowrap}
 }
 .manager-stale b { color: #92400e; margin-right: 8px; }
 .manager-stale p { display: inline; margin: 0; font-size: 13px; }
+
+/* ── 調查日期 × 期別提示（匯入預覽上方）──────────────────────
+ * 紅底＝日期與所選季度不一致（寫入時會再確認一次）；
+ * 黃底＝有檔案讀不到日期（不阻擋，只提醒使用者自行確認）。
+ */
+.period-date-alert{margin:0 0 10px;padding:10px 13px;border-radius:9px;background:#fff8ed;border:1px solid #efc68f;border-left:5px solid #d9922f;color:#8b5a1d}
+.period-date-alert.period-date-alert-bad{background:#fdecea;border-color:#e2a8a2;border-left-color:#bd463d;color:#9c3a32}
+.period-date-alert strong{display:block;font-size:12px;margin-bottom:6px}
+.period-date-alert ul{margin:0 0 6px;padding-left:18px}
+.period-date-alert li{font-size:11px;line-height:1.7}
+.period-date-alert li small{display:block;color:#6b7576;font-size:9px}
+.period-date-alert>small{display:block;font-size:9px;color:#6b7576}
+.period-date-alert .period-date-unknown{margin:6px 0 0;font-size:10px;line-height:1.6}
+/* 期別顯示切換（季別 ⇄ 調查月份）：只換畫面文字，不影響分組與計算。 */
+.period-display-toggle{border:1px solid #cfd9da;background:#fff;border-radius:999px;padding:5px 13px;font-size:11px;cursor:pointer;white-space:nowrap}
+.period-display-toggle.is-on{background:#e6f4ef;border-color:#168466;color:#0f5c48;font-weight:700}
+.period-display-toggle:disabled{opacity:.45;cursor:not-allowed}
