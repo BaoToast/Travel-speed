@@ -263,7 +263,9 @@ test("預覽要分辨名稱是讀自內容還是猜自檔名", () => {
  * 這裡改用 vendor 的真 SheetJS 建活頁簿。
  */
 import { createRequire } from "node:module";
-const XLSX = createRequire(import.meta.url)("./vendor/xlsx.full.min.js");
+const require = createRequire(import.meta.url);
+require("./period-date.js");
+const XLSX = require("./vendor/xlsx.full.min.js");
 
 function headerBook(cells) {
   const wb = XLSX.utils.book_new();
@@ -328,6 +330,11 @@ test("真 xlsx：不是站名的標籤不可誤抓", () => {
 
 test("真 xlsx：平假日要排除「製表日期」這類非調查日期", () => {
   const { dayFromWorkbook } = headerScope();
+  assert.match(
+    source,
+    /PeriodDate\.isNonSurveyDateText\(text\)/,
+    "日別判讀必須使用 period-date.js 的共用排除清單",
+  );
   assert.equal(
     dayFromWorkbook(headerBook([["製表日期：115年3月1日(假日)"]])),
     "",

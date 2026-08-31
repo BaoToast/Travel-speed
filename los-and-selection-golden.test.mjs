@@ -95,3 +95,61 @@ function harness() {
   const compare = new Function("losRank", `return (a, b) => (${body});`)(losRank);
   return { pick: (rows) => [...rows].sort(compare)[0] };
 }
+
+/*
+ * ── 延滯讀取：碰到下一個文字標籤就要停 ──
+ *
+ * `metricAt()` 早就有這道防護（註解寫著「舊寫法會把 35.78 當成旅行速率讀進來」），
+ * 但 `delayPart()` / `valueBelowLabel()` 漏掉了：路段延滯格填「N/A」「-」「休」
+ * **或空白**時，掃描會越過「交叉口延滯」這個標籤列，撿到它下面的值——
+ * 同一個數字被算兩次、導致總延滯被高估，而且 issue 為空、ok=true、靜靜寫入。
+ */
+test("兩條延滯解析路徑：讀不到自己的值時都要回 null，不可以撿到下一欄", () => {
+  const numSrc =
+    'const num = (v) => { if (v == null || String(v).trim() === "") return null;' +
+    " const n = Number(v); return Number.isFinite(n) ? n : null; };";
+  const scope = {};
+  new Function(
+    numSrc +
+      extractFn("normalize") +
+      extractFn("findLabels") +
+      extractFn("delayPart") +
+      extractFn("valueBelowLabel") +
+      "this.delayPart = delayPart;" +
+      "this.valueBelowLabel = valueBelowLabel;",
+  ).call(scope);
+  const sheet = (roadDelay) => [
+    ["", ""],
+    ["路段延滯", ""],
+    [roadDelay, ""],
+    ["交叉口延滯", ""],
+    [48.33, ""],
+  ];
+  const readers = {
+    "舊版型 delayPart": (v) =>
+      scope.delayPart(sheet(v), 0, "路段延滯", { from: 0, to: 5 }),
+    "分塊版型 valueBelowLabel": (v) =>
+      scope.valueBelowLabel(sheet(v), { r: 1, c: 0 }, { from: 0, to: 5 }),
+  };
+  for (const [name, read] of Object.entries(readers)) {
+    assert.equal(read(80), 80, `${name}：正常值照舊讀得到`);
+    for (const bad of ["N/A", "-", "休", "", null])
+      assert.equal(
+        read(bad),
+        null,
+        `${name}：路段延滯為 ${JSON.stringify(bad)} 時必須回 null，不可以回 48.33`,
+      );
+  }
+});
+
+/** 取出 app.js 裡的具名函式原始碼。 */
+function extractFn(name) {
+  const start = source.indexOf(`function ${name}`);
+  assert.ok(start >= 0, `找不到 ${name}`);
+  let depth = 0;
+  for (let i = source.indexOf("{", start); i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}" && --depth === 0) return source.slice(start, i + 1);
+  }
+  throw new Error(`${name} 括號不成對`);
+}

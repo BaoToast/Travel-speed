@@ -154,7 +154,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.19";
+document.querySelector(".brand small").textContent = "正式版 v2.20.21";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -165,8 +165,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.19.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.19.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.21.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.21.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -724,8 +724,11 @@ function delayPart(m, row, text, bounds) {
   if (!best) return null;
   const limit = Math.min(to - 1, best.r + 20);
   for (let r = best.r + 1; r <= limit; r++) {
-    const n = num(m[r]?.[best.c]);
+    const cell = m[r]?.[best.c];
+    const n = num(cell);
     if (n != null) return n;
+    /* 與 valueBelowLabel 同一條規則：碰到下一個文字標籤就停，不撿鄰欄的值。 */
+    if (cell != null && String(cell).trim() !== "") break;
   }
   return null;
 }
@@ -773,11 +776,26 @@ function labelsInBlock(m, block, text) {
   return findLabels(m, text).filter((p) => p.r >= block.from && p.r < block.to);
 }
 /** 讀標籤正下方最近的一個數字，只在同一個區塊內找。 */
+/**
+ * 從標籤往下找它的數值。
+ *
+ * 碰到「另一個非空文字格」就停——那代表已經越過這個標籤的地盤，
+ * 進到下一個欄位了。`metricAt()` 早就這樣做（見它上方的註解：
+ *「舊寫法會把 35.78 當成旅行速率讀進來」），但延滯這條路徑漏掉了。
+ *
+ * 漏掉的後果實測：路段延滯格填「N/A」「-」「休」**或空白**時，掃描會越過
+ *「交叉口延滯」這個標籤列（文字，被跳過），撿到它下面的值——同一個數字被
+ * 算兩次，導致總延滯被高估，而且 issue 為空、ok=true、靜靜寫入。
+ * 程式與 README 三處都寫著「缺一項就判定讀取失敗」，實際上是匯入了鄰欄的值。
+ */
 function valueBelowLabel(m, p, block) {
   const limit = Math.min(block.to - 1, p.r + 20);
   for (let r = p.r + 1; r <= limit; r++) {
-    const n = num(m[r]?.[p.c]);
+    const cell = m[r]?.[p.c];
+    const n = num(cell);
     if (n != null) return n;
+    /* 非空的文字格＝已經是下一個欄位，不能再往下撿。 */
+    if (cell != null && String(cell).trim() !== "") break;
   }
   return null;
 }
@@ -1052,8 +1070,7 @@ function dayFromWorkbook(wb) {
      *「製表日期：115年3月1日(假日)」與「日期：115年1月26日(平日)」時，
      * 會依掃描順序回傳「假日」——而日別是資料識別鍵的一部分。
      */
-    if (/(?:製表|列印|印製|報告|出圖|填表|核定|審查|校核|繪製|更新|修正)\s*日\s*期/.test(text))
-      continue;
+    if (globalThis.PeriodDate.isNonSurveyDateText(text)) continue;
     const match = text.match(/日\s*期\s*[：:][^（(]*[（(]\s*(平日|假日)\s*[）)]/);
     if (match) return match[1];
   }

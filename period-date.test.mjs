@@ -15,12 +15,33 @@ const {
   findSurveyDate,
   formatPeriod,
   isLabelledSurveyDateText,
+  isNonSurveyDateText,
   parseSurveyDateText,
   parseSurveyPeriod,
   periodDisplayLabel,
   periodMismatchPrompt,
   periodUnknownNotice,
 } = globalThis.PeriodDate;
+
+test("非調查日期標籤使用共用清單", () => {
+  for (const label of [
+    "製表日期",
+    "列印日期",
+    "印製日期",
+    "報告日期",
+    "出圖日期",
+    "填表日期",
+    "核定日期",
+    "審查日期",
+    "校核日期",
+    "繪製日期",
+    "修正日期",
+    "更新日期",
+  ])
+    assert.equal(isNonSurveyDateText(`${label}：115年3月1日`), true, label);
+  assert.equal(isNonSurveyDateText("調查日期：115年1月26日"), false);
+  assert.equal(isNonSurveyDateText("監測日期：115年1月26日"), false);
+});
 
 
 /*

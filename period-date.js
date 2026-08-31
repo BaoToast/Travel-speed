@@ -111,6 +111,15 @@
       .normalize("NFKC")
       .replace(/\s+/g, "");
 
+  /**
+   * 這段文字是不是「非調查日期」的標籤（製表日期、列印日期…）。
+   * 平假日判讀也要用同一份清單，否則「製表日期：…(假日)」會蓋掉真正的調查日期。
+   */
+  function isNonSurveyDateText(text) {
+    return NON_SURVEY_DATE_LABEL.test(flatten(text));
+  }
+
+
   function isLabelledSurveyDateText(text) {
     const flat = flatten(text);
     if (NON_SURVEY_DATE_LABEL.test(flat)) return false;
@@ -339,6 +348,7 @@
     formatPeriod: formatPeriod,
     samePeriod: samePeriod,
     isLabelledSurveyDateText: isLabelledSurveyDateText,
+    isNonSurveyDateText,
     parseSurveyDateText: parseSurveyDateText,
     findSurveyDate: findSurveyDate,
     surveyDateSourceLabel: surveyDateSourceLabel,
