@@ -148,7 +148,18 @@
           sourceHash: hash,
         }),
       );
-    } catch {}
+    } catch {
+      /*
+       * 舊版靜靜吞掉：資料照常寫入，但少了 sourceFile/sourceSheet/sourceRefs，
+       * 於是「資料溯源」表顯示「舊資料未記錄」——把**這次抓取失敗**呈現成
+       * **這是舊版匯入的資料**。這是稽核用的畫面，誤導的成本不低。
+       * 畫面上「本次讀取失敗」那條分支早就寫好了，只是從來沒有地方寫入旗標。
+       */
+      result.rows.forEach((r) => {
+        if (!r.sourceFile) r.sourceFile = file.name;
+        r.sourceTraceFailed = true;
+      });
+    }
     return result;
   };
 
@@ -265,7 +276,7 @@
           .slice(0, 500)
           .map(
             (x) =>
-              `<tr><td>${safe(x.period)}<br>${safe(x.road)}／${safe(x.day)}</td><td>${safe(x.peak)}／${safe(rowDirectionName(x))}</td><td>${safe(x.sourceFile || x.source || "舊資料未記錄")}</td><td>${safe(x.sourceSheet || "舊資料未記錄")}</td><td>${safe((x.sourceRefs || []).join("、") || "舊資料未記錄")}</td><td>${safe(x.importBatch || "—")}<br><small>${safe(x.sourceHash || "—")}</small></td></tr>`,
+              `<tr><td>${safe(x.period)}<br>${safe(x.road)}／${safe(x.day)}</td><td>${safe(x.peak)}／${safe(rowDirectionName(x))}</td><td>${safe(x.sourceFile || x.source || "舊資料未記錄")}</td><td>${safe(x.sourceSheet || (x.sourceTraceFailed ? "本次讀取失敗" : "舊資料未記錄"))}</td><td>${safe((x.sourceRefs || []).join("、") || (x.sourceTraceFailed ? "本次讀取失敗" : "舊資料未記錄"))}</td><td>${safe(x.importBatch || "—")}<br><small>${safe(x.sourceHash || "—")}</small></td></tr>`,
           )
           .join("")
       : '<tr><td colspan="6" class="empty">沒有符合的來源紀錄</td></tr>';

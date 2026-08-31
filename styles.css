@@ -300,3 +300,65 @@ button,.primary,.ghost,.outline,.success{white-space:nowrap}
 .period-display-toggle{border:1px solid #cfd9da;background:#fff;border-radius:999px;padding:5px 13px;font-size:11px;cursor:pointer;white-space:nowrap}
 .period-display-toggle.is-on{background:#e6f4ef;border-color:#168466;color:#0f5c48;font-weight:700}
 .period-display-toggle:disabled{opacity:.45;cursor:not-allowed}
+
+/*
+ * ── 檔名／表頭來源說明與預覽提示 ──
+ * 路段名稱與平假日優先讀調查表表頭，讀不到才退回檔名。兩種來源可信度
+ * 差很多，要在視覺上分開，讓使用者知道哪些需要核對。
+ */
+.filename-rules {
+  margin-top: 14px;
+  border: 1px solid #e5c98a;
+  background: #fffaf0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.filename-rules summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #8a5a00;
+}
+.filename-rules p {
+  margin: 8px 0;
+}
+.filename-rules ol {
+  margin: 8px 0 4px;
+  padding-left: 18px;
+}
+.filename-rules li {
+  margin-bottom: 7px;
+}
+.filename-rules li b {
+  display: block;
+}
+.filename-rules li span {
+  display: block;
+  color: #4b5563;
+}
+.filename-rules code {
+  background: #f1f3f5;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  word-break: break-all;
+}
+.filename-rules .note {
+  color: #8a5a00;
+  font-weight: 600;
+}
+.from-filename {
+  display: block;
+  margin-top: 3px;
+  color: #8a5a00;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.from-content {
+  display: block;
+  margin-top: 3px;
+  color: #168466;
+  font-size: 11px;
+  line-height: 1.5;
+}

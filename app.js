@@ -154,7 +154,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.16";
+document.querySelector(".brand small").textContent = "正式版 v2.20.19";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -165,8 +165,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.16.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.16.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.19.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.19.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -349,11 +349,19 @@ function renderPeriodDisplayToggle() {
   const mode = state.periodDisplay === "month" ? "month" : "quarter";
   periodDisplayButton.textContent = `期別顯示：${labels[mode]}`;
   periodDisplayButton.classList.toggle("is-on", mode === "month");
-  const has = anySurveyDate();
+  /*
+   * 按鈕是否可用，看的是「目前計畫或 Manager 有沒有日期」；但只要目前計畫
+   * 自己沒有，就要在提示裡講明白——否則使用者按下去會發現每一格還是季別，
+   * 而畫面上沒有任何解釋。
+   */
+  const activeHas = activeProjectHasSurveyDate();
+  const has = activeHas || managerHasSurveyDate();
   periodDisplayButton.disabled = !has;
-  periodDisplayButton.title = has
-    ? "切換期別顯示方式：季別（115Q1）／實際調查月份（115年2、3月）。只換顯示文字，不影響分組與計算。"
-    : "目前的資料沒有調查日期可用，無法顯示調查月份。重新匯入原始檔之後就會有。";
+  periodDisplayButton.title = !has
+    ? "目前的資料沒有調查日期可用，無法顯示調查月份。重新匯入原始檔之後就會有。"
+    : activeHas
+      ? "切換期別顯示方式：季別（115Q1）／實際調查月份（115年2、3月）。只換顯示文字，不影響分組與計算。"
+      : "目前這個計畫的資料沒有調查日期，切換後仍會顯示季別；Manager 的專案包有日期，那一頁會顯示月份。重新匯入原始檔之後，這個計畫也會有月份。";
 }
 function clearPendingPreview() {
   // 預覽結果只對「預覽當下的那個計畫」有效。切換計畫、刪除計畫或全部清除之後
@@ -501,7 +509,14 @@ function roadFromFile(name) {
   return stripRoadSuffix(s);
 }
 function dayFromFile(name) {
-  return name.includes("假日") ? "假日" : "平日";
+  const stem = String(name).replace(/\.(xlsx?|xlsm)$/i, "");
+  /* 只認結尾處的平假日標記，避免路段名稱裡的字樣誤判。 */
+  const tail = stem.match(
+    /(平日|假日)\s*\)?\s*(?:(?:[-－_]?\d[\d.\-]*)|(?:[（(]\d+[）)]))?$/,
+  );
+  if (tail) return tail[1];
+  /* 尾端沒有標記就判不出來。不可因路段名稱中剛好出現其中一個字樣而猜測。 */
+  return "";
 }
 function editDistance(a, b) {
   a = normalize(a);
@@ -531,6 +546,24 @@ function existingRoads() {
     ...new Set(state.details.filter((d) => d.projectCode === state.activeCode).map((d) => d.road)),
   ];
 }
+function suspiciousRoadName(road) {
+  const value = String(road || "").trim();
+  if (!value) return "從檔名讀不出路段名稱";
+  /* 前面沒有案號數字的純代號（TS1401_、T14-02）也要攔——備援路徑正是為了
+     應付沒有站名的舊模板，那時這種名稱會安靜變成一個幽靈路段。 */
+  if (/^[A-Za-z]{1,3}\s*\d{2,}[-_－.]?\d*[-_－]?$/i.test(value))
+    return "名稱看起來只是站號代號，不是路段名稱";
+  if (/\d{3,}\s*[-_－.]?\s*TS\s*\d/i.test(value))
+    return "名稱裡還留著案號（開頭格式須為「數字TS數字-數字」，例如 99999TS1-01；中間多符號或改用底線就切不掉）";
+  if (/^(複本|副本|Copy of|-\s)/i.test(value))
+    return "名稱以「複本」等字樣開頭，可能是另存的副本檔";
+  if (/[(（]\s*\d+\s*[)）]\s*$/.test(value))
+    return "名稱結尾有 (1) 這類重複下載的流水號";
+  if (/(平日|假日)/.test(value))
+    return "名稱裡仍含「平日／假日」字樣，可能沒有切乾淨";
+  if (/^\d+(Q\d)?$/i.test(value)) return "名稱只有數字或季度字樣";
+  return "";
+}
 function analyzeRoads() {
   const known = existingRoads(),
     seen = [...new Set(pending.filter((x) => x.ok).map((x) => x.road))],
@@ -541,6 +574,18 @@ function analyzeRoads() {
     item.originalRoad = item.road;
     item.matchType = "新路段";
     if (!item.ok) continue;
+    /*
+     * 名稱本身看起來就像沒切乾淨時，不論計畫裡有沒有既有路段都要先問。
+     * 一律強制確認會讓正常流程平白多一道手續；完全不管又會讓
+     * `複本 - …`、`…-平日 (1)`、案號沒切掉的檔名靜靜長出一個幽靈路段，
+     * 而且第一次匯入時連比對對象都沒有，完全不會被發現。
+     */
+    const suspicious = suspiciousRoadName(item.road);
+    if (suspicious) {
+      item.matchType = "疑似判讀失敗";
+      item.roadAlert = { near: "", score: 0, reason: suspicious };
+      continue;
+    }
     if (known.includes(item.road)) {
       item.matchType = "完全相符";
       continue;
@@ -954,6 +999,66 @@ function assertNoPrototypePollution(before, fileLabel) {
  * 不看固定欄位位置——各家報表的日期欄擺放都不一樣（實測看過
  * 上午!AB3、統計表 (1)!B2 這兩種）。
  */
+function headerTextsOf(wb) {
+  const texts = [];
+  for (const name of wb.SheetNames) {
+    const sheet = wb.Sheets[name];
+    if (!sheet || !sheet["!ref"]) continue;
+    let range;
+    try {
+      range = XLSX.utils.decode_range(sheet["!ref"]);
+    } catch {
+      continue;
+    }
+    for (let r = range.s.r; r <= Math.min(range.e.r, 12); r++)
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+        if (!cell) continue;
+        const text = String(cell.w ?? cell.v ?? "").trim();
+        if (text) texts.push(text);
+      }
+  }
+  return texts;
+}
+function roadFromWorkbook(wb) {
+  for (const text of headerTextsOf(wb)) {
+    const match = text.match(/站\s*名\s*[：:]\s*(.+)$/);
+    if (match) {
+      /*
+       * 合併儲存格的表頭常常把站名與方向／備註排在同一格
+       *（「站名：中正路(甲街～乙街)  方向：北往南」）。`(.+)$` 會把後面
+       * 整串吃進來，於是無聲長出一個幽靈路段。截到下一個「標籤：」為止。
+       */
+      const cut = match[1].split(/\s{2,}|　|(?=[\u4e00-\u9fa5]{2,6}\s*[：:])/)[0];
+      /*
+       * 表頭來的名稱也要走與檔名路徑相同的案號剝除，否則舊模板（無站名）
+       * 匯入「中正路」、新模板（站名含案號）匯入「99999TS1-01-中正路」，
+       * 同一條路段會被拆成兩個。
+       */
+      const value = stripRoadSuffix(
+        cut.trim().replace(/^\d+\s*TS\s*\d+-?\d*[-－]?/i, ""),
+      );
+      if (value) return value;
+    }
+  }
+  return "";
+}
+function dayFromWorkbook(wb) {
+  for (const text of headerTextsOf(wb)) {
+    /*
+     * 要排除「製表日期」「列印日期」這類非調查日期。
+     * period-date.js 的 findSurveyDate() 早就有這份排除清單，但那只作用在
+     * 日期本身；平假日這條路徑若不比照辦理，表頭同時有
+     *「製表日期：115年3月1日(假日)」與「日期：115年1月26日(平日)」時，
+     * 會依掃描順序回傳「假日」——而日別是資料識別鍵的一部分。
+     */
+    if (/(?:製表|列印|印製|報告|出圖|填表|核定|審查|校核|繪製|更新|修正)\s*日\s*期/.test(text))
+      continue;
+    const match = text.match(/日\s*期\s*[：:][^（(]*[（(]\s*(平日|假日)\s*[）)]/);
+    if (match) return match[1];
+  }
+  return "";
+}
 function surveyDateFromWorkbook(wb) {
   const cells = [];
   for (const name of wb.SheetNames) {
@@ -1002,13 +1107,28 @@ function managerPeriodLabel(period, projectCode) {
   return periodLabelFromRows(period, source);
 }
 /** 有沒有任何一筆讀得到調查日期——都沒有就把切換鈕停用並說明原因。 */
-function anySurveyDate() {
-  return (
-    state.details.some((x) => x.surveyDate) ||
-    state.manager.some((pack) =>
-      [...(pack.details || []), ...(pack.summaries || [])].some((x) => x.surveyDate),
-    )
+/**
+ * 目前這個計畫的明細裡有沒有調查日期。
+ *
+ * 舊版的 anySurveyDate() 掃的是「這台電腦上全部計畫＋全部 Manager 專案包」，
+ * 但月份顯示（projectPeriodLabel）只看目前這一個計畫。兩者範圍不一致時：
+ * A 計畫有日期、B 計畫是舊資料，切到 B 之後按鈕仍可按，按下去每一格
+ * 卻還是 115Q1，畫面上沒有一個字說明為什麼。手冊寫的也是
+ *「整個計畫都讀不到時，切換鈕會停用並寫明原因」。
+ */
+function activeProjectHasSurveyDate() {
+  return state.details.some(
+    (x) => x.projectCode === state.activeCode && x.surveyDate,
   );
+}
+/** Manager 專案包裡有沒有調查日期（Manager 頁自己的判斷依據）。 */
+function managerHasSurveyDate() {
+  return state.manager.some((pack) =>
+    [...(pack.details || []), ...(pack.summaries || [])].some((x) => x.surveyDate),
+  );
+}
+function anySurveyDate() {
+  return activeProjectHasSurveyDate() || managerHasSurveyDate();
 }
 
 async function parseFile(file, year, q, defSpeed) {
@@ -1018,10 +1138,52 @@ async function parseFile(file, year, q, defSpeed) {
   assertNoPrototypePollution(fingerprint, file.name);
   /* 表頭調查日期。只作顯示與期別檢查用，不參與任何速率、延滯或 LOS 計算。 */
   const surveyDateFound = surveyDateFromWorkbook(wb);
-  const road = roadFromFile(file.name),
-    day = dayFromFile(file.name),
+  /*
+   * 路段名稱與平假日一律「內容優先、檔名備援」。
+   * 這兩個欄位是資料識別鍵（見下方 id 的組成），而調查表表頭本來就寫著
+   * 「站名：台1(中山南路~…)」與「日期：…(平日)」——先讀內容，
+   * 檔名就不再是決定資料歸屬的因素。
+   */
+  const roadFromContent = roadFromWorkbook(wb),
+    dayFromContent = dayFromWorkbook(wb),
+    roadFromName = roadFromFile(file.name),
+    dayFromName = dayFromFile(file.name),
+    road = roadFromContent || roadFromName,
+    roadSource = roadFromContent ? "工作表「站名：」欄位" : "檔名",
+    day = dayFromContent || dayFromName,
+    daySource = dayFromContent ? "工作表日期欄的括號" : "檔名",
+    /*
+     * 兩個來源都算得出來、卻互相矛盾時要講出來，不能靜靜取其一。
+     *
+     * 最危險的情境：調查員把平日檔另存成假日檔、忘了改表頭的「(平日)」，
+     * 但檔名正確寫成「…-假日.xlsx」。內容優先會靜靜記成平日，而 upsert
+     * 依 id 覆蓋——真正的平日那一筆就被蓋掉了。同批匯入時碰撞檢查擋得住，
+     * **分批匯入（平日上週、假日今天）就完全無聲**，假日資料人間蒸發。
+     */
+    dayConflict = Boolean(dayFromContent && dayFromName && dayFromContent !== dayFromName),
+    roadConflict = Boolean(
+      roadFromContent && roadFromName && normalize(roadFromContent) !== normalize(roadFromName),
+    ),
     morning = matrix(wb, ["上午尖峰", "上午", "AM尖峰", "AM"]),
     afternoon = matrix(wb, ["下午尖峰", "下午", "PM尖峰", "PM"]);
+  /*
+   * 路段名稱與平假日都是識別鍵的一部分，判讀不出來時必須當成錯誤退回，
+   * 不能給一個猜出來的值繼續往下走——那會安靜地把資料寫到錯的路段或
+   * 錯的日別，而使用者永遠不會知道。訊息要說得出「改檔名就能解決」。
+   */
+  if (!road)
+    throw new Error(
+      "工作表表頭找不到「站名：」欄位，檔名也讀不出路段名稱。請確認調查表表頭有站名，" +
+        "或將檔名改為「<案號>TS<站號>-<路段名稱>-平日.xlsx」的格式，例如 99999TS1-01-中正路(甲街～乙街)-平日.xlsx",
+    );
+  if (!day)
+    throw new Error(
+      `工作表日期欄沒有註明「(平日)」或「(假日)」，檔名也判斷不出來${
+        /平日/.test(file.name) && /假日/.test(file.name)
+          ? "（檔名同時出現「平日」與「假日」）"
+          : "（檔名沒有「平日」或「假日」字樣）"
+      }。請在檔名結尾加上「-平日」或「-假日」後重新選取，例如 ${String(file.name).replace(/\.(xlsx?|xlsm)$/i, "-平日.$1")}`,
+    );
   const am = parsePeakSheet(morning, "上午尖峰");
   const pm = parsePeakSheet(afternoon, "下午尖峰");
   const rows = [...am.rows, ...pm.rows];
@@ -1056,7 +1218,11 @@ async function parseFile(file, year, q, defSpeed) {
       quarter: +q,
       period: `${year}Q${q}`,
       road,
+      roadSource,
       day,
+      daySource,
+      dayConflict,
+      roadConflict,
       limit,
       // 報告上寫的方向文字，只作顯示用；方向的鍵值仍是方向1／方向2。
       directionText: r.directionText || "",
@@ -1081,7 +1247,16 @@ async function parseFile(file, year, q, defSpeed) {
   return {
     file: file.name,
     road,
+    roadSource,
     day,
+    daySource,
+    dayConflict,
+    roadConflict,
+    conflictNote: dayConflict
+      ? `表頭寫「${dayFromContent}」、檔名寫「${dayFromName}」，兩者不一致。系統採用表頭的「${dayFromContent}」——若檔名才是對的，請先修正表頭或改檔名後重新預覽。`
+      : roadConflict
+        ? `表頭的站名「${roadFromContent}」與檔名切出來的「${roadFromName}」不一致。系統採用表頭的名稱。`
+        : "",
     rows,
     surveyDateFound,
     ok,
@@ -1197,17 +1372,28 @@ $("preview").onclick = async () => {
     try {
       pending.push(await parseFile(f, year, q, $("defaultSpeed").value));
     } catch (e) {
-      // 使用者在預覽後把檔案拿去 Excel 修正、再按一次「讀取並預覽」時，
-      // 瀏覽器手上那個檔案參照已經失效（內容與選取當下不一致），
-      // 讀取會直接失敗。這時講「格式不支援」會把人引到完全錯誤的方向。
-      const changed = /NotReadable|not be read|changed/i.test(String(e?.name || e?.message || ""));
+      /*
+       * 錯誤訊息要原樣傳給使用者。
+       *
+       * 舊寫法是 `String(e?.name || e?.message)`——`new Error()` 的 `.name`
+       * 恆為 "Error"（真值），所以 `.message` **永遠讀不到**，每一種失敗都被
+       * 顯示成「檔案無法開啟或格式不支援」。被吞掉的包括：
+       *  ・「表頭找不到站名、檔名也讀不出路段名稱，請改成 …-平日.xlsx」
+       *  ・「日期欄沒有註明(平日)/(假日)」（連建議檔名都算好了）
+       *  ・**原型污染中止**這種安全訊息，被降級成「格式不支援」
+       * 使用者只會去懷疑 Excel 版本、重存檔，永遠不會想到是檔名問題。
+       */
+      const detail = String(e?.message || "").trim();
+      const changed = /NotReadable|not be read|changed/i.test(
+        detail + " " + String(e?.name || ""),
+      );
       pending.push({
         file: f.name,
         rows: [],
         ok: false,
         error: changed
           ? "這個檔案在選取之後被修改過，請重新選取一次檔案再預覽"
-          : "檔案無法開啟或格式不支援",
+          : detail || "檔案無法開啟或格式不支援",
       });
     }
   }
@@ -1310,10 +1496,34 @@ function matchBadge(type) {
 function roadDecision(x, i) {
   if (!x.ok) return "—";
   const badge = matchBadge(x.matchType);
-  if (!x.roadAlert)
-    return `${badge}<br>${x.roadChoice ? `自動對應：${esc(x.roadChoice)}` : "使用目前正式名稱"}`;
+  if (!x.roadAlert) {
+    /*
+     * 一律把「實際取到的路段名稱」與它的來源印出來。
+     * 舊版在沒有 alert 時只寫「使用目前正式名稱」，但對一個全新計畫來說
+     * 根本沒有「目前正式名稱」，那裡只有一個從檔名切出來的字串，
+     * 而使用者從頭到尾看不到它是什麼。
+     */
+    if (x.conflictNote)
+      return `${badge}<br>路段：${esc(x.road)}<br><small class="from-filename">⚠ ${esc(x.conflictNote)}</small>`;
+    const fromFile = x.roadSource === "檔名" || x.daySource === "檔名";
+    const note = fromFile
+      ? `<small class="from-filename">⚠ 路段名稱取自${esc(x.roadSource || "檔名")}、日別取自${esc(x.daySource || "檔名")}，請確認</small>`
+      : `<small class="from-content">路段名稱與日別皆讀自調查表表頭</small>`;
+    return `${badge}<br>${x.roadChoice ? `自動對應：${esc(x.roadChoice)}` : `路段：${esc(x.road)}`}<br>${note}`;
+  }
   const known = existingRoads(),
     hint = x.roadAlert.score >= 0.55 ? `（疑似：${esc(x.roadAlert.near)}）` : "";
+  if (x.roadAlert.reason) {
+    /*
+     * 補救指示要看名稱是從哪裡來的。名稱取自表頭時叫使用者「改檔名」，
+     * 他改了、重新預覽、還是同一個錯誤——因為內容優先，檔名根本沒被用到。
+     */
+    const howToFix =
+      x.roadSource === "檔名"
+        ? "請確認或改檔名後重新預覽"
+        : "此名稱取自工作表「站名：」欄位，改檔名不會有作用；請確認，或修正原始檔的站名後重新預覽";
+    return `<label class="road-pick"><input type="checkbox" data-pick="${i}" ${roadPicks.has(i) ? "checked" : ""}>${badge}</label><br><b>${esc(x.road) || "（空白）"}</b><br><small class="from-filename">${esc(x.roadAlert.reason)}；${howToFix}</small><br><select class="road-choice" data-pending="${i}"><option value="" ${!x.roadChoice ? "selected" : ""}>請確認</option><option value="__NEW__" ${x.roadChoice === "__NEW__" ? "selected" : ""}>確認就用這個名稱</option>${known.map((r) => `<option value="${esc(r)}" ${x.roadChoice === r ? "selected" : ""}>合併至：${esc(r)}</option>`).join("")}</select>`;
+  }
   // 勾選框只出現在「需要人工確認」的列；已經確認過的仍保留勾選框，
   // 使用者改變主意時可以再批次改一次。
   return `<label class="road-pick"><input type="checkbox" data-pick="${i}" ${roadPicks.has(i) ? "checked" : ""}>${badge}</label><br><select class="road-choice" data-pending="${i}"><option value="" ${!x.roadChoice ? "selected" : ""}>請確認${hint}</option><option value="__NEW__" ${x.roadChoice === "__NEW__" ? "selected" : ""}>確認為新路段</option>${known.map((r) => `<option value="${esc(r)}" ${x.roadChoice === r ? "selected" : ""}>合併至：${esc(r)}</option>`).join("")}</select>`;
@@ -1363,6 +1573,20 @@ function renderRoadBatchBar() {
 function projectedId(item, r) {
   const target = item.roadChoice && item.roadChoice !== "__NEW__" ? item.roadChoice : r.road;
   return [r.projectCode, r.year, `Q${r.quarter}`, target, r.day, r.peak, r.direction].join("|");
+}
+function sourceConflictPrompt(items) {
+  const conflicts = (items || []).filter(
+    (x) => x?.ok && (x.dayConflict || x.roadConflict),
+  );
+  if (!conflicts.length) return "";
+  const lines = conflicts.map(
+    (x) => `• ${x.file}：${x.conflictNote || "表頭與檔名不一致"}`,
+  );
+  return (
+    `有 ${conflicts.length} 份檔案的表頭與檔名不一致：\n\n` +
+    lines.join("\n") +
+    "\n\n系統將採用工作表表頭的路段名稱／日別。確定仍要寫入嗎？"
+  );
 }
 function duplicateStats() {
   const ids = new Set(state.details.map((x) => x.id));
@@ -1458,6 +1682,8 @@ $("commit").onclick = async () => {
     return toast(
       `這幾份檔案被判定為同一個路段與日別，會互相覆蓋，請確認後分批匯入：${collided.join("、")}`,
     );
+  const sourceConflictMessage = sourceConflictPrompt(good);
+  if (sourceConflictMessage && !confirm(sourceConflictMessage)) return;
   /*
    * 調查日期與所選季度對不起來時，寫入前顯眼提示並要求二次確認。
    * 只比對這次真的會寫入的檔案；讀不到日期一律**不阻擋**。
@@ -2286,7 +2512,7 @@ function downloadProjectPackage(note = true) {
   if (note) toast("目前 Project 專案包已下載");
   return true;
 }
-$("downloadBackup").textContent = "下載目前 Project 專案包";
+$("downloadBackup").textContent = "下載目前計畫的專案包";
 $("downloadBackup").onclick = () => downloadProjectPackage();
 const portfolioBtn = document.createElement("button");
 portfolioBtn.className = "outline";
@@ -2495,6 +2721,7 @@ if (clearAllCard) {
 
 $("managerFiles").onchange = async (e) => {
   let added = 0;
+  const failed = [];
   for (const f of [...e.target.files])
     try {
       const p = JSON.parse(await f.text()),
@@ -2516,17 +2743,34 @@ $("managerFiles").onchange = async (e) => {
                 ),
               }))
             : [p];
+      if (
+        !packs.length ||
+        packs.some((pack) => pack.kind !== "TLM_PROJECT_PACKAGE" || !pack.project?.code)
+      )
+        throw new Error("不是有效的 Project 專案包");
       for (const pack of packs) {
-        if (pack.kind !== "TLM_PROJECT_PACKAGE" || !pack.project?.code) continue;
         pack.importedAt = new Date().toLocaleString("zh-TW");
         state.manager = state.manager.filter((x) => x.project.code !== pack.project.code);
         state.manager.push(pack);
         added++;
       }
-    } catch {}
+    } catch {
+      /*
+       * 舊版把讀檔失敗整個吞掉：一次選 8 份、其中 2 份是壞檔或別的系統
+       * 匯出的設定檔時，畫面只說「已匯入或更新 6 個 Project」，看起來像成功，
+       * 沒有一個字說哪兩份沒進來。同一支檔案的「還原備份」就做對了
+       *（會明講「這不是有效的備份檔」），兩處標準應該一致。
+       */
+      failed.push(f.name);
+    }
   e.target.value = "";
   await save();
-  toast(`已匯入或更新 ${added} 個 Project`);
+  toast(
+    `已匯入或更新 ${added} 個 Project` +
+      (failed.length
+        ? `；有 ${failed.length} 個檔案讀不到有效的專案包，未匯入：${failed.join("、")}`
+        : ""),
+  );
 };
 for (const id of [
   "managerSearch",
