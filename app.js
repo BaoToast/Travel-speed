@@ -160,7 +160,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.26";
+document.querySelector(".brand small").textContent = "正式版 v2.20.28";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -171,8 +171,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.26.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.26.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.28.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.28.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -447,8 +447,15 @@ projectSwitch.onchange = async () => {
   toast("已切換計畫");
 };
 const projectPicker = document.createElement("label");
-projectPicker.innerHTML = '目前計畫<select id="projectPicker"></select>';
+projectPicker.innerHTML = '要編輯的計畫<select id="projectPicker"></select>';
 document.querySelector("#setup .form").prepend(projectPicker);
+const projectScopeHint = document.createElement("p");
+projectScopeHint.id = "projectScopeHint";
+projectScopeHint.className = "warning";
+projectScopeHint.setAttribute("role", "status");
+projectScopeHint.setAttribute("aria-live", "polite");
+projectScopeHint.style.display = "none";
+projectPicker.after(projectScopeHint);
 $("projectPicker").onchange = () => {
   const p = state.projects.find((x) => x.code === $("projectPicker").value);
   $("projectCode").value = p?.code || "";
@@ -474,6 +481,14 @@ function renderProjectSetupActions() {
   deleteProjectBtn.disabled = !exists;
   deleteProjectBtn.textContent = exists ? `刪除計畫「${code}」` : "刪除這個計畫";
   deleteProjectHint.style.display = exists ? "" : "none";
+  const active = activeProject();
+  const mismatched = Boolean(active && code && exists && code !== active.code);
+  projectScopeHint.style.display = mismatched ? "" : "none";
+  projectScopeHint.textContent = mismatched
+    ? `⚠️ 目前作用中的是「${active.code} ${active.name}」——匯入、明細、彙總與圖表都會用那一個。` +
+      `這張表單編輯的是「${code}」；按下「儲存計畫設定」才會把作用中計畫換成它，` +
+      `或改用頁首的計畫選單直接切換。`
+    : "";
 }
 deleteProjectBtn.onclick = () => {
   const code = ($("projectCode").value || "").trim();

@@ -481,3 +481,26 @@ test("共用的季度輸入把關在獨立交付包內可完整驗證", () => {
   assert.match(surveyPeriodInputMessage("format"), /115Q2.*2026Q2/);
   assert.match(surveyPeriodInputMessage("range"), /90～200.*2001～2111/);
 });
+
+test("「要編輯的計畫」不得再叫「目前計畫」，且不一致時要當場說明", () => {
+  assert.doesNotMatch(appSource, /'目前計畫<select id="projectPicker">/);
+  assert.match(appSource, /'要編輯的計畫<select id="projectPicker">/);
+  assert.match(appSource, /projectScopeHint/);
+  assert.match(
+    appSource,
+    /const mismatched = Boolean\(active && code && exists && code !== active\.code\)/,
+  );
+  assert.match(appSource, /目前作用中的是「\$\{active\.code\} \$\{active\.name\}」/);
+  assert.match(appSource, /這張表單編輯的是「\$\{code\}」/);
+
+  const picker = appSource.slice(
+    appSource.indexOf('$("projectPicker").onchange'),
+    appSource.indexOf("const deleteProjectBtn"),
+  );
+  assert.match(picker, /renderProjectSetupActions\(\)/);
+  assert.doesNotMatch(picker, /state\.activeCode\s*=/);
+  assert.match(
+    appSource,
+    /projectSwitch\.onchange = async \(\) => \{\s*\n\s*state\.activeCode = projectSwitch\.value;/,
+  );
+});
