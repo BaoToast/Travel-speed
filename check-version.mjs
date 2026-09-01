@@ -160,6 +160,33 @@ for (const name of [...scripts, "index.html"]) {
   );
 }
 
+// 9) README 與驗證報告也必須跟正式版本一致。
+{
+  const readme = read("README.md");
+  const firstReadmeVersion = readme.match(/^##\s+v([\d.]+)/m)?.[1];
+  ok(
+    "README 第一個版本章節與程式相同",
+    firstReadmeVersion === shown,
+    `README v${firstReadmeVersion} vs 顯示 v${shown}`,
+  );
+
+  const validationFiles = readdirSync(here).filter((name) => /^VALIDATION_v[\d.]+\.md$/.test(name));
+  const expectedValidation = `VALIDATION_v${shown}.md`;
+  ok(
+    "根目錄只保留本版驗證報告",
+    validationFiles.length === 1 && validationFiles[0] === expectedValidation,
+    validationFiles.join("、"),
+  );
+  if (validationFiles.includes(expectedValidation)) {
+    const headingVersion = read(expectedValidation).match(/^#\s+交通服務水準\s+v([\d.]+)\s+驗證報告/m)?.[1];
+    ok(
+      "驗證報告標題與程式相同",
+      headingVersion === shown,
+      `報告 v${headingVersion} vs 顯示 v${shown}`,
+    );
+  }
+}
+
 console.log(
   problems.length ? `\n❌ 有問題：\n- ${problems.join("\n- ")}` : "\n全部通過",
 );

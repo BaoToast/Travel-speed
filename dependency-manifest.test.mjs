@@ -118,6 +118,30 @@ test("完整驗證會先建立匿名測資，而且不依賴交付包外部資�
   }
 });
 
+test("所有測試與腳本都不得 import 專案外的相對路徑", async () => {
+  const offenders = [];
+  const patterns = [
+    /\bfrom\s+["']([^"']+)["']/g,
+    /\bimport\s+["']([^"']+)["']/g,
+    /\brequire\(\s*["']([^"']+)["']\s*\)/g,
+    /\bimport\(\s*["']([^"']+)["']\s*\)/g,
+  ];
+  for (const file of await sourceFiles()) {
+    const source = await readFile(new URL(file, root), "utf8");
+    for (const pattern of patterns)
+      for (const match of source.matchAll(pattern)) {
+        if (!match[1].startsWith(".")) continue;
+        const target = new URL(match[1], new URL(file, root));
+        if (!target.href.startsWith(root.href)) offenders.push(`${file} → ${match[1]}`);
+      }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "交付包引用了專案外檔案，換一台電腦或獨立解壓後會失敗",
+  );
+});
+
 test("交付包不可再帶入已過時的 GPT Site 交接說明", async () => {
   await assert.rejects(
     access(new URL("給Claude的交接說明_v2.20.1.md", root)),

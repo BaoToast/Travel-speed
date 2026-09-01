@@ -458,3 +458,26 @@ test("結論草稿的換字是可選的，不傳就維持舊輸出", async () =>
       );
     }
 });
+
+test("共用的季度輸入把關在獨立交付包內可完整驗證", () => {
+  const { checkSurveyPeriodInput, surveyPeriodInputMessage } = box.PeriodDate;
+  assert.equal(typeof checkSurveyPeriodInput, "function");
+  assert.equal(typeof surveyPeriodInputMessage, "function");
+
+  for (let roc = 90; roc <= 200; roc += 1) {
+    for (let quarter = 1; quarter <= 4; quarter += 1) {
+      const key = `${roc}Q${quarter}`;
+      assert.deepEqual(checkSurveyPeriodInput(key), { ok: true, key });
+      assert.deepEqual(checkSurveyPeriodInput(`${roc + 1911}Q${quarter}`), { ok: true, key });
+    }
+  }
+
+  for (const value of ["2112Q3", "2000Q1", "1990Q2", "89Q1", "201Q4"])
+    assert.equal(checkSurveyPeriodInput(value).reason, "range", `${value} 應判定為超出範圍`);
+  for (const value of ["115Q5", "115", "abc", "", "Q1"])
+    assert.equal(checkSurveyPeriodInput(value).reason, "format", `${value} 應判定為格式錯誤`);
+  assert.deepEqual(checkSurveyPeriodInput(" 2026q1 "), { ok: true, key: "115Q1" });
+
+  assert.match(surveyPeriodInputMessage("format"), /115Q2.*2026Q2/);
+  assert.match(surveyPeriodInputMessage("range"), /90～200.*2001～2111/);
+});

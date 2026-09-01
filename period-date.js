@@ -115,6 +115,31 @@
     return formatPeriod(period);
   }
 
+  /*
+   * 季度輸入的共用把關。normalizeSurveyPeriod() 只在民國 90～200
+   * （西元 2001～2111）的窗口內換算；窗口外四碼年份會原樣返回，因此
+   * 呼叫端不可只檢查字串形狀，否則 2112Q3 與 201Q3 會成為兩個鍵。
+   */
+  function checkSurveyPeriodInput(input) {
+    const raw = String(input == null ? "" : input).trim().toUpperCase();
+    const match = raw.match(/^(\d{2,4})Q([1-4])$/);
+    if (!match) return { ok: false, key: normalizeSurveyPeriod(raw), reason: "format" };
+    const sourceYear = Number(match[1]);
+    const quarter = match[2];
+    if (match[1].length <= 3 && sourceYear >= 90 && sourceYear <= 200)
+      return { ok: true, key: sourceYear + "Q" + quarter };
+    if (match[1].length === 4 && sourceYear >= 2001 && sourceYear <= 2111)
+      return { ok: true, key: sourceYear - 1911 + "Q" + quarter };
+    return { ok: false, key: normalizeSurveyPeriod(raw), reason: "range" };
+  }
+
+  function surveyPeriodInputMessage(reason) {
+    return reason === "format"
+      ? "季度格式請輸入 115Q2（民國年）或 2026Q2（西元年）。"
+      : "年份超出可換算範圍：民國年請填 90～200，西元年請填 2001～2111。" +
+          "資料一律以民國年儲存，超出範圍的年份會變成一個比對不到的季度。";
+  }
+
   function samePeriod(a, b) {
     return Boolean(a && b && a.adYear === b.adYear && a.kind === b.kind && a.num === b.num);
   }
@@ -404,6 +429,8 @@
     periodOfDate: periodOfDate,
     formatPeriod: formatPeriod,
     normalizeSurveyPeriod: normalizeSurveyPeriod,
+    checkSurveyPeriodInput: checkSurveyPeriodInput,
+    surveyPeriodInputMessage: surveyPeriodInputMessage,
     samePeriod: samePeriod,
     isLabelledSurveyDateText: isLabelledSurveyDateText,
     isNonSurveyDateText,
