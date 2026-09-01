@@ -43,4 +43,10 @@ v2.20.26 已同步 README、更新說明、驗證報告、網站、快取參數�
 - PDF 手冊 35 頁、Word 手冊 25 頁；PDF 直接轉圖，Word 因環境沒有 LibreOffice，改由 Microsoft Word 輸出 PDF 後逐頁檢查。未見截斷、重疊、缺字或破版。
 - Claude 說明中的 37 份真實檔解析比對屬交接紀錄；原始調查檔未包含在附件內，因此不列為本次獨立複驗結果。
 
-GitHub Actions、Pages 版本、線上程式與手冊雜湊，以及舊版網址 404 會在推送後完成查核。
+## GitHub Pages 發布查核
+
+- 第一階段版本提交：`602ea4339bb5497a2a5dace0d9fac0c9a48b39f1`。
+- GitHub Actions「建置與測試」及「pages build and deployment」均成功。
+- 公開首頁顯示 v2.20.26，且不再含 v2.20.24 版號。
+- 線上 `app.js`、v2.20.26 PDF 手冊及 Word 手冊皆回應 200，SHA-256 與本機逐檔相符。
+- v2.20.24 PDF 與 Word 舊網址皆回應 404。
