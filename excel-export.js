@@ -40,7 +40,21 @@
           road: r.road,
           periods: new Map(),
         };
-      const p = g.periods.get(r.period) || { period: r.period, weekday: null, holiday: null };
+      const p = g.periods.get(r.period) || {
+        period: r.period,
+        /*
+         * label 是寫進儲存格與圖表類別軸的文字，跟著畫面上的年份顯示切換走。
+         * period 保持儲存值，分組與排序（periodOrder）一律走它——否則切成
+         * 西元年之後，民國 99 跨 100 的排序修正就會失效。
+         * 掛勾沒掛上時（e2e 直接呼叫這支元件）就照原樣輸出。
+         */
+        label:
+          typeof globalThis.periodExportLabel === "function"
+            ? globalThis.periodExportLabel(r.period)
+            : r.period,
+        weekday: null,
+        holiday: null,
+      };
       if (r.day === "平日") p.weekday = r.travel;
       if (r.day === "假日") p.holiday = r.travel;
       g.periods.set(r.period, p);
@@ -61,8 +75,10 @@
    * 民國 99 年跨到 100 年的資料在 Excel 表與圖表上會整段排到最前面。
    */
   function periodOrder(value) {
-    const m = String(value || "").match(/^(\d{2,3})Q([1-4])$/);
-    return m ? Number(m[1]) * 4 + Number(m[2]) : -1;
+    const m = String(value || "").match(/^(\d{2,4})Q([1-4])$/);
+    if (!m) return -1;
+    const year = Number(m[1]);
+    return (year >= 1000 ? year - 1911 : year) * 4 + Number(m[2]);
   }
   function dataSheet(groups) {
     let row = 1,
@@ -76,7 +92,7 @@
       const start = row;
       for (const p of g.periods) {
         rows.push(
-          `<row r="${row}">${textCell(`A${row}`, g.projectCode)}${textCell(`B${row}`, g.road)}${textCell(`C${row}`, p.period)}${numCell(`D${row}`, p.weekday)}${numCell(`E${row}`, p.holiday)}</row>`,
+          `<row r="${row}">${textCell(`A${row}`, g.projectCode)}${textCell(`B${row}`, g.road)}${textCell(`C${row}`, p.label ?? p.period)}${numCell(`D${row}`, p.weekday)}${numCell(`E${row}`, p.holiday)}</row>`,
         );
         row++;
       }
@@ -110,7 +126,7 @@
   }
   function chartXml(block, index) {
     const sheet = "&apos;旅行速率資料&apos;",
-      cats = block.periods.map((x) => x.period),
+      cats = block.periods.map((x) => x.label ?? x.period),
       week = block.periods.map((x) => x.weekday),
       holiday = block.periods.map((x) => x.holiday),
       ax1 = 100000 + index * 2,

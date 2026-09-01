@@ -106,7 +106,12 @@ test("完整驗證會先建立匿名測資，而且不依賴交付包外部資�
   const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
   assert.match(pkg.scripts.e2e, /npm run fixtures/, "npm run e2e 必須先建立匿名測資");
   await access(new URL("generate-test-fixtures.mjs", root));
-  for (const file of ["e2e-speed.mjs", "e2e-conclusion.mjs", "e2e-layout.mjs"]) {
+  for (const file of [
+    "e2e-speed.mjs",
+    "e2e-conclusion.mjs",
+    "e2e-layout.mjs",
+    "e2e-year-style.mjs",
+  ]) {
     const source = await readFile(new URL(file, root), "utf8");
     assert.doesNotMatch(source, /speed-samples/, `${file} 仍依賴交付包外部資料夾`);
     assert.doesNotMatch(source, /join\(here,\s*["']\.\.["']/, `${file} 的測資路徑仍指向專案外部`);

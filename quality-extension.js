@@ -5,9 +5,19 @@
   "use strict";
   const q = (id) => document.getElementById(id);
   const clone = (x) => structuredClone(x);
+  /*
+   * 季度排序鍵。四碼年份一律視為西元、換算成民國，與另外兩支系統的
+   * quarterOrderKey() 同一套規則。
+   *
+   * 舊版只認 2～3 碼，遇到西元寫法會回 -1 而排到最前面。寫入路徑現在已經
+   * 一律正規化成民國年，理論上不會出現四碼；但**備份還原、手動編輯過的
+   * 資料、以及外部匯入**都可能帶進來，排序鍵不該對它一無所知。
+   */
   const periodKey = (v) => {
-    const m = String(v || "").match(/^(\d{2,3})Q([1-4])$/);
-    return m ? Number(m[1]) * 4 + Number(m[2]) : -1;
+    const m = String(v || "").match(/^(\d{2,4})Q([1-4])$/);
+    if (!m) return -1;
+    const year = Number(m[1]);
+    return (year >= 1000 ? year - 1911 : year) * 4 + Number(m[2]);
   };
   const ordered = (a) => [...new Set(a)].sort((x, y) => periodKey(x) - periodKey(y));
   const safe = (s) =>
@@ -276,7 +286,7 @@
           .slice(0, 500)
           .map(
             (x) =>
-              `<tr><td>${safe(x.period)}<br>${safe(x.road)}／${safe(x.day)}</td><td>${safe(x.peak)}／${safe(rowDirectionName(x))}</td><td>${safe(x.sourceFile || x.source || "舊資料未記錄")}</td><td>${safe(x.sourceSheet || (x.sourceTraceFailed ? "本次讀取失敗" : "舊資料未記錄"))}</td><td>${safe((x.sourceRefs || []).join("、") || (x.sourceTraceFailed ? "本次讀取失敗" : "舊資料未記錄"))}</td><td>${safe(x.importBatch || "—")}<br><small>${safe(x.sourceHash || "—")}</small></td></tr>`,
+              `<tr><td>${safe(showQuarter(x.period))}<br>${safe(x.road)}／${safe(x.day)}</td><td>${safe(x.peak)}／${safe(rowDirectionName(x))}</td><td>${safe(x.sourceFile || x.source || "舊資料未記錄")}</td><td>${safe(x.sourceSheet || (x.sourceTraceFailed ? "本次讀取失敗" : "舊資料未記錄"))}</td><td>${safe((x.sourceRefs || []).join("、") || (x.sourceTraceFailed ? "本次讀取失敗" : "舊資料未記錄"))}</td><td>${safe(x.importBatch || "—")}<br><small>${safe(x.sourceHash || "—")}</small></td></tr>`,
           )
           .join("")
       : '<tr><td colspan="6" class="empty">沒有符合的來源紀錄</td></tr>';
@@ -640,7 +650,7 @@
       ? rows
           .map(
             (x, i) =>
-              `<tr><td><b>${i + 1}</b></td><td>${safe(x.road)}／${safe(x.day)}</td><td>${safe(x.period)}</td><td>${safe(x.reasons.join("；"))}</td><td>${x.score >= 7 ? "優先查核原始資料與現地狀況" : "持續觀察"}</td></tr>`,
+              `<tr><td><b>${i + 1}</b></td><td>${safe(x.road)}／${safe(x.day)}</td><td>${safe(showQuarter(x.period))}</td><td>${safe(x.reasons.join("；"))}</td><td>${x.score >= 7 ? "優先查核原始資料與現地狀況" : "持續觀察"}</td></tr>`,
           )
           .join("")
       : '<tr><td colspan="5" class="empty">目前沒有達到提醒門檻的路段</td></tr>';
@@ -664,11 +674,19 @@
     const inRange = periods.filter(
       (x) => periodKey(x) >= periodKey(start) && periodKey(x) <= periodKey(end),
     );
+    /*
+     * label 是內部識別用（草稿的儲存鍵就是它），永遠是儲存的季別字串，
+     * 不能跟著年份顯示切換走——否則切一次西元年，之前存的草稿就找不到了。
+     * displayLabel 才是給人看的（提示文字、檔名、草稿標題）。
+     */
+    const showQ = (v) => (typeof showQuarter === "function" ? showQuarter(v) : v);
     return {
       start,
       end,
       periods: inRange,
       label: start === end ? start : `${start}-${end}`,
+      displayLabel:
+        start === end ? showQ(start) : `${showQ(start)}-${showQ(end)}`,
     };
   }
   function inDeliveryRange(period) {
@@ -700,9 +718,14 @@
     // 否則第一次匯入時只有 114Q1，之後再匯入 Q2～Q4，範圍會一直卡在 114Q1。
     const startValue = deliveryRangeTouched && periods.includes(oldStart) ? oldStart : periods[0];
     const endValue = deliveryRangeTouched && periods.includes(oldEnd) ? oldEnd : periods.at(-1);
+    /* value 必須是儲存的季別，否則切成西元年之後成果範圍會對不到資料。 */
     const optionsFor = (value) =>
-      periods.map((x) => `<option ${x === value ? "selected" : ""}>${safe(x)}</option>`).join("") ||
-      '<option value="">尚無資料</option>';
+      periods
+        .map(
+          (x) =>
+            `<option value="${safe(x)}" ${x === value ? "selected" : ""}>${safe(showQuarter(x))}</option>`,
+        )
+        .join("") || '<option value="">尚無資料</option>';
     q("deliveryPeriodStart").innerHTML = optionsFor(startValue);
     q("deliveryPeriodEnd").innerHTML = optionsFor(endValue);
     q("deliveryRoad").innerHTML =
@@ -711,7 +734,7 @@
     const range = deliveryRange();
     if (q("deliveryRangeNote"))
       q("deliveryRangeNote").textContent = range.periods.length
-        ? `本次成果範圍：${range.label}，共 ${range.periods.length} 個季度（${range.periods.join("、")}）`
+        ? `本次成果範圍：${range.displayLabel}，共 ${range.periods.length} 個季度（${range.periods.map(showQuarter).join("、")}）`
         : "目前計畫尚無季度資料";
     loadDraft();
   }
@@ -720,9 +743,9 @@
     const p = activeProject(),
       range = deliveryRange(),
       lines = [
-        `${p?.code || ""} ${p?.name || ""} ${range.label} 交通服務水準分析草稿`,
+        `${p?.code || ""} ${p?.name || ""} ${range.displayLabel} 交通服務水準分析草稿`,
         range.periods.length > 1
-          ? `本次範圍涵蓋 ${range.periods.length} 個季度（${range.periods.join("、")}），共分析 ${new Set(rows.map((x) => x.road)).size} 個路段、${rows.length} 筆路段日別代表資料。`
+          ? `本次範圍涵蓋 ${range.periods.length} 個季度（${range.periods.map(showQuarter).join("、")}），共分析 ${new Set(rows.map((x) => x.road)).size} 個路段、${rows.length} 筆路段日別代表資料。`
           : `本期共分析 ${new Set(rows.map((x) => x.road)).size} 個路段、${rows.length} 筆路段日別代表資料。`,
       ];
     for (const x of rows) {
@@ -749,13 +772,13 @@
           return `${label}${change >= 0 ? "增加" : "下降"} ${Math.abs(change).toFixed(1)}%`;
         };
         change =
-          `較 ${prev.period} ` +
+          `較 ${showQuarter(prev.period)} ` +
           pctText(prev.travel, x.travel, "旅行速率") +
           "，" +
           pctText(prev.totalDelay, x.totalDelay, "總延滯");
       }
       lines.push(
-        `${x.period} ${x.road}（${x.day}）服務水準為 ${x.los}，代表紀錄為${x.peak}${rowDirectionName(x)}，旅行速率 ${fmt(x.travel, 1)} km/h、總延滯 ${fmt(x.totalDelay, 1)} 秒；${change}。`,
+        `${showQuarter(x.period)} ${x.road}（${x.day}）服務水準為 ${x.los}，代表紀錄為${x.peak}${rowDirectionName(x)}，旅行速率 ${fmt(x.travel, 1)} km/h、總延滯 ${fmt(x.totalDelay, 1)} 秒；${change}。`,
       );
     }
     lines.push("本段文字由系統依彙總資料自動產生，正式引用前應核對原始檔、速限設定及現地情況。");
@@ -883,7 +906,13 @@
     };
     return [
       fields.map((k) => csvCell(labels[k] || k)).join(","),
-      ...rows.map((x) => fields.map((k) => csvCell(x[k])).join(",")),
+      /*
+       * 季度欄跟著畫面上的年份顯示切換走（使用者要「畫面與匯出都跟著變」）。
+       * 只有這一欄換寫法，其餘欄位與數值原樣輸出。
+       */
+      ...rows.map((x) =>
+        fields.map((k) => csvCell(k === "period" ? showQuarter(x[k]) : x[k])).join(","),
+      ),
     ].join("\r\n");
   }
   q("downloadQuarterPack").onclick = async () => {
@@ -901,7 +930,7 @@
     inspectHealth();
     const zip = new JSZip(),
       p = activeProject(),
-      prefix = `${p.code}_${range.label}`;
+      prefix = `${p.code}_${range.displayLabel}`;
     if (q("packDetail").checked) zip.file(`${prefix}_尖峰明細.csv`, "\uFEFF" + rowsCsv(detail));
     if (q("packSummary").checked) zip.file(`${prefix}_尖峰彙總.csv`, "\uFEFF" + rowsCsv(summaries));
     if (q("packQuality").checked)
@@ -937,7 +966,7 @@
     downloadBlob(await zip.generateAsync({ type: "blob" }), `${prefix}_成果包.zip`);
     toast(
       range.periods.length > 1
-        ? `成果包已下載（${range.label}，共 ${range.periods.length} 個季度）`
+        ? `成果包已下載（${range.displayLabel}，共 ${range.periods.length} 個季度）`
         : "季度成果包已下載",
     );
   };
@@ -1009,7 +1038,7 @@
               road,
               day,
               item: `${road}／${day}`,
-              detail: `相較 ${prev.period}：${reasons.join("；")}，請確認原始資料或現地變化。`,
+              detail: `相較 ${showQuarter(prev.period)}：${reasons.join("；")}，請確認原始資料或現地變化。`,
             });
         }
       }
@@ -1117,17 +1146,26 @@
 
     const periods = ordered(rows.map((x) => x.period));
     const years = [...new Set(periods.map((x) => speedPeriodYear(x)).filter(Boolean))].sort();
-    const options = (list, value) =>
-      list.map((x) => `<option ${x === value ? "selected" : ""}>${safe(x)}</option>`).join("");
+    /*
+     * value 一律是儲存值（季別或民國年份），只有看到的文字跟著年份顯示切換走；
+     * 兩者混用的話，切成西元年之後既有的條件會挑不到任何資料。
+     */
+    const options = (list, value, label = (x) => x) =>
+      list
+        .map(
+          (x) =>
+            `<option value="${safe(x)}" ${x === value ? "selected" : ""}>${safe(label(x))}</option>`,
+        )
+        .join("");
     const scope = conclusionCondition.scope;
 
     q("conclusionQuarterBox").hidden = scope.kind !== "quarter";
     q("conclusionYearBox").hidden = scope.kind !== "year";
     q("conclusionRangeBox").hidden = scope.kind !== "range";
-    q("conclusionQuarter").innerHTML = options(periods, scope.quarter);
-    q("conclusionYear").innerHTML = options(years, scope.year);
-    q("conclusionFrom").innerHTML = options(periods, scope.from);
-    q("conclusionTo").innerHTML = options(periods, scope.to);
+    q("conclusionQuarter").innerHTML = options(periods, scope.quarter, showQuarter);
+    q("conclusionYear").innerHTML = options(years, scope.year, showYear);
+    q("conclusionFrom").innerHTML = options(periods, scope.from, showQuarter);
+    q("conclusionTo").innerHTML = options(periods, scope.to, showQuarter);
     q("conclusionScopeKinds")
       .querySelectorAll("input")
       .forEach((input) => {
@@ -1253,6 +1291,8 @@
       {
         projectName: p ? `${p.code} ${p.name}` : "未命名計畫",
         systemVersion: document.querySelector(".brand small")?.textContent || "",
+        /* 草稿上的季度跟著畫面的年份顯示切換走；篩選與排序仍走儲存值。 */
+        showPeriod: showQuarter,
         generatedAt:
           now.getFullYear() +
           "-" +

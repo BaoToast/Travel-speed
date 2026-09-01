@@ -29,6 +29,12 @@ const emptyState = () => ({
    * period（115Q1）為準。存進 state 是為了重新整理後還記得使用者的選擇。
    */
   periodDisplay: "quarter",
+  /*
+   * 年份要顯示成民國年（115Q1）還是西元年（2026Q1）。
+   * 與 periodDisplay 一樣**只影響畫面與匯出檔上的文字**——資料一律以民國年
+   * 寫法儲存（見 normalizeSurveyPeriod），分組、排序、鍵值與計算都走儲存值。
+   */
+  yearStyle: "roc",
   manager: [],
 });
 let state = emptyState(),
@@ -154,7 +160,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.21";
+document.querySelector(".brand small").textContent = "正式版 v2.20.24";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -165,8 +171,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.21.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.21.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.24.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.24.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -344,6 +350,55 @@ periodDisplayButton.onclick = async () => {
   renderAll();
 };
 document.querySelector("header .blank-badge").before(periodDisplayButton);
+/*
+ * 年份顯示切換：民國年（115Q1）⇄ 西元年（2026Q1）。
+ * 同樣只換畫面與匯出檔上的文字；儲存值一律是民國年，切換不會動到任何數字，
+ * 也不會影響分組、排序與識別鍵。
+ */
+const yearStyleButton = document.createElement("button");
+yearStyleButton.type = "button";
+yearStyleButton.id = "yearStyleToggle";
+yearStyleButton.className = "period-display-toggle";
+yearStyleButton.dataset.testid = "year-style-toggle";
+yearStyleButton.onclick = async () => {
+  state.yearStyle = state.yearStyle === "ad" ? "roc" : "ad";
+  renderYearStyleToggle();
+  await save();
+  renderAll();
+};
+document.querySelector("header .blank-badge").before(yearStyleButton);
+function renderYearStyleToggle() {
+  const labels = globalThis.PeriodDate.YEAR_STYLE_LABELS;
+  const style = state.yearStyle === "ad" ? "ad" : "roc";
+  yearStyleButton.textContent = `年份顯示：${labels[style]}`;
+  yearStyleButton.classList.toggle("is-on", style === "ad");
+  yearStyleButton.title =
+    "切換年份顯示方式：民國年（115Q1）／西元年（2026Q1）。畫面與匯出檔一起變；資料一律以民國年儲存，切換不影響分組與計算。";
+}
+/**
+ * 期別字串在畫面與匯出檔上要顯示成什麼年份寫法。
+ * 只換文字：傳進來的 period 仍是分組、排序與鍵值的依據，認不得的字串原樣回傳。
+ */
+function showQuarter(period) {
+  return globalThis.PeriodDate.quarterInYearStyle(
+    period,
+    state.yearStyle === "ad" ? "ad" : "roc",
+  );
+}
+/**
+ * 光年份（"115"）在畫面上要顯示成什麼寫法。
+ * 借一個季度殼子換算完再把 Qn 去掉；換不成就原樣回傳。
+ */
+function showYear(year) {
+  const shown = showQuarter(String(year) + "Q1");
+  const m = String(shown).match(/^(\d{2,4})Q1$/);
+  return m ? m[1] : String(year);
+}
+/*
+ * 匯出用的期別文字。excel-export.js 是獨立元件（e2e 會單獨呼叫它），
+ * 所以用一個可選的全域掛勾把顯示設定交給它，沒有掛勾時它就照原樣輸出。
+ */
+globalThis.periodExportLabel = showQuarter;
 function renderPeriodDisplayToggle() {
   const labels = globalThis.PeriodDate.PERIOD_DISPLAY_LABELS;
   const mode = state.periodDisplay === "month" ? "month" : "quarter";
@@ -1096,7 +1151,28 @@ function surveyDateFromWorkbook(wb) {
         if (text) cells.push({ text, sheet: name, cell: address });
       }
   }
-  return globalThis.PeriodDate.findSurveyDate(cells);
+  const found = globalThis.PeriodDate.findSurveyDate(cells);
+  /*
+   * 同一份活頁簿裡出現「兩個都有標示、但不同季度」的調查日期時要講出來。
+   *
+   * findSurveyDate() 取第一個有標示的就回傳，這在單一日期時是對的；
+   * 但實測 11535TS1501／1502／1503 三份真實檔，上午尖峰的表頭寫 115Q1、
+   * 下午尖峰卻還留著上一季的 114Q4（套模板時忘了改），系統只看到前者，
+   * 於是回報「調查日期與所選期別相符」——對一份自己前後矛盾的檔案發出
+   * 無保留的通過。這支程式對路段名稱（roadConflict）與平假日（dayConflict）
+   * 都已經會回報來源衝突，日期是唯一漏掉的一個。
+   */
+  if (!found) return found;
+  const others = [];
+  for (const item of cells) {
+    if (globalThis.PeriodDate.isNonSurveyDateText(item.text)) continue;
+    if (!globalThis.PeriodDate.isLabelledSurveyDateText(item.text)) continue;
+    const iso = globalThis.PeriodDate.parseSurveyDateText(item.text);
+    if (!iso || iso === found.iso) continue;
+    if (!others.some((o) => o.iso === iso))
+      others.push({ iso, sheet: item.sheet, cell: item.cell });
+  }
+  return others.length ? { ...found, conflicts: others } : found;
 }
 
 /*
@@ -1104,11 +1180,13 @@ function surveyDateFromWorkbook(wb) {
  * **只換顯示的文字**——分組、排序、鍵值、計算與匯出的數值一律仍以 period 為準。
  */
 function periodLabelFromRows(period, rows) {
-  if (state.periodDisplay !== "month") return period;
+  const yearStyle = state.yearStyle === "ad" ? "ad" : "roc";
+  if (state.periodDisplay !== "month")
+    return globalThis.PeriodDate.quarterInYearStyle(period, yearStyle);
   const dates = (rows || [])
     .filter((x) => x.period === period && x.surveyDate)
     .map((x) => x.surveyDate);
-  return globalThis.PeriodDate.periodDisplayLabel(period, dates, "month");
+  return globalThis.PeriodDate.periodDisplayLabel(period, dates, "month", yearStyle);
 }
 /** 目前 Project 的期別顯示，只能採用目前計畫自己的原始明細日期。 */
 function projectPeriodLabel(period, projectCode = state.activeCode) {
@@ -1273,7 +1351,19 @@ async function parseFile(file, year, q, defSpeed) {
       ? `表頭寫「${dayFromContent}」、檔名寫「${dayFromName}」，兩者不一致。系統採用表頭的「${dayFromContent}」——若檔名才是對的，請先修正表頭或改檔名後重新預覽。`
       : roadConflict
         ? `表頭的站名「${roadFromContent}」與檔名切出來的「${roadFromName}」不一致。系統採用表頭的名稱。`
-        : "",
+        : /*
+           * 同一份檔案出現兩個不同的調查日期時，比照路段名稱與平假日一樣
+           * 講出來。常見成因是套用上一季的模板卻只改了其中一張工作表的
+           * 表頭，於是上午與下午分屬不同季度。
+           */
+          surveyDateFound?.conflicts?.length
+          ? `這份檔案有兩個不同的調查日期：${globalThis.PeriodDate.readableDate(surveyDateFound.iso)}（${surveyDateFound.sheet}!${surveyDateFound.cell}）與 ${surveyDateFound.conflicts
+              .map(
+                (c) =>
+                  `${globalThis.PeriodDate.readableDate(c.iso)}（${c.sheet}!${c.cell}）`,
+              )
+              .join("、")}。系統採用前者做期別檢查，請確認表頭是否有一處忘了更新。`
+          : "",
     rows,
     surveyDateFound,
     ok,
@@ -1371,15 +1461,29 @@ $("files").onchange = () => {
 $("preview").onclick = async () => {
   if (!activeProject()) return toast("請先完成計畫設定");
   const files = [...$("files").files],
-    year = $("rocYear").value,
+    rawYear = $("rocYear").value,
     q = $("quarter").value;
-  if (!files.length || !year) return toast("請輸入民國年並選取檔案");
-  // 民國年只接受 90～200 的整數。舊版完全不檢查，打錯成 1145 或 114.5
-  // 會產生一個「1145Q1」的幽靈季度，之後所有期間比較、速限版本與成果範圍
-  // 都比對不到它，只能用刪除季度才清得掉。
-  const yearNumber = Number(year);
-  if (!Number.isInteger(yearNumber) || yearNumber < 90 || yearNumber > 200)
-    return toast("民國年必須是 90～200 之間的整數");
+  if (!files.length || !rawYear) return toast("請輸入年份並選取檔案");
+  /*
+   * 民國與西元都收，但**寫進資料時一律換算成民國年**。
+   *
+   * 年份會直接組成 period（`${year}Q${q}`）與紀錄 id，是資料的識別鍵之一。
+   * 若照打的字原樣存，同一季會因為寫法不同而變成兩個不同的鍵：115Q1 與
+   * 2026Q1 會並列成兩季、歷季比較被拆成兩段，而且永遠不會合併。
+   * 三支系統都採同一個規則（民國年為準），正規化邏輯在共用的 period-date。
+   *
+   * 範圍檢查仍然保留：舊版完全不檢查，打錯成 1145 或 114.5 會產生一個
+   * 「1145Q1」的幽靈季度，之後所有期間比較、速限版本與成果範圍都比對不到它，
+   * 只能用刪除季度才清得掉。
+   */
+  const yearNumber = Number(rawYear);
+  const isRocYear =
+    Number.isInteger(yearNumber) && yearNumber >= 90 && yearNumber <= 200;
+  const isAdYear =
+    Number.isInteger(yearNumber) && yearNumber >= 2001 && yearNumber <= 2111;
+  if (!isRocYear && !isAdYear)
+    return toast("年份請輸入民國 90～200，或西元 2001～2111（會換算成民國年記錄）");
+  const year = String(isAdYear ? yearNumber - 1911 : yearNumber);
   if (!window.XLSX) return toast("Excel 讀取元件尚未載入，請確認網路後重新整理");
   $("preview").disabled = true;
   $("previewStatus").textContent = "讀取中…";
@@ -1471,7 +1575,23 @@ for (const id of ["rocYear", "quarter"])
 for (const id of ["rocYear", "quarter"])
   $(id).addEventListener("input", () => {
     importPeriodTouched = true;
+    renderYearHint();
   });
+/*
+ * 打西元年時當場說明實際會存成什麼。
+ * 不講的話使用者會以為畫面上會看到 2026Q2，找不到就重打一次，
+ * 結果同一季被匯入兩遍——而那兩筆的排序鍵一模一樣，很難看出是寫法問題。
+ */
+function renderYearHint() {
+  const hint = $("yearHint");
+  if (!hint) return;
+  const n = Number($("rocYear").value);
+  const isAd = Number.isInteger(n) && n >= 2001 && n <= 2111;
+  hint.hidden = !isAd;
+  if (isAd)
+    hint.textContent = `將存成民國 ${n - 1911} 年（資料一律以民國年記錄）`;
+}
+renderYearHint();
 /*
  * 匯入預覽上方的調查日期提示。
  * 紅底＝日期與所選季度對不起來（按「確認寫入」時會再問一次）；
@@ -1776,11 +1896,13 @@ function roadMeta(road, code = state.activeCode) {
   );
 }
 function validPeriod(v) {
-  return !v || /^\d{2,3}Q[1-4]$/.test(v);
+  return !v || /^\d{2,4}Q[1-4]$/.test(v);
 }
 function periodIndex(v) {
-  const m = String(v || "").match(/^(\d{2,3})Q([1-4])$/);
-  return m ? Number(m[1]) * 4 + Number(m[2]) : -1;
+  const m = String(v || "").match(/^(\d{2,4})Q([1-4])$/);
+  if (!m) return -1;
+  const year = Number(m[1]);
+  return (year >= 1000 ? year - 1911 : year) * 4 + Number(m[2]);
 }
 function sortPeriods(values) {
   return [...new Set(values)].sort((a, b) => periodIndex(a) - periodIndex(b));
@@ -1961,7 +2083,7 @@ function showRoadImpact(source, target, mode) {
     exists = existingRoads().includes(target);
   pendingRoadChange = { ...impact, mode };
   $("roadImpact").innerHTML =
-    `<div><b>${mode === "rename" && !exists ? "正式名稱修改" : "重複路段合併"}預覽</b><p>「${esc(source)}」→「${esc(target)}」</p><ul><li>影響季度：${impact.periods.length ? impact.periods.join("、") : "無"}</li><li>尖峰明細：${impact.rows} 筆</li><li>尖峰彙總：${impact.summary} 筆</li><li>合併後重複鍵值：${impact.collisions} 筆（保留目標路段既有資料）</li></ul><small>執行前會自動下載 Project 專案包；路段速限、別名及圖表會一起更新。</small></div><button class="danger-button" id="confirmRoadChange">備份後確認執行</button>`;
+    `<div><b>${mode === "rename" && !exists ? "正式名稱修改" : "重複路段合併"}預覽</b><p>「${esc(source)}」→「${esc(target)}」</p><ul><li>影響季度：${impact.periods.length ? impact.periods.map(showQuarter).join("、") : "無"}</li><li>尖峰明細：${impact.rows} 筆</li><li>尖峰彙總：${impact.summary} 筆</li><li>合併後重複鍵值：${impact.collisions} 筆（保留目標路段既有資料）</li></ul><small>執行前會自動下載 Project 專案包；路段速限、別名及圖表會一起更新。</small></div><button class="danger-button" id="confirmRoadChange">備份後確認執行</button>`;
   $("confirmRoadChange").onclick = confirmRoadChange;
 }
 async function applyRoadChange(source, target) {
@@ -1975,6 +2097,8 @@ async function applyRoadChange(source, target) {
     if (k.startsWith(`${code}|`) && v === source) state.aliases[k] = target;
   const kept = state.details.filter((x) => !(x.projectCode === code && x.road === source)),
     map = new Map(kept.map((x) => [x.id, x]));
+  /* 因與目標路段既有版本重疊而沒有搬過去的速限版本，最後要一併告訴使用者。 */
+  const skippedVersions = [];
   for (const d of state.details.filter((x) => x.projectCode === code && x.road === source)) {
     const oldLimit = `${code}|${source}|${d.direction}`,
       newLimit = `${code}|${target}|${d.direction}`;
@@ -1984,12 +2108,8 @@ async function applyRoadChange(source, target) {
     delete state.limitConfirmed[oldLimit];
     // 速限版本（有效期間、查證來源與人員）也是以「計畫|路段|方向」為鍵，
     // 改名時一併搬過去，否則整組查證紀錄會變成孤兒、速限悄悄退回預設值。
-    if (state.speedVersions?.[oldLimit]) {
-      state.speedVersions[newLimit] = (state.speedVersions[newLimit] || []).concat(
-        state.speedVersions[oldLimit],
-      );
-      delete state.speedVersions[oldLimit];
-    }
+    const versionMerge = mergeSpeedVersions(state, oldLimit, newLimit);
+    if (versionMerge.skipped.length) skippedVersions.push(...versionMerge.skipped);
     const moved = { ...d, road: target, limit: state.limits[newLimit] };
     moved.ratio = moved.travel == null ? null : moved.travel / moved.limit;
     moved.los = losOf(moved.ratio, code);
@@ -2015,6 +2135,7 @@ async function applyRoadChange(source, target) {
   delete state.roadMeta[sourceKey];
   rebuild();
   await save();
+  return { skippedVersions };
 }
 async function confirmRoadChange() {
   const x = pendingRoadChange;
@@ -2031,9 +2152,21 @@ async function confirmRoadChange() {
   )
     return;
   downloadProjectPackage(false);
-  await applyRoadChange(x.source, x.target);
+  const result = await applyRoadChange(x.source, x.target);
   pendingRoadChange = null;
-  toast("路段正式名稱、明細、速限、別名與圖表已更新");
+  /*
+   * 沒搬過去的速限版本一定要講出來。這些版本的有效期間與目標路段既有的
+   * 重疊，若照舊直接併入，會蓋掉目標路段原本就有、而且不在這次合併範圍內
+   * 的紀錄，速限比與服務水準都跟著變，而使用者不會收到任何提示。
+   */
+  const skipped = result?.skippedVersions ?? [];
+  toast(
+    skipped.length
+      ? `路段正式名稱、明細、速限、別名與圖表已更新。有 ${skipped.length} 組來源路段的速限版本因為與目標路段既有版本的有效期間重疊而未併入（保留目標路段原本的速限）：${skipped
+          .map((v) => `${v.start || "?"}起${v.end ? `～${v.end}` : ""} ${v.speed} km/h`)
+          .join("、")}。如需改用來源路段的速限，請至「速限查證」自行新增版本。`
+      : "路段正式名稱、明細、速限、別名與圖表已更新",
+  );
   go("roadadmin");
 }
 function roadOptions(selected = "") {
@@ -2441,6 +2574,8 @@ $("exportDetail").onclick = () =>
       .filter((x) => x.projectCode === state.activeCode)
       .map((x) => ({
         ...x,
+        /* 季度欄跟著畫面上的年份顯示切換走；其餘欄位與數值原樣輸出。 */
+        period: showQuarter(x.period),
         directionLabel: rowDirectionName(x),
       })),
   );
@@ -2823,6 +2958,8 @@ $("exportManager").onclick = () =>
      */
     managerFilteredRows().map(({ packageProject, packageRoadMeta, ...row }) => ({
       ...row,
+      /* 季度欄跟著畫面上的年份顯示切換走；其餘欄位與數值原樣輸出。 */
+      period: showQuarter(row.period),
       directionLabel: managerDirectionName({ ...row, packageRoadMeta }),
     })),
     `Manager_篩選結果_${new Date().toISOString().slice(0, 10)}.csv`,
@@ -3043,9 +3180,16 @@ function renderManager() {
   const periodSource = all.filter(
     (x) => !$("managerProjectFilter").value || x.projectCode === $("managerProjectFilter").value,
   );
+  /*
+   * 篩選值一律用儲存的季別字串，只有看到的文字跟著年份顯示切換走；
+   * 兩者混用的話，切成西元年之後既有的篩選就會對不到任何一筆。
+   */
   syncOptions(
     "managerPeriodFilter",
-    sortPeriods(periodSource.map((x) => x.period)),
+    sortPeriods(periodSource.map((x) => x.period)).map((p) => ({
+      value: p,
+      label: showQuarter(p),
+    })),
     "全部季度",
   );
   const rows = managerFilteredRows();
@@ -3053,7 +3197,9 @@ function renderManager() {
   $("managerRecords").textContent = rows.length;
   $("managerRoads").textContent = new Set(rows.map((x) => `${x.projectCode}|${x.road}`)).size;
   const ps = sortPeriods(rows.map((x) => x.period));
-  $("managerPeriod").textContent = ps.length ? `${ps[0]}～${ps.at(-1)}` : "—";
+  $("managerPeriod").textContent = ps.length
+    ? `${showQuarter(ps[0])}～${showQuarter(ps.at(-1))}`
+    : "—";
   $("managerPackageRows").innerHTML = state.manager.length
     ? state.manager
         .map(
@@ -3091,7 +3237,7 @@ function renderImportLog() {
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(x.time)}</td><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(x.period)}</td><td>${x.files.length}</td><td>${x.added}</td><td>${x.updated}</td><td>${x.skipped}</td><td>${esc(x.status)}</td><td>${x.status === "有效" ? `<button class="outline" data-rollback="${esc(x.id)}">復原此批</button>` : "—"}</td></tr>`,
+            `<tr><td>${esc(x.time)}</td><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(showQuarter(x.period))}</td><td>${x.files.length}</td><td>${x.added}</td><td>${x.updated}</td><td>${x.skipped}</td><td>${esc(x.status)}</td><td>${x.status === "有效" ? `<button class="outline" data-rollback="${esc(x.id)}">復原此批</button>` : "—"}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="9" class="empty">目前計畫尚無匯入紀錄</td></tr>';
@@ -3137,7 +3283,7 @@ async function rollbackBatch(id) {
     return toast("這個季度在刪除後已重新匯入，還原會覆蓋新資料；請先復原較新的匯入批次");
   const message =
     batch.type === "delete-quarter"
-      ? `確定還原已刪除的 ${batch.period}？\n將回復 ${batch.previous.length} 筆尖峰明細。`
+      ? `確定還原已刪除的 ${showQuarter(batch.period)}？\n將回復 ${batch.previous.length} 筆尖峰明細。`
       : `確定復原 ${batch.time} 的匯入？\n新增 ${batch.added} 筆將移除，更新 ${batch.updated} 筆將還原。`;
   if (!confirm(message)) return;
   const added = new Set(batch.addedIds);
@@ -3168,13 +3314,17 @@ function refreshMaintenance() {
     selected = $("deletePeriod").value;
   $("deletePeriod").innerHTML =
     periods
-      .map((p) => `<option value="${esc(p)}" ${p === selected ? "selected" : ""}>${p}</option>`)
+      .map(
+        (p) =>
+          /* 值必須留儲存的季別；只有看到的文字跟著年份顯示切換走。 */
+          `<option value="${esc(p)}" ${p === selected ? "selected" : ""}>${esc(showQuarter(p))}</option>`,
+      )
       .join("") || '<option value="">目前沒有資料</option>';
   const period = $("deletePeriod").value,
     rows = state.details.filter((x) => x.projectCode === state.activeCode && x.period === period),
     roads = new Set(rows.map((x) => x.road)).size;
   $("deleteImpact").textContent = period
-    ? `${period}：${rows.length} 筆尖峰明細、${roads} 個路段。刪除後可重新批次匯入。`
+    ? `${showQuarter(period)}：${rows.length} 筆尖峰明細、${roads} 個路段。刪除後可重新批次匯入。`
     : "目前沒有可刪除的季度";
   $("deleteQuarter").disabled = !rows.length;
 }
@@ -3186,7 +3336,7 @@ $("deleteQuarter").onclick = async () => {
   if (!p || !rows.length) return;
   if (
     !confirm(
-      `確定刪除「${p.code} ${p.name}」的 ${period}？\n共 ${rows.length} 筆尖峰明細。系統會先下載備份，刪除後可重新匯入。`,
+      `確定刪除「${p.code} ${p.name}」的 ${showQuarter(period)}？\n共 ${rows.length} 筆尖峰明細。系統會先下載備份，刪除後可重新匯入。`,
     )
   )
     return;
@@ -3214,13 +3364,66 @@ $("deleteQuarter").onclick = async () => {
   rebuild();
   await save();
   inspectHealth();
-  toast(`${period} 已刪除，可重新批次匯入`);
+  toast(`${showQuarter(period)} 已刪除，可重新批次匯入`);
 };
+/**
+ * 合併兩條路段時，把來源路段的速限版本搬到目標路段。
+ *
+ * 舊版直接 concat，沒有任何重疊檢查。但 speedFor() 挑版本的規則是
+ * 「開始季度較新者優先；開始季度相同時，後建立的 id 較大者優先」——
+ * 於是來源路段的版本只要開始季度不早於目標路段的，就會蓋過目標路段
+ * **原本就有、而且根本不在這次合併範圍內**的紀錄：速限、速限比、服務水準
+ * 與查證來源全部跟著換掉。實測目標路段一筆紀錄的 LOS 由 A 變成 D，
+ * 而確認對話框只統計來源路段的列數，完全不會提到這件事。
+ *
+ * 手動新增版本時 saveSpeedVersion() 對重疊是會跳確認的；這條路徑不能比它寬鬆。
+ * 因此改為：**目標路段既有的版本優先**，來源路段只帶進「與目標完全不重疊」
+ * 的版本，被略過的則回報給呼叫端，由它一併告訴使用者。
+ */
+function mergeSpeedVersions(state, oldKey, newKey) {
+  const incoming = state.speedVersions?.[oldKey];
+  if (!incoming || !incoming.length) return { moved: 0, skipped: [] };
+  const key = (v) => {
+    const m = String(v || "").match(/^(\d{2,4})Q([1-4])$/);
+    if (!m) return -1;
+    const year = Number(m[1]);
+    return (year >= 1000 ? year - 1911 : year) * 4 + Number(m[2]);
+  };
+  const existing = state.speedVersions[newKey] || [];
+  const kept = [];
+  const skipped = [];
+  for (const v of incoming) {
+    const overlap = existing.some(
+      (e) =>
+        key(v.start) <= key(e.end || "9999Q4") &&
+        key(e.start) <= key(v.end || "9999Q4"),
+    );
+    if (overlap) skipped.push(v);
+    else kept.push(v);
+  }
+  if (kept.length) state.speedVersions[newKey] = existing.concat(kept);
+  delete state.speedVersions[oldKey];
+  return { moved: kept.length, skipped };
+}
+
+/*
+ * 「這兩個名稱是不是同一條路段」的比對簽章。
+ *
+ * 這裡要清掉的是**分隔符與標點**——路段名稱寫成「甲路(乙街～丙街)」還是
+ * 「甲路(乙街-丙街)」是同一條路，寫法不同只是承辦習慣。
+ *
+ * 舊版的字元類列了各種連字號的原形（‐‑‒–—―－），卻漏了 ASCII 的 `-`。
+ * 但 stripRoadSuffix() 裡的 normalize() 已經先把那六種全部換成 ASCII `-` 了，
+ * 於是「-」永遠留著、「～」永遠被清掉，任何「波浪號 vs 連字號」的配對
+ * 都算不出相同簽章——而這正是重複路段偵測要抓的最典型情形。
+ * 實測 14013TS601 的平日與假日兩份真實檔就是差這一個字元，
+ * 結果被當成兩條路段，平假日比較整個不成立，而「名稱疑似重複」始終是 0。
+ */
 function roadSignature(s) {
   return stripRoadSuffix(s)
     .normalize("NFKC")
     .toLowerCase()
-    .replace(/[\s　/\\_~～〜‐‑‒–—―－.,，、。:：;；()（）\[\]【】]/g, "");
+    .replace(/[\s　/\\_\-~～〜‐‑‒–—―－.,，、。:：;；()（）\[\]【】]/g, "");
 }
 function inspectHealth() {
   const rows = state.details.filter((x) => x.projectCode === state.activeCode),
@@ -3378,7 +3581,7 @@ function inspectHealth() {
             road,
             day,
             item: `${road}／${day}`,
-            detail: `相較 ${prev.period}：LOS ${prev.los}→${now.los}，旅行速率 ${fmt(prev.travel, 1)}→${fmt(now.travel, 1)} km/h，請確認資料或現地變化。`,
+            detail: `相較 ${showQuarter(prev.period)}：LOS ${prev.los}→${now.los}，旅行速率 ${fmt(prev.travel, 1)}→${fmt(now.travel, 1)} km/h，請確認資料或現地變化。`,
           });
       }
     }
@@ -3411,7 +3614,7 @@ function renderHealth() {
       ? healthIssues
           .map(
             (x) =>
-              `<tr><td>${esc(x.type)}</td><td>${esc(x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
+              `<tr><td>${esc(x.type)}</td><td>${esc(showQuarter(x.period))}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
           )
           .join("")
       : '<tr><td colspan="4" class="empty">目前計畫未發現資料異常</td></tr>';
@@ -3501,19 +3704,26 @@ function renderQuality() {
   const roads = [...new Set(all.map((x) => x.road).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, "zh-Hant"),
   );
-  const fillSelect = (id, values, placeholder, current) => {
+  /*
+   * label 只換看到的文字（季別要跟著年份顯示切換走）；value 一律是儲存值，
+   * 否則切成西元年之後，既有的篩選條件會對不到任何一筆資料。
+   */
+  const fillSelect = (id, values, placeholder, current, label = (v) => v) => {
     const el = $(id);
     if (!el) return "";
     const keep = values.includes(current) ? current : "";
     el.innerHTML =
       `<option value="">${placeholder}</option>` +
       values
-        .map((v) => `<option value="${esc(v)}"${v === keep ? " selected" : ""}>${esc(v)}</option>`)
+        .map(
+          (v) =>
+            `<option value="${esc(v)}"${v === keep ? " selected" : ""}>${esc(label(v))}</option>`,
+        )
         .join("");
     return keep;
   };
-  qualityFilter.from = fillSelect("qualityFrom", periods, "不限", qualityFilter.from);
-  qualityFilter.to = fillSelect("qualityTo", periods, "不限", qualityFilter.to);
+  qualityFilter.from = fillSelect("qualityFrom", periods, "不限", qualityFilter.from, showQuarter);
+  qualityFilter.to = fillSelect("qualityTo", periods, "不限", qualityFilter.to, showQuarter);
   qualityFilter.road = fillSelect("qualityRoad", roads, "全部路段", qualityFilter.road);
   if ($("qualityDayFilter")) $("qualityDayFilter").value = qualityFilter.day;
   /*
@@ -3556,7 +3766,7 @@ function renderQuality() {
       ? rows
           .map(
             (x) =>
-              `<tr><td>${esc(x.type)}</td><td>${esc(x.fromPeriod ? `${x.fromPeriod}→${x.period}` : x.period)}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
+              `<tr><td>${esc(x.type)}</td><td>${esc(x.fromPeriod ? `${showQuarter(x.fromPeriod)}→${showQuarter(x.period)}` : showQuarter(x.period))}</td><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`,
           )
           .join("")
       : all.length
@@ -3612,6 +3822,8 @@ $("cleanSuffix").onclick = async () => {
     dirty = state.details.filter((x) => x.projectCode === p.code && targets.has(x.road)),
     map = new Map(cleanFirst.map((x) => [x.id, x]));
   let dropped = 0;
+  /* 同 applyRoadChange：與目標路段既有版本重疊而未併入的速限版本要講出來。 */
+  const skippedVersions = [];
   for (const d of dirty) {
     const old = d.road,
       target = targets.get(old);
@@ -3623,12 +3835,8 @@ $("cleanSuffix").onclick = async () => {
     delete state.limits[oldLimit];
     delete state.limitConfirmed[oldLimit];
     // 速限版本一併搬過去（同 applyRoadChange）
-    if (state.speedVersions?.[oldLimit]) {
-      state.speedVersions[newLimit] = (state.speedVersions[newLimit] || []).concat(
-        state.speedVersions[oldLimit],
-      );
-      delete state.speedVersions[oldLimit];
-    }
+    const versionMerge = mergeSpeedVersions(state, oldLimit, newLimit);
+    if (versionMerge.skipped.length) skippedVersions.push(...versionMerge.skipped);
     d.road = target;
     d.limit = state.limits[newLimit];
     d.ratio = d.travel == null ? null : d.travel / d.limit;
@@ -3644,14 +3852,18 @@ $("cleanSuffix").onclick = async () => {
   rebuild();
   await save();
   inspectHealth();
+  const versionNote = skippedVersions.length
+    ? `另有 ${skippedVersions.length} 組速限版本因有效期間與目標路段既有版本重疊而未併入，目標路段維持原本的速限。`
+    : "";
   toast(
-    dropped
+    (dropped
       ? `明顯日期尾碼已修正並合併；其中 ${dropped} 筆與既有資料鍵值重複，已保留原有資料（合併前的備份已下載）。`
-      : "明顯日期尾碼已修正並合併",
+      : "明顯日期尾碼已修正並合併") + versionNote,
   );
 };
 function renderAll() {
   renderPeriodDisplayToggle();
+  renderYearStyleToggle();
   const p = activeProject(),
     ownDetails = state.details.filter((x) => x.projectCode === state.activeCode),
     ownSummary = state.summaries.filter((x) => x.projectCode === state.activeCode),

@@ -125,6 +125,41 @@ for (const name of [...scripts, "index.html"]) {
   ok(`${name} 沒有殘留其他版號`, suspicious.length === 0, suspicious.join("、"));
 }
 
+// 8) 部署說明裡的版號要跟著版本走
+/*
+ * 這一條是實際踩到的：更新說明最後的「如何更新」從 v2.20.20 起就沒再改過，
+ * v2.20.21、v2.20.22 兩次發布都照原樣交出去。依那份說明操作的人會
+ * **刪掉本版的驗證報告**（它說只保留 VALIDATION_v2.20.20.md），
+ * 而且會照著錯的版號去確認部署有沒有成功。
+ */
+{
+  const notes = read("【更新說明】請先讀我.txt");
+  /*
+   * 「給Claude的交接說明_v2.20.1.md」是**要求刪除的舊檔名**，
+   * 那個版號本來就該是舊的，掃描前先拿掉。
+   */
+  const deploySection = notes
+    .slice(notes.indexOf("如何更新"))
+    .replaceAll(/給Claude的交接說明_v[\d.]+\.md/g, "〔要求刪除的舊檔〕");
+  const stale = [
+    ...new Set(
+      [...deploySection.matchAll(/v(\d+\.\d+(?:\.\d+)?)/g)]
+        .map((m) => m[1])
+        .filter((v) => v !== shown.replace(/^v/, "")),
+    ),
+  ];
+  ok(
+    "更新說明的「如何更新」段落沒有殘留舊版號",
+    stale.length === 0,
+    stale.map((v) => "v" + v).join("、"),
+  );
+  ok(
+    "更新說明的標題就是本版版號",
+    notes.split("\n")[0].includes(shown),
+    notes.split("\n")[0],
+  );
+}
+
 console.log(
   problems.length ? `\n❌ 有問題：\n- ${problems.join("\n- ")}` : "\n全部通過",
 );

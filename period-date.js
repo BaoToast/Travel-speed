@@ -91,6 +91,30 @@
       : year + "Q" + period.num;
   }
 
+
+  /**
+   * 把季度字串正規化成**民國年**寫法（例：2026Q1 → 115Q1）。
+   *
+   * 三支系統的介面都同時接受民國與西元（115Q1 或 2026Q1），但**寫進資料時
+   * 一定要統一成一種**，否則同一季會因為打字寫法不同而變成兩個不同的鍵：
+   * 季度清單是 `[...new Set(records.map(r => r.quarter))]`，115Q1 與 2026Q1
+   * 會並列成兩季，歷季趨勢被拆成兩段，而且永遠不會合併——兩者的排序鍵其實
+   * 一模一樣（都是 461），看起來只是「同一季出現兩次」，很難聯想到是寫法問題。
+   *
+   * 選民國年當標準寫法的理由：使用者的原始調查表、手冊與報告全部是民國年，
+   * 既有資料也全部是民國年，統一成民國年不需要任何歸位作業。
+   *
+   * 認不得的字串原樣回傳（含前後空白去除），交給呼叫端的格式驗證去擋，
+   * 這裡不猜、也不擅自改寫。
+   */
+  function normalizeSurveyPeriod(input) {
+    const text = String(input ?? "").trim();
+    const period = parseSurveyPeriod(text);
+    /* 只處理季度；月份期別不是這個欄位的格式，交回原字串由驗證擋下。 */
+    if (!period || period.kind !== "Q") return text;
+    return formatPeriod(period);
+  }
+
   function samePeriod(a, b) {
     return Boolean(a && b && a.adYear === b.adYear && a.kind === b.kind && a.num === b.num);
   }
@@ -104,7 +128,7 @@
   const SURVEY_DATE_LABEL = /(?:調查|監測|施測|檢測|觀測|測量|作業)?日期[:：]/;
   /** 這些不是調查日期，不可以拿來比對期別。 */
   const NON_SURVEY_DATE_LABEL =
-    /(?:製表|列印|印製|報告|出圖|填表|核定|審查|校核|繪製|修正|更新)日期/;
+    /(?:製表|列印|印製|報告|出圖|填表|核定|審查|校核|繪製|修正|更新|彙整|輸出|建檔|產製)日期/;
 
   const flatten = (text) =>
     String(text ?? "")
@@ -289,12 +313,40 @@
 
   /** 期別要顯示成季別還是實際調查月份。 */
 
+  /*
+   * 年份要顯示成民國年還是西元年。
+   *
+   * 這是**純顯示**的切換，與資料怎麼存無關——季別字串一律以民國年寫法儲存
+   *（見 normalizeSurveyPeriod），這裡只換畫面與匯出檔上看到的字。
+   * 兩者分開的理由：分組、排序、識別鍵全部走儲存值，顯示怎麼換都不會動到它們。
+   */
+
+  /** 民國年 ⇄ 西元年互換。超出民國 90～200 的值視為西元年，原樣處理。 */
+  function rocToAd(roc) {
+    return roc >= 90 && roc <= 200 ? roc + 1911 : roc;
+  }
+  function adToRoc(ad) {
+    const roc = ad - 1911;
+    return roc >= 90 && roc <= 200 ? roc : ad;
+  }
+
+  /** 把季別字串換成指定的年份寫法（115Q1 ⇄ 2026Q1）。認不得就原樣回傳。 */
+  function quarterInYearStyle(quarter, style) {
+    const m = String(quarter ?? "").trim().match(/^(\d{2,4})Q([1-4])$/i);
+    if (!m) return String(quarter ?? "");
+    const year = Number(m[1]);
+    const shown = style === "ad" ? rocToAd(year) : adToRoc(year);
+    return String(shown) + "Q" + m[2];
+  }
+
   /**
    * quarter：資料實際掛的季別字串（例："115Q1"），永遠是分組與鍵值的依據。
    * isoDates：這一季底下每一筆的調查日期（YYYY-MM-DD），沒有的就別放進來。
+   * yearStyle：顯示用的年份寫法，預設民國年（沿用舊行為）。
    */
-  function periodDisplayLabel(quarter, isoDates, mode) {
-    const label = String(quarter ?? "");
+  function periodDisplayLabel(quarter, isoDates, mode, yearStyle) {
+    const style = yearStyle === "ad" ? "ad" : "roc";
+    const label = quarterInYearStyle(quarter, style);
     if (mode !== "month") return label;
     const months = [];
     for (const iso of Array.isArray(isoDates) ? isoDates : []) {
@@ -310,10 +362,9 @@
       const year = key.slice(0, 4);
       if (!years.includes(year)) years.push(year);
     }
-    const rocOf = (year) => {
-      const roc = Number(year) - 1911;
-      return roc >= 90 && roc <= 200 ? String(roc) : year;
-    };
+    /* isoDates 一律是西元；要顯示民國年時才換算。 */
+    const rocOf = (year) =>
+      style === "ad" ? year : String(adToRoc(Number(year)));
     /*
      * 同一年就寫「115年2、3月」；跨年（12 月與隔年 1 月同一季不會發生，
      * 但資料掛錯季時會）就逐個寫完整的「114年12月、115年1月」，不省略年份。
@@ -336,6 +387,12 @@
       .join("、");
   }
 
+  /** 年份切換鈕上的文字，三支程式共用。 */
+  const YEAR_STYLE_LABELS = {
+    roc: "民國年",
+    ad: "西元年",
+  };
+
   /** 切換鈕上的文字，三支程式共用。 */
   const PERIOD_DISPLAY_LABELS = {
     quarter: "季別",
@@ -346,6 +403,7 @@
     parseSurveyPeriod: parseSurveyPeriod,
     periodOfDate: periodOfDate,
     formatPeriod: formatPeriod,
+    normalizeSurveyPeriod: normalizeSurveyPeriod,
     samePeriod: samePeriod,
     isLabelledSurveyDateText: isLabelledSurveyDateText,
     isNonSurveyDateText,
@@ -357,6 +415,8 @@
     periodMismatchPrompt: periodMismatchPrompt,
     periodUnknownNotice: periodUnknownNotice,
     periodDisplayLabel: periodDisplayLabel,
+    quarterInYearStyle: quarterInYearStyle,
     PERIOD_DISPLAY_LABELS: PERIOD_DISPLAY_LABELS,
+    YEAR_STYLE_LABELS: YEAR_STYLE_LABELS,
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

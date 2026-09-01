@@ -51,6 +51,21 @@
 
   var LOS_ORDER = ["A", "B", "C", "D", "E", "F"];
 
+  /*
+   * 季度在草稿上要寫成民國年還是西元年。
+   *
+   * 這是**純顯示**的換字：分組、排序、篩選（periodKey／periodYear／scope 比對）
+   * 一律走傳進來的儲存值，換寫法不會挑到不同的資料，也不會動到任何數字。
+   * 呼叫端在 meta.showPeriod 傳一個函式進來就會生效；沒傳就照原樣輸出，
+   * 單元測試與舊呼叫端的行為完全不變。
+   *
+   * 用模組層變數而不是一路傳參數：組字的輔助函式有七、八個，全部加一個參數
+   * 會讓每一個簽章都變髒。buildConclusion 是同步的，進入時設定、用完即可。
+   */
+  var periodText = function (value) {
+    return String(value == null ? "" : value);
+  };
+
   function periodKey(period) {
     var match = String(period || "").match(/^(\d{2,4})Q([1-4])$/);
     if (!match) return Number.NEGATIVE_INFINITY;
@@ -136,12 +151,26 @@
     if (!scope || scope.kind === "project") {
       var periods = uniquePeriods(rows);
       return periods.length
-        ? "全計畫（" + periods[0] + "～" + periods[periods.length - 1] + "）"
+        ? "全計畫（" +
+            periodText(periods[0]) +
+            "～" +
+            periodText(periods[periods.length - 1]) +
+            "）"
         : "全計畫";
     }
-    if (scope.kind === "quarter") return scope.quarter;
-    if (scope.kind === "year") return scope.year + " 年度";
-    return scope.from + "～" + scope.to;
+    if (scope.kind === "quarter") return periodText(scope.quarter);
+    if (scope.kind === "year") return yearText(scope.year) + " 年度";
+    return periodText(scope.from) + "～" + periodText(scope.to);
+  }
+
+  /*
+   * 年度是「115」這種光年份的字串，沒有 Qn，periodText 認不得。
+   * 借一個季度殼子換算完再把 Qn 去掉，換不成就原樣回傳。
+   */
+  function yearText(year) {
+    var shown = periodText(String(year) + "Q1");
+    var match = String(shown).match(/^(\d{2,4})Q1$/);
+    return match ? match[1] : String(year);
   }
 
   function uniquePeriods(rows) {
@@ -251,9 +280,9 @@
       lines.push(
         label +
           "由 " +
-          first.period +
+          periodText(first.period) +
           " 至 " +
-          last.period +
+          periodText(last.period) +
           "，" +
           speed +
           "；" +
@@ -321,7 +350,7 @@
         same
           .slice(0, 5)
           .map(function (row) {
-            return row.period + " " + row.road + "（" + row.day + "・" + row.peak + "・" + dirLabel(row) + "）";
+            return periodText(row.period) + " " + row.road + "（" + row.day + "・" + row.peak + "・" + dirLabel(row) + "）";
           })
           .join("、") +
         (same.length > 5 ? " 等 " + same.length + " 筆" : "") +
@@ -342,7 +371,7 @@
         return sum + Number(row.travel);
       }, 0) / points.length;
     var name = function (row) {
-      return row.period + " " + row.road + "（" + row.day + "・" + row.peak + "・" + dirLabel(row) + "）";
+      return periodText(row.period) + " " + row.road + "（" + row.day + "・" + row.peak + "・" + dirLabel(row) + "）";
     };
     return [
       "　旅行速率最快為 " +
@@ -383,6 +412,12 @@
   function buildConclusion(details, condition, meta) {
     var c = Object.assign({}, DEFAULT_CONDITION, condition || {});
     var m = meta || {};
+    periodText =
+      typeof m.showPeriod === "function"
+        ? m.showPeriod
+        : function (value) {
+            return String(value == null ? "" : value);
+          };
     var rows = selectRows(details, c);
     var out = [];
     out.push("【結論草稿】" + scopeLabel(c.scope, rows));
@@ -407,7 +442,7 @@
       "統計範圍：" +
         periods.length +
         " 個季度（" +
-        periods.join("、") +
+        periods.map(periodText).join("、") +
         "）、" +
         uniqueBy(rows, "road").length +
         " 個路段、共 " +
@@ -453,7 +488,7 @@
         group.forEach(function (row) {
           var key = row.period + "|" + row.day;
           if (key !== lastKey) {
-            out.push("　〔" + row.period + "・" + row.day + "〕");
+            out.push("　〔" + periodText(row.period) + "・" + row.day + "〕");
             lastKey = key;
           }
           Array.prototype.push.apply(out, describeRow(row, c));
@@ -465,7 +500,7 @@
         var group = rows.filter(function (row) {
           return row.period === period;
         });
-        heading(period + "（共 " + group.length + " 筆）");
+        heading(periodText(period) + "（共 " + group.length + " 筆）");
         var lastKey = "";
         group.forEach(function (row) {
           var key = row.road + "|" + row.day;
@@ -491,7 +526,9 @@
       var first = rows[0];
       var rowLines = describeRow(first, c);
       if (rowLines.length) {
-        out.push("　代表紀錄：" + first.period + "　" + first.road + "（" + first.day + "）");
+        out.push(
+          "　代表紀錄：" + periodText(first.period) + "　" + first.road + "（" + first.day + "）",
+        );
         Array.prototype.push.apply(out, rowLines);
         if (rows.length > 1)
           out.push(
