@@ -32,7 +32,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { manualBaseName, manualRelease } from "./manual-src/release.mjs";
 
@@ -57,7 +57,7 @@ function walk(dir, out = []) {
 
 test("包裡每一份手冊副本都必須來自同一次產生", () => {
   const base = manualBaseName(manualRelease());
-  const files = walk(ROOT).filter((f) => [base + ".pdf", base + ".docx"].includes(f.slice(f.lastIndexOf("\\") + 1)));
+  const files = walk(ROOT).filter((f) => [base + ".pdf", base + ".docx"].includes(basename(f)));
   assert.ok(
     files.length > 0,
     "包裡找不到任何本版手冊——升版時可能忘了重新產生，或檔名對不上。",
