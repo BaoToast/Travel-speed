@@ -152,7 +152,8 @@ for (let i = 0; i < metricLabels.length; i += 1) {
   }
 }
 
-await page.click("#conclusionGenerate");
+/* 產生鈕只剩草稿框旁邊那一顆（頁首那顆已移除，見 VALIDATION 第 3 節） */
+await page.click("#conclusionRegenerate");
 await page.waitForTimeout(800);
 const text1 = await page.inputValue("#conclusionDraft");
 console.log("\n── 草稿前 900 字 ──\n" + text1.slice(0, 900) + "\n──────────────");

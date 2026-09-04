@@ -3,8 +3,8 @@
 /* Data maintenance */
 .muted{color:var(--muted);font-size:13px;line-height:1.7}.danger-button{border:0;border-radius:7px;padding:11px 17px;font:inherit;font-weight:800;cursor:pointer;background:var(--red);color:#fff;margin-top:15px}.danger-button:disabled{background:#c9d0d4;cursor:not-allowed}.metrics.compact{grid-template-columns:repeat(3,1fr);margin:14px 0}.metrics.compact article{box-shadow:none;padding:14px}.metrics.compact b{font-size:22px}.health-panel{margin-top:20px}.health-panel td:nth-child(4){white-space:normal;min-width:300px}
 aside{display:flex;flex-direction:column}.brand{flex:none}aside nav{flex:1;min-height:0;overflow-y:auto;padding-bottom:8px}.local{position:static;flex:none;margin:14px 10px 0}
-.manager-data{margin-top:20px}.manager-filters{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr)) minmax(190px,1.4fr) auto auto;gap:9px;margin-bottom:17px}.manager-filters select,.manager-filters input{min-width:0;padding:10px;border:1px solid #cbd7dd;border-radius:6px;background:#fff;font:inherit}.manager-chart-title{margin-top:32px}
-@media(max-width:1200px){.manager-filters{grid-template-columns:repeat(3,1fr)}}
+.manager-data{margin-top:20px}.manager-filters{display:grid;grid-template-columns:minmax(150px,1fr) minmax(190px,1.4fr) auto auto auto;gap:9px;margin-bottom:9px;align-items:center}.manager-filters select,.manager-filters input{min-width:0;padding:10px;border:1px solid #cbd7dd;border-radius:6px;background:#fff;font:inherit}.manager-chart-title{margin-top:32px}
+@media(max-width:1200px){.manager-filters{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.manager-filters{grid-template-columns:1fr}.manager-filters button{width:100%}}
 .manual{margin-top:28px}.manual-intro{margin-bottom:16px}.manual-intro h2{margin:8px 0}.manual-intro p,.manual-grid p,.manual-grid li{color:var(--muted);font-size:13px;line-height:1.8}.manual-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.manual-grid h3{margin-top:0;color:var(--navy)}.manual-grid ol,.manual-grid ul{padding-left:22px;margin-bottom:0}
 @media(max-width:750px){.manual-grid{grid-template-columns:1fr}}
@@ -80,7 +80,7 @@ button,.primary,.ghost,.outline,.success{white-space:nowrap}
 @media print{
   .view{display:none!important}
   .view.active{display:block!important}
-  aside,header,#menu,.filters,.preview-actions,.road-batch-bar,
+  aside,header,#menu,.filters,.preview-actions,.road-batch-bar,.col-filter-panel,.col-filter-btn,
   .title button,.panel-head button,#toast{display:none!important}
   .shell{grid-template-columns:1fr!important}
   main{grid-column:1!important}
@@ -361,4 +361,154 @@ button,.primary,.ghost,.outline,.success{white-space:nowrap}
   color: #168466;
   font-size: 11px;
   line-height: 1.5;
+}
+
+/* ── 表頭欄位篩選（像 Excel 的資料篩選） ─────────────────────
+ * 漏斗按鈕掛在 <th> 裡；表頭是 sticky 的，所以下拉面板要放在 body 底下
+ * 用絕對座標定位，否則會被表格的 overflow 裁掉。
+ */
+th.has-col-filter {
+  padding-right: 34px;
+  position: sticky;
+}
+.col-filter-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid transparent;
+  background: none;
+  color: #90a2ad;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.col-filter-btn:hover {
+  background: #fff;
+  border-color: var(--line);
+  color: var(--navy);
+}
+.col-filter-btn.on {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  font-weight: 800;
+}
+.col-filter-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 12px;
+}
+.col-filter-on {
+  background: #e9f4fa;
+  color: #14618f;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 16px;
+}
+.col-filter-clear {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--navy);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.col-filter-panel {
+  position: absolute;
+  z-index: 60;
+  width: 250px;
+  background: #fff;
+  border: 1px solid #c6d3da;
+  border-radius: 9px;
+  box-shadow: 0 12px 32px rgba(25, 50, 69, 0.18);
+  padding: 10px;
+  font-size: 12px;
+}
+.col-filter-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.col-filter-head b {
+  color: var(--navy);
+}
+.col-filter-head button {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--navy);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.col-filter-search {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #cbd7dd;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.col-filter-list {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.col-filter-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f4f6;
+}
+.col-filter-list label:last-child {
+  border-bottom: 0;
+}
+.col-filter-list label:hover {
+  background: #f4f9fc;
+}
+.col-filter-list input {
+  margin: 0;
+}
+.col-filter-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-filter-empty {
+  margin: 0;
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+}
+.col-filter-foot {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.manager-filter-note {
+  margin: -6px 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.manager-filter-note b {
+  color: var(--navy);
 }

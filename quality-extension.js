@@ -1308,6 +1308,12 @@
     conclusionEdited = false;
     renderConclusion();
     toast("結論草稿已產生");
+    /*
+     * 唯一的「產生草稿」就在草稿框旁邊，所以正常情況下結果本來就在眼前，
+     * revealResult() 會判斷「已經看得到」而完全不動。
+     * 保留這一行是為了少數例外——例如視窗特別矮、或草稿變長把框推出畫面外。
+     */
+    if (typeof revealResult === "function") revealResult(q("conclusionDraft"));
   }
 
   if (q("conclusionScopeKinds"))
@@ -1376,7 +1382,15 @@
       conclusionCondition.roads = [];
       renderConclusion();
     };
-  if (q("conclusionGenerate")) q("conclusionGenerate").onclick = generateConclusion;
+  /*
+   * 只留草稿框旁邊這一顆。
+   *
+   * 頁首原本另有一顆「產生草稿」，和這一顆呼叫同一個函式，只是位置不同。
+   * 使用者指出實際動線根本用不到它：條件與條件範本都在下方，
+   *「哪怕條件沒變，為了確保資料正確，正常情況下仍會往下滑動確認條件」，
+   * 所以每一條動線最後都停在草稿框旁邊。兩顆同名按鈕反而讓人以為有差別，
+   * 還可能讓新手在還沒勾任何條件時就按下去，拿到一份用預設條件產生的草稿。
+   */
   if (q("conclusionRegenerate")) q("conclusionRegenerate").onclick = generateConclusion;
   if (q("conclusionDraft"))
     q("conclusionDraft").oninput = () => {

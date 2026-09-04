@@ -89,7 +89,7 @@ function migrateLosRules() {
     for (const [code, rule] of Object.entries(state.losRules))
       if (isLegacyLosRule(rule)) delete state.losRules[code];
   /*
-   * v2.20.31：把既有的路段有效期間界線統一成民國年寫法。
+   * 把既有的路段有效期間界線統一成民國年寫法。
    *
    * 舊版的輸入框不換算，所以資料裡可能留著 `2026Q1` 這種西元寫法。它和
    * `115Q1` 的排序鍵一模一樣（比較行為一直是對的），但顯示時不會跟著
@@ -150,6 +150,42 @@ function toast(t) {
   $("toast").classList.add("show");
   setTimeout(() => $("toast").classList.remove("show"), 2600);
 }
+
+/*
+ * 按下按鈕之後，把「剛長出來的結果」帶到看得見的地方。
+ *
+ * 使用者回報：「路段管理」按下『預覽修改影響』或『顯示合併影響』之後，
+ * 畫面停在原地，不知道預覽已經長在下面，會以為程式沒反應。
+ * 實測（視窗高 900px）：預覽面板的頂端在 1243px 處——比視窗下緣還低 343px，
+ * 使用者完全看不到。結論草稿的 1331px 也一樣。
+ *
+ * 規則刻意訂得保守，因為「畫面亂跳」比「不跳」更惱人：
+ *   ・結果已經看得到 → **完全不動**。按確認鍵、結果就在原地的情況不受影響。
+ *   ・結果在視窗外   → 才捲動，而且只捲到剛好看得見。
+ *   ・使用者的系統設定要求減少動態效果 → 直接跳過去，不做平滑捲動。
+ *
+ * 只在「按了才會出現結果」的按鈕呼叫；每次輸入都會重畫的地方不要用，
+ * 那會變成打一個字畫面跳一次。
+ */
+function revealResult(target) {
+  const el = typeof target === "string" ? $(target) : target;
+  if (!el || typeof el.getBoundingClientRect !== "function") return;
+  const rect = el.getBoundingClientRect(),
+    vh = window.innerHeight || document.documentElement.clientHeight;
+  /* 頂端與底端都在視窗內，或者它本來就佔滿整個視窗 → 使用者已經看得到 */
+  const fullyVisible = rect.top >= 0 && rect.bottom <= vh;
+  const fillsViewport = rect.top <= 0 && rect.bottom >= vh;
+  if (fullyVisible || fillsViewport) return;
+  const reduce =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  try {
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest", inline: "nearest" });
+  } catch {
+    /* 舊瀏覽器不接受設定物件時，退回最陽春的用法 */
+    el.scrollIntoView();
+  }
+}
 const titles = {
   home: "操作首頁",
   setup: "計畫設定",
@@ -179,7 +215,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.31";
+document.querySelector(".brand small").textContent = "正式版 v2.20.33";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -190,8 +226,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.31.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.31.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.33.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.33.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -207,7 +243,7 @@ managerButton.onclick = () => go("manager");
 const managerSection = document.createElement("section");
 managerSection.id = "manager";
 managerSection.className = "view";
-managerSection.innerHTML = `<div class="title"><div><span class="eyebrow">MANAGER EDITION</span><h2>跨計畫比較</h2><p>由各同事匯出 Project 專案包，再由管理者匯入；相同計畫編號會更新，不會重複累加。</p></div><label class="primary upload">匯入 Project 專案包<input id="managerFiles" type="file" multiple accept=".json"></label></div><div class="metrics"><article><span>已載入計畫</span><b id="managerProjects">0</b><small>專案包</small></article><article><span>篩選後資料</span><b id="managerRecords">0</b><small>路段日別彙總</small></article><article><span>篩選後路段</span><b id="managerRoads">0</b><small>計畫內去除重複</small></article><article><span>資料期間</span><b id="managerPeriod">—</b><small>篩選結果</small></article></div><div class="panel"><div class="panel-head"><div><h3>已匯入 Project 專案包</h3><small>可個別移除，不影響同事原始 Project</small></div><button class="outline" id="clearManager">全部清除</button></div><div class="table-wrap"><table><thead><tr><th>計畫編號</th><th>計畫名稱</th><th>彙總筆數</th><th>匯入／更新時間</th><th>操作</th></tr></thead><tbody id="managerPackageRows"></tbody></table></div></div><div id="managerStaleHint" class="panel manager-stale hidden"></div><div class="panel manager-data"><div class="manager-filters"><select id="managerProjectFilter"><option value="">全部計畫</option></select><select id="managerPeriodFilter"><option value="">全部季度</option></select><select id="managerDayFilter"><option value="">全部日別</option><option>平日</option><option>假日</option></select><select id="managerLosFilter"><option value="">全部 LOS</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select><input id="managerSearch" placeholder="搜尋路段或計畫"><button class="outline" id="resetManagerFilters">清除篩選</button><button class="primary" id="exportManager">匯出篩選結果</button></div><div class="table-wrap"><table><thead><tr><th>計畫</th><th>期間</th><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>總延滯</th><th>LOS</th></tr></thead><tbody id="managerRows"></tbody></table></div></div><div class="title manager-chart-title"><div><span class="eyebrow">MANAGER CHARTS</span><h2>計畫全路段 LOS 趨勢</h2><p>先於上方選擇一個計畫，再依目前季度、日別及 LOS 篩選產生每路段一張圖。</p></div></div><div id="managerChartHint" class="panel empty-block">請先選擇一個計畫，避免一次載入過多圖表。</div><div id="managerChartGrid" class="chart-grid"></div>`;
+managerSection.innerHTML = `<div class="title"><div><span class="eyebrow">MANAGER EDITION</span><h2>跨計畫比較</h2><p>由各同事匯出 Project 專案包，再由管理者匯入；相同計畫編號會更新，不會重複累加。</p></div><label class="primary upload">匯入 Project 專案包<input id="managerFiles" type="file" multiple accept=".json"></label></div><div class="metrics"><article><span>已載入計畫</span><b id="managerProjects">0</b><small>專案包</small></article><article><span>篩選後資料</span><b id="managerRecords">0</b><small>路段日別彙總</small></article><article><span>篩選後路段</span><b id="managerRoads">0</b><small>計畫內去除重複</small></article><article><span>資料期間</span><b id="managerPeriod">—</b><small>篩選結果</small></article></div><div class="panel"><div class="panel-head"><div><h3>已匯入 Project 專案包</h3><small>可個別移除，不影響同事原始 Project</small></div><button class="outline" id="clearManager">全部清除</button></div><div class="table-wrap"><table><thead><tr><th>計畫編號</th><th>計畫名稱</th><th>彙總筆數</th><th>匯入／更新時間</th><th>操作</th></tr></thead><tbody id="managerPackageRows"></tbody></table></div></div><div id="managerStaleHint" class="panel manager-stale hidden"></div><div class="panel manager-data"><div class="manager-filters"><select id="managerProjectFilter"><option value="">全部計畫</option></select><input id="managerSearch" placeholder="搜尋路段或計畫"><span id="managerFilterState" class="col-filter-state"></span><button class="outline" id="resetManagerFilters">清除篩選</button><button class="primary" id="exportManager">匯出篩選結果</button></div><p class="manager-filter-note">季度、日別、LOS 等條件改到<b>表頭的漏斗</b>裡挑，可以多選、也可以疊加；下方的圖表仍然要在左邊選定<b>一個計畫</b>才會產生。</p><div class="table-wrap"><table><thead><tr id="managerHead"><th>計畫</th><th>期間</th><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>總延滯</th><th>LOS</th></tr></thead><tbody id="managerRows"></tbody></table></div></div><div class="title manager-chart-title"><div><span class="eyebrow">MANAGER CHARTS</span><h2>計畫全路段 LOS 趨勢</h2><p>先於上方選擇一個計畫，再依目前季度、日別及 LOS 篩選產生每路段一張圖。</p></div></div><div id="managerChartHint" class="panel empty-block">請先選擇一個計畫，避免一次載入過多圖表。</div><div id="managerChartGrid" class="chart-grid"></div>`;
 document.querySelector("#backup").before(managerSection);
 const projectSpeedTitle = document.createElement("div");
 projectSpeedTitle.className = "title speed-chart-title";
@@ -1984,7 +2020,7 @@ function roadIsActive(road, period, code = state.activeCode) {
   // 格式不合的期間（例如手改備份留下的 114Q9）視為「沒有設定」，
   // 否則 periodIndex 會回 -1，任何季度都大於它，路段會被當成永遠有效。
   //
-  // v2.20.31 起，**超出可換算範圍**的界線也一併視為「沒有設定」。
+  // **超出可換算範圍**的界線也一併視為「沒有設定」。
   // 舊版只擋形狀：`9999Q1` 形狀合法、periodIndex 算得出 32353，於是
   // 開始季度少按一個鍵打成 9999Q1（或打成 201Q4），該路段在所有真的有資料
   // 的季度都會被判成「不在有效期間」，**悄悄從品質總覽與成果範圍消失，
@@ -2143,6 +2179,7 @@ function showRoadImpact(source, target, mode) {
     $("confirmRoadChange").disabled = true;
     $("roadImpact").innerHTML =
       '<b>無法預覽</b><p>來源與目標必須是不同名稱。</p><button class="danger-button" id="confirmRoadChange" disabled>備份後確認執行</button>';
+    revealResult("roadImpact");
     return;
   }
   const impact = roadImpact(source, target),
@@ -2151,6 +2188,8 @@ function showRoadImpact(source, target, mode) {
   $("roadImpact").innerHTML =
     `<div><b>${mode === "rename" && !exists ? "正式名稱修改" : "重複路段合併"}預覽</b><p>「${esc(source)}」→「${esc(target)}」</p><ul><li>影響季度：${impact.periods.length ? impact.periods.map(showQuarter).join("、") : "無"}</li><li>尖峰明細：${impact.rows} 筆</li><li>尖峰彙總：${impact.summary} 筆</li><li>合併後重複鍵值：${impact.collisions} 筆（保留目標路段既有資料）</li></ul><small>執行前會自動下載 Project 專案包；路段速限、別名及圖表會一起更新。</small></div><button class="danger-button" id="confirmRoadChange">備份後確認執行</button>`;
   $("confirmRoadChange").onclick = confirmRoadChange;
+  /* 預覽面板在四個表單方塊的下面，不捲過去使用者會以為沒反應 */
+  revealResult("roadImpact");
 }
 async function applyRoadChange(source, target) {
   const code = state.activeCode,
@@ -2341,7 +2380,7 @@ $("saveRoadPeriod").onclick = async () => {
     rawEnd = $("roadEndPeriod").value;
   if (!road) return toast("請先選擇路段");
   /*
-   * v2.20.31：改走三支共用的 checkSurveyPeriodInput()。
+   * 改走三支共用的 checkSurveyPeriodInput()。
    *
    * 舊版只用 validPeriod() 檢查形狀（/^\d{2,4}Q[1-4]$/），所以
    * `2026Q1`、`89Q1`、`201Q4`、`2000Q1`、`2112Q1`、`9999Q1` 全部照收、原樣存，
@@ -2426,15 +2465,84 @@ function rowSearchText(row, directionLabel, displayedPeriod = "") {
   if (displayedPeriod) values.push(displayedPeriod);
   return values.join(" ");
 }
+/*
+ * 兩張表的表頭欄位篩選（像 Excel 的資料篩選）。
+ *
+ * 只對「值是有限幾種」的欄位開篩選：期間、路段、日別、尖峰、方向、LOS。
+ * 速率、延滯、速限、速限比是連續數值，逐值勾選沒有意義，所以不掛。
+ *
+ * value() 一律回**儲存值**、label() 才是畫面上的字：
+ * 期間存的是民國年（115Q1），畫面可能顯示成西元或月份，
+ * 用顯示值當鍵的話，切換年份顯示就會把勾好的條件弄丟。
+ */
+function periodColumn(indexInRow) {
+  return {
+    index: indexInRow,
+    name: "期間",
+    value: (x) => x.period,
+    label: (x) => projectPeriodLabel(x.period, state.activeCode),
+  };
+}
+const plainColumn = (index, name, field) => ({
+  index,
+  name,
+  value: (x) => x[field],
+  label: (x) => x[field],
+});
+const directionColumn = (index, name) => ({
+  index,
+  name,
+  /* 方向的儲存值是 方向1／方向2，畫面上顯示的是使用者取的名字 */
+  value: (x) => x.direction,
+  label: (x) => rowDirectionName(x),
+});
+
+const detailFilter = globalThis.ColumnFilter.create({
+  thead: "#detailHead",
+  summary: "#detailFilterState",
+  columns: [
+    periodColumn(0),
+    plainColumn(1, "路段", "road"),
+    plainColumn(2, "日別", "day"),
+    plainColumn(3, "尖峰", "peak"),
+    directionColumn(4, "方向"),
+    plainColumn(9, "LOS", "los"),
+  ],
+  onChange: () => renderDetails(),
+});
+const summaryFilter = globalThis.ColumnFilter.create({
+  thead: "#summaryHead",
+  summary: "#summaryFilterState",
+  columns: [
+    periodColumn(0),
+    plainColumn(1, "路段", "road"),
+    plainColumn(2, "日別", "day"),
+    plainColumn(3, "代表尖峰", "peak"),
+    directionColumn(4, "代表方向"),
+    plainColumn(9, "LOS", "los"),
+  ],
+  onChange: () => renderSummaries(),
+});
+
+/*
+ * 畫面上目前實際顯示的列。匯出 CSV 要跟著它走——
+ * 使用者把畫面篩成「115Q2 A 路段」之後按匯出，卻拿到整包資料，
+ * 那比不能篩選更糟：檔案和眼前看到的不一樣，而且不會有任何提示。
+ */
+let shownDetailRows = [];
 function renderDetails() {
   const q = normalize($("detailSearch")?.value || ""),
     code = state.activeCode;
-  const rows = state.details.filter(
+  const all = state.details.filter((x) => x.projectCode === code);
+  /* 先套用搜尋框，欄位篩選的可選值就只會列出搜尋結果裡真的有的東西 */
+  const searched = all.filter(
     (x) =>
-      x.projectCode === code &&
       (!q || normalize(rowSearchText(x, rowDirectionName(x), projectPeriodLabel(x.period, code))).includes(q)),
   );
-  $("detailCount").textContent = `${rows.length} 筆`;
+  const rows = detailFilter.filter(searched);
+  shownDetailRows = rows;
+  $("detailCount").textContent =
+    rows.length === searched.length ? `${rows.length} 筆` : `${rows.length} / ${searched.length} 筆`;
   $("detailRows").innerHTML = rows.length
     ? rows
         .map(
@@ -2442,17 +2550,25 @@ function renderDetails() {
             `<tr><td>${esc(projectPeriodLabel(x.period, code))}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, Number.isInteger(Number(x.limit)) ? 0 : 1)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
-    : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰明細</td></tr>';
+    : `<tr><td colspan="10" class="empty">${
+        searched.length
+          ? "目前的欄位篩選沒有符合的資料——請點表頭的漏斗調整，或按「清除全部篩選」。"
+          : "目前計畫尚無尖峰明細"
+      }</td></tr>`;
+  /* 搜尋只暫時限制下拉選項，不能因此刪掉使用者已勾的表頭條件。 */
+  detailFilter.mount(searched, all);
 }
 function renderSummaries() {
   const q = normalize($("summarySearch")?.value || ""),
     code = state.activeCode;
-  const rows = state.summaries.filter(
+  const all = state.summaries.filter((x) => x.projectCode === code);
+  const searched = all.filter(
     (x) =>
-      x.projectCode === code &&
       (!q || normalize(rowSearchText(x, rowDirectionName(x), projectPeriodLabel(x.period, code))).includes(q)),
   );
-  $("summaryCount").textContent = `${rows.length} 筆`;
+  const rows = summaryFilter.filter(searched);
+  $("summaryCount").textContent =
+    rows.length === searched.length ? `${rows.length} 筆` : `${rows.length} / ${searched.length} 筆`;
   $("summaryRows").innerHTML = rows.length
     ? rows
         .map(
@@ -2460,7 +2576,12 @@ function renderSummaries() {
             `<tr><td>${esc(projectPeriodLabel(x.period, code))}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td><b>${fmt(x.totalDelay, 3)}</b></td><td>${fmt(x.ratio, 3)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
-    : '<tr><td colspan="10" class="empty">目前計畫尚無尖峰彙總</td></tr>';
+    : `<tr><td colspan="10" class="empty">${
+        searched.length
+          ? "目前的欄位篩選沒有符合的資料——請點表頭的漏斗調整，或按「清除全部篩選」。"
+          : "目前計畫尚無尖峰彙總"
+      }</td></tr>`;
+  summaryFilter.mount(searched, all);
 }
 function renderLosRules() {
   const x = rulesFor();
@@ -2658,22 +2779,30 @@ function csv(rows, name) {
     "text/csv",
   );
 }
-$("exportDetail").onclick = () =>
-  csv(
+$("exportDetail").onclick = () => {
+  /* 明講匯出的是「畫面上這些」，避免使用者以為拿到的是整包資料 */
+  const filtered =
+    shownDetailRows.length !==
+    state.details.filter((x) => x.projectCode === state.activeCode).length;
+  toast(
+    filtered
+      ? `已匯出畫面上的 ${shownDetailRows.length} 筆（有套用篩選）。要整包請先清除篩選與搜尋。`
+      : `已匯出 ${shownDetailRows.length} 筆`,
+  );
+  return csv(
     /*
      * CSV 是照欄位原樣倒出去的，direction 一定是鍵值（方向1／方向2）。
      * 交出去的檔案只有鍵值，收的人看不出哪個方向是哪一邊，所以另外補一欄
      * 顯示名稱。鍵值那一欄保留不動，既有的比對流程不受影響。
      */
-    state.details
-      .filter((x) => x.projectCode === state.activeCode)
-      .map((x) => ({
-        ...x,
-        /* 季度欄跟著畫面上的年份顯示切換走；其餘欄位與數值原樣輸出。 */
-        period: showQuarter(x.period),
-        directionLabel: rowDirectionName(x),
-      })),
+    shownDetailRows.map((x) => ({
+      ...x,
+      /* 季度欄跟著畫面上的年份顯示切換走；其餘欄位與數值原樣輸出。 */
+      period: showQuarter(x.period),
+      directionLabel: rowDirectionName(x),
+    })),
   );
+};
 /**
  * 觸發瀏覽器下載。
  * 連結一定要先掛進文件再點擊：部分瀏覽器對「沒有掛進 DOM」的 <a> 會忽略
@@ -3019,24 +3148,14 @@ $("managerFiles").onchange = async (e) => {
         : ""),
   );
 };
-for (const id of [
-  "managerSearch",
-  "managerProjectFilter",
-  "managerPeriodFilter",
-  "managerDayFilter",
-  "managerLosFilter",
-])
+for (const id of ["managerSearch", "managerProjectFilter"])
   $(id).addEventListener(id === "managerSearch" ? "input" : "change", renderManager);
 $("resetManagerFilters").onclick = () => {
-  for (const id of [
-    "managerProjectFilter",
-    "managerPeriodFilter",
-    "managerDayFilter",
-    "managerLosFilter",
-    "managerSearch",
-  ])
-    $(id).value = "";
+  for (const id of ["managerProjectFilter", "managerSearch"]) $(id).value = "";
+  managerFilter.clearAll();
   renderManager();
+  /* 重設之後要讓使用者看到「表格真的變了」，否則按鈕按下去像沒事發生 */
+  revealResult("managerRows");
 };
 $("clearManager").onclick = async () => {
   if (confirm("確定清除 Manager 內全部專案包？各 Project 本身不受影響。")) {
@@ -3107,21 +3226,50 @@ function managerSearchText(row) {
     managerPeriodLabel(row.period, row.projectCode),
   );
 }
-function managerFilteredRows() {
+/*
+ * Manager 的欄位篩選。
+ *
+ * 「計畫」保留成左邊的單選下拉，不做成欄位篩選——下方的 LOS 趨勢圖是
+ * 「一個計畫、每路段一張」，必須先確定是哪一個計畫；做成可複選就沒有這個保證了。
+ * 其餘條件（期間、路段、日別、代表尖峰、方向、LOS）都改成表頭漏斗，可多選、可疊加。
+ */
+const managerFilter = globalThis.ColumnFilter.create({
+  thead: "#managerHead",
+  summary: "#managerFilterState",
+  columns: [
+    {
+      index: 1,
+      name: "期間",
+      /* 比對用儲存的民國年，畫面上的字才跟著年份顯示切換走 */
+      value: (x) => x.period,
+      label: (x) => managerPeriodLabel(x.period, x.projectCode),
+    },
+    { index: 2, name: "路段", value: (x) => x.road, label: (x) => x.road },
+    { index: 3, name: "日別", value: (x) => x.day, label: (x) => x.day },
+    { index: 4, name: "代表尖峰", value: (x) => x.peak, label: (x) => x.peak },
+    {
+      index: 5,
+      name: "方向",
+      value: (x) => x.direction,
+      label: (x) => managerDirectionName(x),
+    },
+    { index: 8, name: "LOS", value: (x) => x.los, label: (x) => x.los },
+  ],
+  onChange: () => renderManager(),
+});
+/** 只套用「計畫下拉」；全文搜尋不能被當成資料真的被刪除。 */
+function managerProjectRows() {
   const all = managerAllRows(),
-    project = $("managerProjectFilter").value,
-    period = $("managerPeriodFilter").value,
-    day = $("managerDayFilter").value,
-    los = $("managerLosFilter").value,
-    q = normalize($("managerSearch").value);
-  return all.filter(
-    (x) =>
-      (!project || x.projectCode === project) &&
-      (!period || x.period === period) &&
-      (!day || x.day === day) &&
-      (!los || x.los === los) &&
-      (!q || normalize(managerSearchText(x)).includes(q)),
-  );
+    project = $("managerProjectFilter").value;
+  return all.filter((x) => !project || x.projectCode === project);
+}
+/** 再套用全文搜尋；欄位篩選的下拉選項以這些列為母體。 */
+function managerSearchedRows() {
+  const q = normalize($("managerSearch").value);
+  return managerProjectRows().filter((x) => !q || normalize(managerSearchText(x)).includes(q));
+}
+function managerFilteredRows() {
+  return managerFilter.filter(managerSearchedRows());
 }
 function renderManagerCharts(rows) {
   const grid = $("managerChartGrid"),
@@ -3272,21 +3420,13 @@ function renderManager() {
     "全部計畫",
   );
   if (projectBefore) $("managerProjectFilter").value = projectBefore;
-  const periodSource = all.filter(
-    (x) => !$("managerProjectFilter").value || x.projectCode === $("managerProjectFilter").value,
-  );
   /*
-   * 篩選值一律用儲存的季別字串，只有看到的文字跟著年份顯示切換走；
-   * 兩者混用的話，切成西元年之後既有的篩選就會對不到任何一筆。
+   * 季度、日別、LOS 改由表頭漏斗處理。那邊比對的一樣是**儲存的季別字串**，
+   * 只有看到的文字跟著年份顯示切換走；兩者混用的話，切成西元年之後
+   * 既有的篩選就會對不到任何一筆。
    */
-  syncOptions(
-    "managerPeriodFilter",
-    sortPeriods(periodSource.map((x) => x.period)).map((p) => ({
-      value: p,
-      label: showQuarter(p),
-    })),
-    "全部季度",
-  );
+  const projectRows = managerProjectRows();
+  const searched = managerSearchedRows();
   const rows = managerFilteredRows();
   $("managerProjects").textContent = state.manager.length;
   $("managerRecords").textContent = rows.length;
@@ -3311,7 +3451,12 @@ function renderManager() {
             `<tr><td>${esc(x.projectCode)} ${esc(x.projectName)}</td><td>${esc(managerPeriodLabel(x.period, x.projectCode))}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(managerDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
-    : '<tr><td colspan="9" class="empty">目前篩選條件沒有資料</td></tr>';
+    : `<tr><td colspan="9" class="empty">${
+        searched.length
+          ? "目前的欄位篩選沒有符合的資料——請點表頭的漏斗調整，或按「清除篩選」。"
+          : "目前篩選條件沒有資料"
+      }</td></tr>`;
+  managerFilter.mount(searched, projectRows);
   document.querySelectorAll("[data-remove-manager]").forEach(
     (b) =>
       (b.onclick = async () => {
@@ -3899,6 +4044,11 @@ qualityPanel.addEventListener("click", (e) => {
 $("runHealth").onclick = () => {
   inspectHealth();
   toast(healthIssues.length ? `健康檢查完成：${healthIssues.length} 項需確認` : "健康檢查通過");
+  /*
+   * 按鈕在頁首，「檢查結果」表格在兩張卡片下面。實測（視窗高 900px）
+   * 結果面板的頂端在 1865px——按下去畫面完全沒動，看起來就像沒反應。
+   */
+  revealResult(document.querySelector(".health-panel"));
 };
 $("cleanSuffix").onclick = async () => {
   const p = activeProject(),

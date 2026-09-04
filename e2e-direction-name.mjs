@@ -229,7 +229,7 @@ ok(
   dirChoices.every((x) => /方向[12]/.test(x)),
   dirChoices.join(" ／ "),
 );
-await page.click("#conclusionGenerate");
+await page.click("#conclusionRegenerate");
 await page.waitForTimeout(900);
 const draft = await page.inputValue("#conclusionDraft");
 ok("結論草稿寫的是新名稱", draft.includes(NAME_1) || draft.includes(NAME_2));

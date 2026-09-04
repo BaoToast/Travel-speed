@@ -232,7 +232,7 @@ const conclusionSingleQuarter = await page.evaluate(async () => {
   select.value = select.options[select.options.length - 1].value;
   select.onchange();
   await new Promise((r) => setTimeout(r, 300));
-  document.getElementById("conclusionGenerate").click();
+  document.getElementById("conclusionRegenerate").click();
   await new Promise((r) => setTimeout(r, 500));
   return {
     optionValue: select.value,
