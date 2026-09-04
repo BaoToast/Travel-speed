@@ -152,6 +152,84 @@ function toast(t) {
 }
 
 /*
+ * ── 讓 <input type="file"> 也能用拖曳的方式給檔案 ──
+ *
+ * 作法刻意繞一圈：把拖進來的 FileList 指派給原本那個 input.files，
+ * 再送一個 change 事件，後面就走原本 onchange 的同一條路。
+ * 不另外寫一份「拖曳版」的處理邏輯——那種寫法遲早會出現
+ * 「用拖的少做了一步檢查」這類只有拖曳才踩得到的錯。
+ *
+ * 副檔名依 input 自己的 accept 過濾。瀏覽器對 <input> 的 accept
+ * 只在「選檔對話框」生效，拖曳完全不受它限制，所以這裡要自己擋，
+ * 而且擋掉的要講出來，不能安靜地少匯入幾個檔。
+ */
+function enableFileDrop(zone, input) {
+  if (!zone || !input) return;
+  zone.dataset.dropzone = "1";
+  let dragDepth = 0;
+  const accept = (input.getAttribute("accept") || "")
+    .split(",")
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+  const accepted = (name) =>
+    !accept.length || accept.some((ext) => name.toLowerCase().endsWith(ext));
+  const active = (on) => zone.classList.toggle("drag-active", on);
+  zone.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    dragDepth += 1;
+    active(true);
+  });
+  zone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    active(true);
+  });
+  zone.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) active(false);
+  });
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    active(false);
+    if (input.disabled) return toast("目前正在讀取檔案，請等本批判讀完成後再選取下一批");
+    const dropped = [...((e.dataTransfer && e.dataTransfer.files) || [])];
+    if (!dropped.length) return;
+    const ok = dropped.filter((f) => accepted(f.name));
+    const bad = dropped.filter((f) => !accepted(f.name));
+    if (!ok.length)
+      return toast(
+        `這裡只收 ${accept.join("、")}；拖進來的 ${dropped.length} 個檔案都不是`,
+      );
+    const keep = input.multiple ? ok : ok.slice(0, 1);
+    const dt = new DataTransfer();
+    for (const f of keep) dt.items.add(f);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    if (bad.length)
+      toast(`已忽略 ${bad.length} 個不是 ${accept.join("、")} 的檔案`);
+    else if (!input.multiple && ok.length > 1)
+      toast(`這裡一次只收一個檔，已使用「${keep[0].name}」`);
+  });
+}
+
+/*
+ * 檔案掉在放置區**外面**時，瀏覽器預設會直接開啟那個檔案，
+ * 等於把使用者踢出系統頁面。這裡全域擋掉，並讓游標顯示「不可放置」，
+ * 使用者就知道要往放置區丟，而不是莫名其妙離開畫面。
+ * 放置區內部照常放行，交給上面的 enableFileDrop 處理。
+ */
+function blockStrayFileDrop(e) {
+  const el = e.target instanceof Element ? e.target : null;
+  if (el && el.closest("[data-dropzone]")) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
+}
+window.addEventListener("dragover", blockStrayFileDrop);
+window.addEventListener("drop", blockStrayFileDrop);
+
+/*
  * 按下按鈕之後，把「剛長出來的結果」帶到看得見的地方。
  *
  * 使用者回報：「路段管理」按下『預覽修改影響』或『顯示合併影響』之後，
@@ -215,7 +293,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.33";
+document.querySelector(".brand small").textContent = "正式版 v2.20.36";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -226,8 +304,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.33.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.33.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.36.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.36.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -243,7 +321,7 @@ managerButton.onclick = () => go("manager");
 const managerSection = document.createElement("section");
 managerSection.id = "manager";
 managerSection.className = "view";
-managerSection.innerHTML = `<div class="title"><div><span class="eyebrow">MANAGER EDITION</span><h2>跨計畫比較</h2><p>由各同事匯出 Project 專案包，再由管理者匯入；相同計畫編號會更新，不會重複累加。</p></div><label class="primary upload">匯入 Project 專案包<input id="managerFiles" type="file" multiple accept=".json"></label></div><div class="metrics"><article><span>已載入計畫</span><b id="managerProjects">0</b><small>專案包</small></article><article><span>篩選後資料</span><b id="managerRecords">0</b><small>路段日別彙總</small></article><article><span>篩選後路段</span><b id="managerRoads">0</b><small>計畫內去除重複</small></article><article><span>資料期間</span><b id="managerPeriod">—</b><small>篩選結果</small></article></div><div class="panel"><div class="panel-head"><div><h3>已匯入 Project 專案包</h3><small>可個別移除，不影響同事原始 Project</small></div><button class="outline" id="clearManager">全部清除</button></div><div class="table-wrap"><table><thead><tr><th>計畫編號</th><th>計畫名稱</th><th>彙總筆數</th><th>匯入／更新時間</th><th>操作</th></tr></thead><tbody id="managerPackageRows"></tbody></table></div></div><div id="managerStaleHint" class="panel manager-stale hidden"></div><div class="panel manager-data"><div class="manager-filters"><select id="managerProjectFilter"><option value="">全部計畫</option></select><input id="managerSearch" placeholder="搜尋路段或計畫"><span id="managerFilterState" class="col-filter-state"></span><button class="outline" id="resetManagerFilters">清除篩選</button><button class="primary" id="exportManager">匯出篩選結果</button></div><p class="manager-filter-note">季度、日別、LOS 等條件改到<b>表頭的漏斗</b>裡挑，可以多選、也可以疊加；下方的圖表仍然要在左邊選定<b>一個計畫</b>才會產生。</p><div class="table-wrap"><table><thead><tr id="managerHead"><th>計畫</th><th>期間</th><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>總延滯</th><th>LOS</th></tr></thead><tbody id="managerRows"></tbody></table></div></div><div class="title manager-chart-title"><div><span class="eyebrow">MANAGER CHARTS</span><h2>計畫全路段 LOS 趨勢</h2><p>先於上方選擇一個計畫，再依目前季度、日別及 LOS 篩選產生每路段一張圖。</p></div></div><div id="managerChartHint" class="panel empty-block">請先選擇一個計畫，避免一次載入過多圖表。</div><div id="managerChartGrid" class="chart-grid"></div>`;
+managerSection.innerHTML = `<div class="title"><div><span class="eyebrow">MANAGER EDITION</span><h2>跨計畫比較</h2><p>由各同事匯出 Project 專案包，再由管理者匯入；相同計畫編號會更新，不會重複累加。</p></div><label class="primary upload">匯入 Project 專案包（可拖曳）<input id="managerFiles" type="file" multiple accept=".json"></label></div><div class="metrics"><article><span>已載入計畫</span><b id="managerProjects">0</b><small>專案包</small></article><article><span>篩選後資料</span><b id="managerRecords">0</b><small>路段日別彙總</small></article><article><span>篩選後路段</span><b id="managerRoads">0</b><small>計畫內去除重複</small></article><article><span>資料期間</span><b id="managerPeriod">—</b><small>篩選結果</small></article></div><div class="panel"><div class="panel-head"><div><h3>已匯入 Project 專案包</h3><small>可個別移除，不影響同事原始 Project</small></div><button class="outline" id="clearManager">全部清除</button></div><div class="table-wrap"><table><thead><tr><th>計畫編號</th><th>計畫名稱</th><th>彙總筆數</th><th>匯入／更新時間</th><th>操作</th></tr></thead><tbody id="managerPackageRows"></tbody></table></div></div><div id="managerStaleHint" class="panel manager-stale hidden"></div><div class="panel manager-data"><div class="manager-filters"><select id="managerProjectFilter"><option value="">全部計畫</option></select><input id="managerSearch" placeholder="搜尋路段或計畫"><span id="managerFilterState" class="col-filter-state"></span><button class="outline" id="resetManagerFilters">清除篩選</button><button class="primary" id="exportManager">匯出篩選結果</button></div><p class="manager-filter-note">季度、日別、LOS 等條件改到<b>表頭的漏斗</b>裡挑，可以多選、也可以疊加；下方的圖表仍然要在左邊選定<b>一個計畫</b>才會產生。</p><div class="table-wrap"><table><thead><tr id="managerHead"><th>計畫</th><th>期間</th><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>總延滯</th><th>LOS</th></tr></thead><tbody id="managerRows"></tbody></table></div></div><div class="title manager-chart-title"><div><span class="eyebrow">MANAGER CHARTS</span><h2>計畫全路段 LOS 趨勢</h2><p>先於上方選擇一個計畫，再依目前季度、日別及 LOS 篩選產生每路段一張圖。</p></div></div><div id="managerChartHint" class="panel empty-block">請先選擇一個計畫，避免一次載入過多圖表。</div><div id="managerChartGrid" class="chart-grid"></div>`;
 document.querySelector("#backup").before(managerSection);
 const projectSpeedTitle = document.createElement("div");
 projectSpeedTitle.className = "title speed-chart-title";
@@ -1523,6 +1601,7 @@ $("saveProject").onclick = async () => {
   toast(i >= 0 ? "計畫設定已更新" : "新計畫已建立");
   go("import");
 };
+enableFileDrop(document.querySelector("label.drop"), $("files"));
 $("files").onchange = () => {
   $("fileInfo").textContent = $("files").files.length
     ? `已選取 ${$("files").files.length} 份檔案`
@@ -1555,11 +1634,51 @@ $("preview").onclick = async () => {
     return toast("年份請輸入民國 90～200，或西元 2001～2111（會換算成民國年記錄）");
   const year = String(isAdYear ? yearNumber - 1911 : yearNumber);
   if (!window.XLSX) return toast("Excel 讀取元件尚未載入，請確認網路後重新整理");
-  $("preview").disabled = true;
-  $("previewStatus").textContent = "讀取中…";
+  /*
+   * ── 判讀中的提示 ──
+   *
+   * 舊版只有兩個動作：按鈕變灰、右邊「辨識預覽」的小字改成「讀取中…」。
+   * 使用者回報「上傳大量檔案後以為沒成功」，原因不是程式沒反應——實測
+   * 24 份 64KB 的檔案要 5.7 秒，這段期間「讀取中…」確實顯示著、畫面也沒卡死
+   * ——而是那行字**在畫面另一側、很小、而且一動也不動**，
+   * 按鈕本身文字又完全沒變，看起來就跟當掉一樣。
+   *
+   * 改成三件事同時做：
+   *  ・按鈕本身變成「讀取中… 3／24」，使用者按完之後眼睛就在那裡
+   *  ・檔案資訊列同步顯示正在讀哪一個檔名
+   *  ・每讀完一份就讓瀏覽器有機會重畫（見下方 breathe()）
+   */
+  const previewButton = $("preview");
+  const fileInput = $("files");
+  const originalLabel = previewButton.textContent;
+  previewButton.disabled = true;
+  fileInput.disabled = true;
+  const showProgress = (done) => {
+    previewButton.textContent = `讀取中… ${done}／${files.length}`;
+    $("previewStatus").textContent = `讀取中… 已完成 ${done}／${files.length} 份`;
+  };
+  /*
+   * 讓出主執行緒一個「巨集任務」的時間。
+   *
+   * 只有 await 一個已完成的 Promise 是不夠的——那只讓出微任務，
+   * 瀏覽器不會重畫，進度數字會整批卡到最後才一次跳完。
+   * setTimeout(0) 才會讓畫面真的更新。
+   *
+   * 誠實記一筆：突變測試把這裡改成 Promise.resolve()（只讓出微任務）時，
+   * e2e-progress.mjs **仍然全綠**——因為匿名測資太小，parseFile 內部的
+   * await 本來就足以讓畫面重畫。也就是說這一行目前沒有被守門測試釘住。
+   * 保留它是為了真實尺寸的調查檔：那時 XLSX 的同步解析會長時間占住
+   * 主執行緒，少了這一步進度就會整批卡到最後才跳完。
+   */
+  const breathe = () => new Promise((done) => setTimeout(done, 0));
+  showProgress(0);
+  await breathe();
   pending = [];
   roadPicks = new Set();
+  let done = 0;
   for (const f of files) {
+    $("fileInfo").textContent = `讀取中：${f.name}（第 ${done + 1}／${files.length} 份）`;
+    await breathe();
     try {
       pending.push(await parseFile(f, year, q, $("defaultSpeed").value));
     } catch (e) {
@@ -1587,7 +1706,13 @@ $("preview").onclick = async () => {
           : detail || "檔案無法開啟或格式不支援",
       });
     }
+    done += 1;
+    showProgress(done);
+    await breathe();
   }
+  previewButton.textContent = originalLabel;
+  fileInput.disabled = false;
+  $("fileInfo").textContent = `已選取 ${files.length} 份檔案`;
   // 記住這次預覽的條件。寫入時要用這一份，而不是當下輸入框的值：
   // 使用者若在預覽後才改民國年或季度，舊版會把資料寫進「預覽時的季度」，
   // 卻把「改過的季度」記進匯入紀錄，兩邊不一致而且完全看不出來。
@@ -2940,6 +3065,7 @@ function looksLikeLegacyBackup(x) {
   const bags = ["limits", "aliases", "roadMeta", "losRules"];
   return bags.some((k) => x[k] && typeof x[k] === "object");
 }
+enableFileDrop($("restoreFile").closest("label"), $("restoreFile"));
 $("restoreFile").onchange = async (e) => {
   // 還原前先把目前狀態留一份。舊版是「邊解析邊改 state」，
   // 遇到壞掉的備份檔會在改壞之後才丟出例外，畫面只顯示「這不是有效的備份檔」，
@@ -3095,6 +3221,7 @@ if (clearAllCard) {
   };
 }
 
+enableFileDrop($("managerFiles").closest("label"), $("managerFiles"));
 $("managerFiles").onchange = async (e) => {
   let added = 0;
   const failed = [];

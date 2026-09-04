@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8" />
-<title>交通服務水準分析系統 新手使用手冊 v2.20.33</title>
+<title>交通服務水準分析系統 新手使用手冊 v2.20.36</title>
 <style>
   :root{
     --navy:#17354d; --teal:#1f7a8c; --orange:#c9752b; --ink:#1c3348;
@@ -97,7 +97,7 @@
     </tbody>
   </table>
 
-  <p class="stamp">系統版本：v2.20.33　更新日期：2026-09-04</p>
+  <p class="stamp">系統版本：v2.20.36　更新日期：2026-09-05</p>
 </section>
 
 <!-- ══════════ 1 ══════════ -->
@@ -182,7 +182,8 @@
 
 <div class="step"><div class="h">第 1 步　建立計畫</div><p>「計畫設定」→ 輸入計畫編號與名稱 → 按<span class="btn">儲存計畫設定</span>。</p></div>
 <div class="step"><div class="h">第 2 步　準備原始檔</div><p>把同一季度的平日、假日 Excel 放在同一個資料夾。不同季度要<strong>分開</strong>匯入。</p></div>
-<div class="step"><div class="h">第 3 步　匯入</div><p>「尖峰批次匯入」→ 填民國年與季度 → 選取多份檔案 → 按<span class="btn">讀取並預覽</span>。</p></div>
+<div class="step"><div class="h">第 3 步　匯入</div><p>「尖峰批次匯入」→ 填民國年與季度 → 選取多份檔案（<strong>也可以直接把檔案拖進虛線框</strong>，拖曳經過時框會亮起來）→ 按<span class="btn">讀取並預覽</span>。</p>
+  <p>檔案多的時候，按鈕本身會變成「讀取中… 3／18」，下方也會寫出正在讀哪一個檔名。<strong>看到數字在跳就是還在跑，不必重按。</strong></p></div>
 <div class="step"><div class="h">第 4 步　核對預覽</div><p>每份正常的檔案應該顯示 <strong>4 筆</strong>、失敗 0。有「疑似新路段」要先確認是新路段還是名稱寫法不同。</p></div>
 <div class="step"><div class="h">第 5 步　寫入</div><p>按<span class="btn">確認寫入尖峰明細</span>。系統會自動建立尖峰彙總。</p></div>
 <div class="step"><div class="h">第 6 步　核對速限</div><p>「路段速限」→ 依實際速限牌修改 → 按<span class="btn">套用並重算 LOS</span>。<strong>這一步不能跳過。</strong></p></div>
@@ -495,7 +496,7 @@
 <ul>
   <li><strong>Project 專案包：</strong>目前這一個計畫的完整資料。每完成一季就下載一次。</li>
   <li><strong>個人全部計畫包：</strong>這台電腦上所有計畫的完整資料。換電腦或重灌前下載。</li>
-  <li><strong>載入備份：</strong>「備份與淨空 → 選取備份檔」。若檔案格式不對，系統會維持原有資料不變並提示您，不會把資料弄壞。</li>
+  <li><strong>載入備份：</strong>「備份與淨空 → 選取或拖曳備份檔」，也可以直接把備份檔拖到那張卡片上。若檔案格式不對，系統會維持原有資料不變並提示您，不會把資料弄壞。</li>
   <li><strong>Manager 比較：</strong>管理者把各同事交來的專案包匯進「Manager 比較」，即可跨計畫比較；同事各自的原始資料不會互相覆蓋。</li>
 </ul>
 

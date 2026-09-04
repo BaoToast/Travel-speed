@@ -137,18 +137,56 @@ await probe("manager", "重設篩選", "#resetManagerFilters", "#managerRows");
  * 「使用者必須先決定產生哪些結論出來，會一路往下滑，勾選要產生的監測結果，
  *   最後在最底下才會點選『重新產生』，直接原地看到結果，不需要跳轉。」
  *
- * revealResult() 因此是有條件的：只有結果不在視窗內才捲。這一段就是驗那個條件——
- * 先把畫面滑到最底下（草稿框就在眼前），按下「重新產生」，scrollY 必須完全不動。
- * 少了這一段，把 revealResult() 改成無條件捲動也一樣會通過上面每一項。
+ * revealResult() 因此是有條件的：只有結果不在視窗內才捲。這一段就是驗那個條件。
+ *
+ * ⚠️ 這裡有一個量測上的陷阱，v2.20.33 的版本踩到了：**直接捲到整頁最底下按，
+ * 畫面本來就動不了**（已經到捲動極限），於是不管程式怎麼寫都會通過。
+ * 實測把 revealResult() 改成無條件 `block: "start"`，這一項仍然是綠的——
+ * 也就是說它當時擋不住任何東西。
+ *
+ * 改法：先在頁尾補一塊空白，讓「草稿框整個看得見」與「畫面還捲得動」同時成立，
+ * 再把草稿框放到視窗中間；這時候只要程式擅自捲動就一定量得到。
+ * 另外不用 Playwright 的 click()（它按之前會自己把元素捲進視窗），
+ * 改成在頁面裡直接對按鈕發 click()，量到的才是程式自己的行為。
+ * 前置條件本身也要驗，否則版面一改這一項又會悄悄變成恆真。
  */
 await page.evaluate(() => go("conclusion"));
 await page.waitForTimeout(400);
-await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-await page.waitForTimeout(300);
-const stayY0 = await page.evaluate(() => window.scrollY);
-await page.click("#conclusionRegenerate").catch(() => {});
+await page.evaluate(() => {
+  const spacer = document.createElement("div");
+  spacer.id = "reveal-probe-spacer";
+  spacer.style.height = "1500px";
+  document.body.appendChild(spacer);
+  document.getElementById("conclusionDraft").scrollIntoView({ block: "center", behavior: "auto" });
+});
+await page.waitForTimeout(400);
+const stayPre = await page.evaluate(() => {
+  const r = document.getElementById("conclusionDraft").getBoundingClientRect();
+  const vh = window.innerHeight;
+  const max = document.documentElement.scrollHeight - vh;
+  return {
+    y: Math.round(window.scrollY),
+    fullyVisible: r.top >= 0 && r.bottom <= vh,
+    canScroll: Math.round(window.scrollY) < Math.round(max) - 50,
+  };
+});
+const stayY0 = stayPre.y;
+await page.evaluate(() => document.getElementById("conclusionRegenerate")?.click());
 await page.waitForTimeout(800);
-const stayY1 = await page.evaluate(() => window.scrollY);
+const stayY1 = await page.evaluate(() => Math.round(window.scrollY));
+await page.evaluate(() => document.getElementById("reveal-probe-spacer")?.remove());
+results.push({
+  view: "conclusion",
+  label: "前置：看得見且捲得動",
+  result: "#conclusionDraft",
+  top: 0,
+  height: 999,
+  visible: 999,
+  vh: 900,
+  scrolled: !(stayPre.fullyVisible && stayPre.canScroll),
+  mustNotScroll: true,
+  detail: `整個看得見=${stayPre.fullyVisible}、還捲得動=${stayPre.canScroll}（scrollY=${stayPre.y}）`,
+});
 results.push({
   view: "conclusion",
   label: "已看得到就不跳",
