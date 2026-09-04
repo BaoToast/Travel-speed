@@ -12,6 +12,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import { access, readFile, readdir } from "node:fs/promises";
 
 /* 交通服務水準是純靜態網站，測試與腳本就放在專案根目錄。 */
@@ -151,9 +152,15 @@ test("交付包不可再帶入已過時的 GPT Site 交接說明", async () => {
 
 test("瀏覽器與測試端使用同一版 SheetJS 0.20.3", async () => {
   const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
-  assert.match(pkg.devDependencies.xlsx, /xlsx-0\.20\.3/, "測試端 SheetJS 不是 0.20.3");
+  assert.equal(pkg.devDependencies.xlsx, "file:./vendor/xlsx-0.20.3.tgz");
   const vendor = await readFile(new URL("vendor/xlsx.full.min.js", root), "utf8");
   assert.match(vendor, /0\.20\.3/, "瀏覽器端 SheetJS 不是 0.20.3");
+  const tgz = await readFile(new URL("vendor/xlsx-0.20.3.tgz", root));
+  assert.equal(
+    createHash("sha256").update(tgz).digest("hex").toUpperCase(),
+    "8DC73FC3B00203E72D176E85B50938627C7B086E607C682E8D3C22C02BB99FE8",
+    "內附的 SheetJS 0.20.3 安裝包不是已核對的官方檔案",
+  );
 });
 
 /*

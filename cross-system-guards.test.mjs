@@ -464,6 +464,7 @@ test("共用的季度輸入把關在獨立交付包內可完整驗證", () => {
   assert.equal(typeof checkSurveyPeriodInput, "function");
   assert.equal(typeof surveyPeriodInputMessage, "function");
 
+  /* 民國 90～200 的每一季，兩種寫法都要放行且存成同一個民國年鍵 */
   for (let roc = 90; roc <= 200; roc += 1) {
     for (let quarter = 1; quarter <= 4; quarter += 1) {
       const key = `${roc}Q${quarter}`;
@@ -472,14 +473,37 @@ test("共用的季度輸入把關在獨立交付包內可完整驗證", () => {
     }
   }
 
-  for (const value of ["2112Q3", "2000Q1", "1990Q2", "89Q1", "201Q4"])
-    assert.equal(checkSurveyPeriodInput(value).reason, "range", `${value} 應判定為超出範圍`);
-  for (const value of ["115Q5", "115", "abc", "", "Q1"])
-    assert.equal(checkSurveyPeriodInput(value).reason, "format", `${value} 應判定為格式錯誤`);
-  assert.deepEqual(checkSurveyPeriodInput(" 2026q1 "), { ok: true, key: "115Q1" });
-
   assert.match(surveyPeriodInputMessage("format"), /115Q2.*2026Q2/);
   assert.match(surveyPeriodInputMessage("range"), /90～200.*2001～2111/);
+});
+
+/* ── 三支共用的季度輸入行為契約（v2.20.30） ── */
+
+test("季度輸入把關必須完全符合三支共用的行為契約", async () => {
+  /*
+   * 上一輪三支的 checkSurveyPeriodInput() 被改成三種不同寫法，而三支的守門
+   * 測試都只驗自己那一份，所以沒有任何一支看得到分歧。這裡改成跑共用契約：
+   * 契約檔在三支裡逐位元相同，任何一支的實作漂掉，就是它自己的測試紅。
+   */
+  const { runContract, CASES } = await import("./period-input-contract.mjs");
+  assert.ok(CASES.length >= 50, "契約案例數異常，檔案可能被截斷");
+  const problems = runContract(box.PeriodDate.checkSurveyPeriodInput, box.PeriodDate.normalizeSurveyPeriod);
+  assert.deepEqual(problems, [], "與共用行為契約不符：\n" + problems.join("\n"));
+});
+
+test("行為契約檔本身必須與另外兩支逐位元相同", async () => {
+  /*
+   * 三支各自釘同一個 SHA-256。只改一支的契約檔，那一支就會紅；
+   * 要改行為就得三支的契約檔一起改、雜湊一起換——這正是我們要的。
+   * 用雜湊而不是跨包引用檔案，交付包才能解壓後獨立執行。
+   */
+  const { createHash } = await import("node:crypto");
+  const bytes = readFileSync(new URL("./period-input-contract.mjs", import.meta.url));
+  assert.equal(
+    createHash("sha256").update(bytes).digest("hex"),
+    "638f2b48ed3d7e24e7c605314eb2149f3cc5c07865f69a99d8c767a52945fe75",
+    "行為契約檔與另外兩支不同步；三支必須是同一份檔案",
+  );
 });
 
 test("「要編輯的計畫」不得再叫「目前計畫」，且不一致時要當場說明", () => {
@@ -502,5 +526,77 @@ test("「要編輯的計畫」不得再叫「目前計畫」，且不一致時�
   assert.match(
     appSource,
     /projectSwitch\.onchange = async \(\) => \{\s*\n\s*state\.activeCode = projectSwitch\.value;/,
+  );
+});
+
+/* ── F-3：路段有效期間的季度輸入（v2.20.30） ── */
+
+test("路段有效期間必須走共用把關，不得只檢查形狀", () => {
+  /*
+   * 舊版 saveRoadPeriod 只用 validPeriod()（/^\d{2,4}Q[1-4]$/），於是
+   * 2026Q1／89Q1／201Q4／2000Q1／2112Q1／9999Q1 全部照收、原樣存，
+   * 提示卻寫「季度格式應為民國年加 Q1～Q4」。實測後果：開始季度打成
+   * 9999Q1，該路段在所有真的有資料的季度都被判成不在有效期間，
+   * 悄悄從品質總覽與成果範圍消失，沒有任何警告。
+   */
+  const block = appSource.slice(
+    appSource.indexOf('$("saveRoadPeriod").onclick'),
+    appSource.indexOf('$("addAlias").onclick'),
+  );
+  assert.ok(block.length > 200, "找不到 saveRoadPeriod 區塊");
+  assert.match(
+    block,
+    /PeriodDate\.checkSurveyPeriodInput\(text\)/,
+    "有效期間必須走共用的 checkSurveyPeriodInput()",
+  );
+  assert.match(
+    block,
+    /PeriodDate\.surveyPeriodInputMessage\(check\.reason\)/,
+    "錯誤訊息必須與匯入路徑同一句",
+  );
+  assert.match(block, /bounds\.push\(check\.key\)/, "存下的必須是換算後的民國年鍵");
+  /* 只找實際呼叫，註解裡提到 validPeriod() 說明歷史是可以的 */
+  const code = block.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert.doesNotMatch(
+    code,
+    /!validPeriod\(|validPeriod\(start\)|validPeriod\(end\)/,
+    "不可以再用只看形狀的 validPeriod() 當有效期間的把關",
+  );
+  assert.doesNotMatch(
+    code,
+    /toast\("季度格式應為民國年加/,
+    "那句提示與實際行為不符（它其實收四碼西元），必須改掉",
+  );
+});
+
+test("不可用的有效期間界線要退化成「沒有設定」，不可以讓路段消失", () => {
+  /*
+   * periodIndex() 只看形狀，9999Q1 算得出 32353。界線的失效方式必須和
+   * 「格式不合」一樣回 -1（＝視為沒有設定），否則路段會從畫面上消失——
+   * 看不見的錯誤比「暫時當成永遠有效」危險得多。
+   */
+  assert.match(
+    appSource,
+    /function periodBoundIndex\(v\) \{[\s\S]*?checkSurveyPeriodInput\(v\)/,
+    "應有 periodBoundIndex() 且走共用把關",
+  );
+  const active = appSource.slice(
+    appSource.indexOf("function roadIsActive("),
+    appSource.indexOf("function directionNameFrom("),
+  );
+  assert.match(active, /periodBoundIndex\(start\)/, "roadIsActive 的下界要走 periodBoundIndex");
+  assert.match(active, /periodBoundIndex\(end\)/, "roadIsActive 的上界要走 periodBoundIndex");
+});
+
+test("既有資料裡寫成西元的有效期間會在載入時統一成民國年", () => {
+  assert.match(
+    appSource,
+    /for \(const meta of Object\.values\(state\.roadMeta\)\)[\s\S]*?canonicalPeriod\(before\)/,
+    "migrateLosRules 應把既有的有效期間界線正規化",
+  );
+  assert.match(
+    appSource,
+    /function canonicalPeriod\(v\) \{[\s\S]*?check\.ok \? check\.key/,
+    "canonicalPeriod 應只換認得出來的，認不得的原樣留著",
   );
 });

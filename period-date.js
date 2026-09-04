@@ -121,15 +121,35 @@
    * 呼叫端不可只檢查字串形狀，否則 2112Q3 與 201Q3 會成為兩個鍵。
    */
   function checkSurveyPeriodInput(input) {
-    const raw = String(input == null ? "" : input).trim().toUpperCase();
+    /*
+     * 先做 NFKC 正規化並去掉所有空白：從 Excel／Word／PDF 複製貼上很常帶進
+     * 全形數字或全形 Ｑ，手打時也常在中間多一個空白。三支必須一視同仁。
+     */
+    const raw = String(input == null ? "" : input)
+      .normalize("NFKC")
+      .replace(/\s+/g, "")
+      .toUpperCase();
     const match = raw.match(/^(\d{2,4})Q([1-4])$/);
-    if (!match) return { ok: false, key: normalizeSurveyPeriod(raw), reason: "format" };
-    const sourceYear = Number(match[1]);
+    if (!match)
+      return { ok: false, key: normalizeSurveyPeriod(raw), reason: "format" };
+
+    /*
+     * 年份**以數值判定，不看位數**。
+     *
+     * 舊寫法依位數分派（四碼一律當西元），於是把 `0115Q1` 判成「西元 115 年、
+     * 超出範圍」，回一句「民國年請填 90～200」——但 0115 就是 115，訊息與事實
+     * 矛盾；而共用的 normalizeSurveyPeriod() 一直都把它算成 115Q1，等於檢查與
+     * 正規化對同一個字串有兩種看法。Number() 會吃掉前導零，改用數值就一致了。
+     *
+     * 民國 90～200 與西元 2001～2111 兩段不重疊，所以數值本身就足以分辨，
+     * 不需要位數。範圍外一律擋下：normalizeSurveyPeriod() 只在這個窗口內換算，
+     * 窗口外的年份會原樣回傳，放行就會產生一個永遠比對不到的季度鍵。
+     */
+    const year = Number(match[1]);
     const quarter = match[2];
-    if (match[1].length <= 3 && sourceYear >= 90 && sourceYear <= 200)
-      return { ok: true, key: sourceYear + "Q" + quarter };
-    if (match[1].length === 4 && sourceYear >= 2001 && sourceYear <= 2111)
-      return { ok: true, key: sourceYear - 1911 + "Q" + quarter };
+    if (year >= 90 && year <= 200) return { ok: true, key: year + "Q" + quarter };
+    if (year >= 2001 && year <= 2111)
+      return { ok: true, key: year - 1911 + "Q" + quarter };
     return { ok: false, key: normalizeSurveyPeriod(raw), reason: "range" };
   }
 

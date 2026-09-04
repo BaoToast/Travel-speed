@@ -1,12 +1,12 @@
 {
   "name": "travel-speed",
-  "version": "2.20.28",
+  "version": "2.20.31",
   "private": true,
   "description": "交通服務水準分析系統（純靜態網站：HTML + CSS + 原生 JavaScript，無框架、無建置步驟）",
   "scripts": {
     "test": "node --test *.test.mjs && node check-version.mjs",
     "fixtures": "node generate-test-fixtures.mjs",
-    "e2e": "npm run fixtures && node e2e-speed.mjs && node e2e-conclusion.mjs && node e2e-direction-name.mjs && node e2e-layout.mjs && node e2e-period-date.mjs && node e2e-year-style.mjs && node e2e-project-scope.mjs",
+    "e2e": "npm run fixtures && node e2e-speed.mjs && node e2e-conclusion.mjs && node e2e-direction-name.mjs && node e2e-layout.mjs && node e2e-period-date.mjs && node e2e-year-style.mjs && node e2e-project-scope.mjs && node e2e-road-period.mjs",
     "manual": "node manual-src/build-pdf.mjs && node manual-src/build-docx.mjs",
     "verify": "npm run test && npm run e2e"
   },
@@ -14,6 +14,6 @@
     "docx": "^9.7.1",
     "jszip": "^3.10.1",
     "playwright": "^1.62.1",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "file:./vendor/xlsx-0.20.3.tgz"
   }
 }

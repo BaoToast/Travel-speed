@@ -88,6 +88,25 @@ function migrateLosRules() {
   if ((Number(state.version) || 0) < 10)
     for (const [code, rule] of Object.entries(state.losRules))
       if (isLegacyLosRule(rule)) delete state.losRules[code];
+  /*
+   * v2.20.31：把既有的路段有效期間界線統一成民國年寫法。
+   *
+   * 舊版的輸入框不換算，所以資料裡可能留著 `2026Q1` 這種西元寫法。它和
+   * `115Q1` 的排序鍵一模一樣（比較行為一直是對的），但顯示時不會跟著
+   * 民國／西元切換走，而且和全系統「一律存民國年」的規則不一致。
+   * 只換「認得出來」的；認不得的（例如 9999Q1）原樣留著，不擅自丟掉
+   * 使用者的資料——那一種現在會被 periodBoundIndex() 當成沒有設定，
+   * 路段仍然看得見，使用者下次編輯時會被擋下並得到說明。
+   */
+  for (const meta of Object.values(state.roadMeta)) {
+    if (!meta || typeof meta !== "object") continue;
+    for (const field of ["startPeriod", "endPeriod"]) {
+      const before = meta[field];
+      if (!before) continue;
+      const after = canonicalPeriod(before);
+      if (after !== before) meta[field] = after;
+    }
+  }
   state.version = 10;
 }
 async function load() {
@@ -160,7 +179,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.28";
+document.querySelector(".brand small").textContent = "正式版 v2.20.31";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -171,8 +190,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.28.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.28.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.31.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.31.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -1919,6 +1938,31 @@ function periodIndex(v) {
   const year = Number(m[1]);
   return (year >= 1000 ? year - 1911 : year) * 4 + Number(m[2]);
 }
+/*
+ * 有效期間界線專用的排序鍵。
+ *
+ * periodIndex() 只看形狀，`9999Q1` 也算得出鍵。但一個算得出來卻不可能有資料的
+ * 界線，會讓路段被判定為「永遠不在有效期間」而從畫面上消失。界線的失效方式
+ * 應該和「格式不合」一樣是回 -1（＝視為沒有設定），這樣至少看得見。
+ */
+function periodBoundIndex(v) {
+  if (!v) return -1;
+  const check = globalThis.PeriodDate.checkSurveyPeriodInput(v);
+  return check.ok ? periodIndex(check.key) : -1;
+}
+/*
+ * 把有效期間界線寫成全系統統一的民國年寫法。
+ *
+ * 舊版的「路段有效期間」是自由文字，只用 validPeriod() 檢查形狀，於是
+ * `2026Q1` 會原樣存下來——全系統其他地方一律存民國年，只有這裡是例外，
+ * 而且這個值是直接回填輸入框顯示的，不會跟著民國／西元顯示切換走。
+ * 認得出來的就換成民國年，認不得的原樣留著（不擅自丟掉使用者的資料）。
+ */
+function canonicalPeriod(v) {
+  if (!v) return "";
+  const check = globalThis.PeriodDate.checkSurveyPeriodInput(v);
+  return check.ok ? check.key : String(v).trim().toUpperCase();
+}
 function sortPeriods(values) {
   return [...new Set(values)].sort((a, b) => periodIndex(a) - periodIndex(b));
 }
@@ -1939,8 +1983,15 @@ function roadIsActive(road, period, code = state.activeCode) {
     p = periodIndex(period);
   // 格式不合的期間（例如手改備份留下的 114Q9）視為「沒有設定」，
   // 否則 periodIndex 會回 -1，任何季度都大於它，路段會被當成永遠有效。
-  const startIndex = periodIndex(start),
-    endIndex = periodIndex(end);
+  //
+  // v2.20.31 起，**超出可換算範圍**的界線也一併視為「沒有設定」。
+  // 舊版只擋形狀：`9999Q1` 形狀合法、periodIndex 算得出 32353，於是
+  // 開始季度少按一個鍵打成 9999Q1（或打成 201Q4），該路段在所有真的有資料
+  // 的季度都會被判成「不在有效期間」，**悄悄從品質總覽與成果範圍消失，
+  // 而且沒有任何警告**。這比「暫時當成永遠有效」危險得多——後者看得見，
+  // 前者看不見。所以沿用上面那一段既有的判斷：不可用的界線就是沒有界線。
+  const startIndex = periodBoundIndex(start),
+    endIndex = periodBoundIndex(end);
   return (
     (startIndex < 0 || p >= startIndex) && (endIndex < 0 || p <= endIndex)
   );
@@ -2286,16 +2337,45 @@ $("periodRoad").onchange = () => {
 };
 $("saveRoadPeriod").onclick = async () => {
   const road = $("periodRoad").value,
-    start = $("roadStartPeriod").value.trim().toUpperCase(),
-    end = $("roadEndPeriod").value.trim().toUpperCase();
+    rawStart = $("roadStartPeriod").value,
+    rawEnd = $("roadEndPeriod").value;
   if (!road) return toast("請先選擇路段");
-  if (!validPeriod(start) || !validPeriod(end))
-    return toast("季度格式應為民國年加 Q1～Q4，例如 114Q1");
+  /*
+   * v2.20.31：改走三支共用的 checkSurveyPeriodInput()。
+   *
+   * 舊版只用 validPeriod() 檢查形狀（/^\d{2,4}Q[1-4]$/），所以
+   * `2026Q1`、`89Q1`、`201Q4`、`2000Q1`、`2112Q1`、`9999Q1` 全部照收、原樣存，
+   * 而提示卻寫著「季度格式應為民國年加 Q1～Q4」——訊息與行為不符。
+   * 更實際的後果是：開始季度打成 9999Q1，該路段在所有真的有資料的季度都會
+   * 被判成不在有效期間，悄悄從品質總覽與成果範圍消失，沒有任何警告。
+   * 現在超出範圍會當場擋下並說明該填什麼，通過的一律換算成民國年再存。
+   */
+  const bounds = [];
+  for (const [label, raw] of [["開始季度", rawStart], ["停止季度", rawEnd]]) {
+    const text = String(raw || "").trim();
+    if (!text) {
+      bounds.push("");
+      continue;
+    }
+    const check = globalThis.PeriodDate.checkSurveyPeriodInput(text);
+    if (!check.ok)
+      return toast(`${label}「${text}」無法使用：` + globalThis.PeriodDate.surveyPeriodInputMessage(check.reason));
+    bounds.push(check.key);
+  }
+  const [start, end] = bounds;
   if (start && end && periodIndex(start) > periodIndex(end))
     return toast("停止季度不可早於開始季度");
   state.roadMeta[roadMetaKey(road)] = { ...roadMeta(road), startPeriod: start, endPeriod: end };
+  /* 存下的是民國年寫法，輸入框也要同步顯示存下去的那個值 */
+  $("roadStartPeriod").value = start;
+  $("roadEndPeriod").value = end;
   await save();
-  toast("路段有效期間已更新");
+  toast(
+    start === String(rawStart || "").trim().toUpperCase() &&
+      end === String(rawEnd || "").trim().toUpperCase()
+      ? "路段有效期間已更新"
+      : `路段有效期間已更新（已換算成民國年儲存：${start || "—"}～${end || "—"}）`,
+  );
 };
 $("addAlias").onclick = async () => {
   const alias = normalize($("aliasName").value),
