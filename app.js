@@ -221,6 +221,16 @@ function enableFileDrop(zone, input) {
  * 放置區內部照常放行，交給上面的 enableFileDrop 處理。
  */
 function blockStrayFileDrop(e) {
+  /*
+   * 只攔「拖檔案」，不要攔一般的文字拖曳。
+   *
+   * 先前版本少了這一行判斷，於是把使用者在頁面內拖動選取文字
+   * 也一起擋掉了——拖一段字到搜尋框、計畫名稱欄或結論草稿的文字框
+   * 全都放不下去。實測三個位置都中。
+   * dataTransfer.types 含 "Files" 才是拖檔案。
+   */
+  const types = e.dataTransfer ? Array.from(e.dataTransfer.types || []) : [];
+  if (!types.includes("Files")) return;
   const el = e.target instanceof Element ? e.target : null;
   if (el && el.closest("[data-dropzone]")) return;
   e.preventDefault();
@@ -293,7 +303,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.36";
+document.querySelector(".brand small").textContent = "正式版 v2.20.38";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -304,8 +314,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.36.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.36.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.38.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.38.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -1653,6 +1663,16 @@ $("preview").onclick = async () => {
   const originalLabel = previewButton.textContent;
   previewButton.disabled = true;
   fileInput.disabled = true;
+  /*
+   * 從這裡到函式結尾包一層 try/catch/finally。
+   *
+   * 迴圈裡每一份檔案都有自己的 try/catch，但**迴圈之後**的整理步驟
+   * （pendingPeriodChecks、analyzeRoads、renderPreview）沒有任何保護。
+   * 那裡一丟例外，「讀取並預覽」就永遠停用、狀態欄卡在「讀取中…」，
+   * 使用者只能重新整理頁面——實測確認過。
+   * 其他交通調查系統已處理過同一類問題，這一支現在也採相同防護。
+   */
+  try {
   const showProgress = (done) => {
     previewButton.textContent = `讀取中… ${done}／${files.length}`;
     $("previewStatus").textContent = `讀取中… 已完成 ${done}／${files.length} 份`;
@@ -1710,8 +1730,6 @@ $("preview").onclick = async () => {
     showProgress(done);
     await breathe();
   }
-  previewButton.textContent = originalLabel;
-  fileInput.disabled = false;
   $("fileInfo").textContent = `已選取 ${files.length} 份檔案`;
   // 記住這次預覽的條件。寫入時要用這一份，而不是當下輸入框的值：
   // 使用者若在預覽後才改民國年或季度，舊版會把資料寫進「預覽時的季度」，
@@ -1730,8 +1748,36 @@ $("preview").onclick = async () => {
     ),
   );
   analyzeRoads();
-  $("preview").disabled = false;
   renderPreview();
+  } catch (error) {
+    /*
+     * finally 只能解鎖控制項，不能把一個「做了一半」的預覽變成安全狀態。
+     * 若日期比對、路段分析或畫面重繪出錯，必須同時清掉 pending 與確認按鈕，
+     * 否則使用者可能把上一次或本次未完成的結果誤認為可寫入資料。
+     * 檔案欄也清空，讓同一批檔名修正後可以直接重新選取。
+     */
+    clearPendingPreview();
+    fileInput.value = "";
+    $("fileInfo").textContent = "本次判讀未完成，請重新選取檔案";
+    $("previewStatus").textContent = "判讀未完成，資料尚未寫入；請重新選取檔案後再試";
+    $("errorBadge").textContent = "1 錯誤";
+    $("errorBadge").style.color = "#bd463d";
+    $("previewRows").innerHTML =
+      '<tr><td colspan="5" class="empty">本次判讀未完成，沒有資料被寫入</td></tr>';
+    if ($("periodDateAlert")) {
+      $("periodDateAlert").hidden = true;
+      $("periodDateAlert").innerHTML = "";
+    }
+    const detail = String(error?.message || error || "").trim();
+    toast(
+      `本次判讀未完成，資料尚未寫入；請重新選取檔案後再試${detail ? `：${detail}` : ""}`,
+    );
+  } finally {
+    /* 不論成功或中途出錯，畫面都要回到使用者能繼續操作的狀態 */
+    previewButton.disabled = false;
+    previewButton.textContent = originalLabel;
+    fileInput.disabled = false;
+  }
 };
 /**
  * 取消本次預覽。

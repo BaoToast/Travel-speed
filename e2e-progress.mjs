@@ -184,7 +184,67 @@ ok(
   `結束時「${last.info}」`,
 );
 
-ok("沒有 JS 例外", errors.length === 0, errors.slice(0, 2).join(" | "));
+/* ── 判讀後的整理階段出錯，也不可以把畫面卡死 ── */
+/*
+ * 迴圈裡每一份檔案都有自己的 try/catch，但迴圈**之後**的整理步驟
+ * （期別比對、路段分析、重畫預覽）在 v2.20.36 之前沒有任何保護。
+ * 那裡一丟例外，「讀取並預覽」就永遠停用、狀態欄卡在「讀取中…」，
+ * 使用者只能重新整理頁面。這一項用注入例外的方式把它釘住。
+ */
+await page.reload({ waitUntil: "networkidle" });
+await page.evaluate(() => document.querySelector('[data-view="setup"]').click());
+await page.fill("#projectCode", "STUCK");
+await page.fill("#projectName", "整理階段例外測試");
+await page.click("#saveProject");
+await page.waitForTimeout(400);
+await page.evaluate(() => document.querySelector('[data-view="import"]').click());
+await page.fill("#rocYear", "115");
+await page.selectOption("#quarter", { index: 0 });
+await page.evaluate(() => {
+  globalThis.PeriodDate.checkPeriodAgainstDate = () => {
+    throw new Error("模擬：判讀後整理階段的非預期例外");
+  };
+});
+await page.setInputFiles("#files", batch.slice(0, 2));
+await page.waitForTimeout(300);
+await page.click("#preview");
+await page.waitForTimeout(3000);
+const afterCrash = await page.evaluate(() => ({
+  button: document.getElementById("preview").textContent.trim(),
+  buttonDisabled: document.getElementById("preview").disabled,
+  filesDisabled: document.getElementById("files").disabled,
+  selectedFiles: document.getElementById("files").files.length,
+  status: document.getElementById("previewStatus").textContent.trim(),
+  fileInfo: document.getElementById("fileInfo").textContent.trim(),
+  commitDisabled: document.getElementById("commit").disabled,
+  cancelDisabled: document.getElementById("cancelPreview").disabled,
+  rows: document.getElementById("previewRows").textContent.trim(),
+}));
+ok(
+  "整理階段丟例外時，「讀取並預覽」不可以永久停用",
+  afterCrash.buttonDisabled === false,
+  `按鈕「${afterCrash.button}」${afterCrash.buttonDisabled ? "（仍停用）" : "（可按）"}`,
+);
+ok(
+  "整理階段丟例外時，檔案欄也要解鎖，使用者才能重試",
+  afterCrash.filesDisabled === false && afterCrash.selectedFiles === 0,
+  `檔案欄${afterCrash.filesDisabled ? "仍鎖住" : "已解鎖"}，已選 ${afterCrash.selectedFiles} 份`,
+);
+ok(
+  "整理失敗後會清除未完成預覽，不會留下可誤按的寫入狀態",
+  afterCrash.commitDisabled &&
+    afterCrash.cancelDisabled &&
+    /沒有資料被寫入/.test(afterCrash.rows),
+  `確認寫入=${afterCrash.commitDisabled ? "停用" : "可按"}；取消=${afterCrash.cancelDisabled ? "停用" : "可按"}；內容「${afterCrash.rows}」`,
+);
+ok(
+  "整理失敗後狀態欄會明確說明未寫入並提示重新選取",
+  !/讀取中/.test(afterCrash.status) &&
+    /未完成/.test(afterCrash.status) &&
+    /重新選取/.test(afterCrash.fileInfo),
+  `狀態「${afterCrash.status}」；檔案列「${afterCrash.fileInfo}」`,
+);
+ok("非預期整理錯誤已由畫面接住，沒有未處理的 JS 例外", errors.length === 0, errors.slice(0, 2).join(" | "));
 
 console.log(problems.length ? `\n❌ ${problems.length} 項未通過` : "\n✅ 全部通過");
 await browser.close();

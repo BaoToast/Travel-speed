@@ -350,6 +350,39 @@ if (managerZoneExists) {
   ok("Manager 匯入區找得到", false, "頁面上沒有 #managerFiles");
 }
 
+/* ── 六、全域防呆只能攔檔案，不可以連一般文字拖曳都擋掉 ── */
+/*
+ * 先前版本的防呆少了「是不是拖檔案」這一層判斷，於是把使用者
+ * 在頁面內拖動選取文字也一起擋掉了：拖一段字到搜尋框、計畫名稱欄
+ * 或結論草稿的文字框全都放不下去。這一項就是釘住那個分界。
+ */
+const textDrag = await page.evaluate(() => {
+  const probe = (selector) => {
+    const el = document.querySelector(selector);
+    if (!el) return { missing: true };
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "一段被拖曳的文字");
+    const over = new DragEvent("dragover", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: dt,
+    });
+    el.dispatchEvent(over);
+    return { blocked: over.defaultPrevented };
+  };
+  return {
+    input: probe("#projectCode"),
+    search: probe('input[placeholder*="搜尋"]'),
+    table: probe(".table-wrap"),
+  };
+});
+for (const [label, key] of [["計畫編號輸入框", "input"], ["搜尋框", "search"], ["表格區域", "table"]])
+  ok(
+    `拖一般文字到${label}不會被擋掉`,
+    !textDrag[key].missing && textDrag[key].blocked === false,
+    textDrag[key].missing ? "（頁面上沒有這個元素）" : `被擋=${textDrag[key].blocked}`,
+  );
+
 ok("沒有 JS 例外", errors.length === 0, errors.slice(0, 2).join(" | "));
 
 console.log(problems.length ? `\n❌ ${problems.length} 項未通過` : "\n✅ 全部通過");
