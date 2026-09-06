@@ -109,14 +109,22 @@ function migrateLosRules() {
   }
   state.version = 10;
 }
+function assertLoadableState(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("本機資料根格式不符");
+  const current = Array.isArray(value.projects);
+  const legacy = value.project && typeof value.project === "object" && !Array.isArray(value.project);
+  if (!current && !legacy) throw new Error("本機資料缺少計畫結構");
+}
 async function load() {
   try {
     const db = await openDB();
     state = await new Promise((ok, no) => {
       const r = db.transaction(STORE).objectStore(STORE).get(KEY);
-      r.onsuccess = () => ok(r.result || emptyState());
+      r.onsuccess = () => ok(r.result === undefined ? emptyState() : r.result);
       r.onerror = () => no(r.error);
     });
+    assertLoadableState(state);
     if (state.project && !state.projects) {
       state.projects = state.project.code ? [state.project] : [];
       state.activeCode = state.project.code;
@@ -125,10 +133,74 @@ async function load() {
     state = { ...emptyState(), ...state };
     migrateLosRules();
     rebuild();
-  } catch {
+  } catch (error) {
+    /*
+     * ⚠️ 讀不出來時**絕對不可以**靜靜換成空白 state。
+     *
+     * 舊版就是 `state = emptyState()` 然後照常 renderAll()：畫面變成
+     * 「尚未建立計畫」，沒有 toast、沒有例外、沒有任何訊息。使用者以為資料
+     * 沒了，於是重建計畫或重新匯入——那個動作會呼叫 save()，把空白 state
+     * 寫回 IndexedDB，**原始資料這時候才真的消失**，而且救不回來。
+     *
+     * 實測（種入一筆會讓 rebuild() 丟例外的壞紀錄）：
+     *   重新載入後 → 計畫選單「尚未建立計畫」、toast 空白、無頁面錯誤
+     *   此時 DB 裡原始計畫其實還在
+     *   使用者按一次「儲存計畫設定」→ DB 只剩新計畫，原始計畫消失
+     *
+     * 路口轉向已經修過同一個缺陷（loadError ＋ 整頁搶救指引）。這裡比照：
+     * 鎖住存檔、換成搶救畫面，讓原始資料留在瀏覽器裡等使用者備份。
+     */
+    loadError = error?.message || String(error) || "未知錯誤";
     state = emptyState();
+    showLoadError();
+    return;
   }
   renderAll();
+}
+/** 讀取失敗時鎖住存檔——存檔會覆蓋掉還留在瀏覽器裡的原始資料。 */
+let loadError = "";
+function showLoadError() {
+  const shell = document.querySelector(".app") || document.body;
+  const panel = document.createElement("div");
+  panel.className = "load-error";
+  panel.innerHTML =
+    '<div class="load-error-card"><h1>無法讀取這台電腦上的資料</h1>' +
+    "<p>儲存在瀏覽器裡的資料有一部分格式不符，系統為了避免把它覆蓋掉，" +
+    "這次<b>沒有載入、也沒有寫入任何東西</b>。您的原始資料仍然完整保留在瀏覽器裡。</p>" +
+    '<p class="load-error-reason">錯誤訊息：' +
+    esc(loadError) +
+    "</p><p>請先按下面的按鈕把原始資料存成檔案（那是一份完整的備份），" +
+    "再把檔案提供給維護人員；確認之後可以用「備份與淨空」還原回來。</p>" +
+    '<p><b>在備份完成之前，請不要在這個畫面重新建立計畫或重新匯入</b>——' +
+    "那會把還留在瀏覽器裡的原始資料覆蓋掉。</p>" +
+    '<div class="load-error-actions"><button class="primary" id="rescueDownload">下載原始資料備份</button></div></div>';
+  shell.replaceChildren(panel);
+  const button = document.getElementById("rescueDownload");
+  if (button)
+    button.onclick = async () => {
+      try {
+        const db = await openDB();
+        const raw = await new Promise((ok, no) => {
+          const r = db.transaction(STORE).objectStore(STORE).get(KEY);
+          r.onsuccess = () => ok(r.result);
+          r.onerror = () => no(r.error);
+        });
+        const blob = new Blob([JSON.stringify(raw ?? null, null, 2)], {
+          type: "application/json",
+        });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `交通服務水準_原始資料備份_${new Date()
+          .toISOString()
+          .slice(0, 10)}.json`;
+        /* 連結一定要掛進頁面，否則部分瀏覽器會忽略指定的檔名 */
+        document.body.append(link);
+        link.click();
+        link.remove();
+      } catch (error) {
+        alert("備份下載失敗：" + (error?.message || error));
+      }
+    };
 }
 // 存檔失敗（無痕模式、容量已滿、磁碟已滿）若無聲無息，
 // 畫面看起來一切正常，實際上什麼都沒寫進去。這裡統一攔下來提醒使用者。
@@ -137,6 +209,8 @@ addEventListener("unhandledrejection", (event) => {
   toast(`儲存失敗，這次的變更沒有寫入：${message || "請確認瀏覽器儲存空間"}`);
 });
 async function save() {
+  /* 讀取失敗時一律不寫入——寫入就是把原始資料覆蓋掉的那一步。 */
+  if (loadError) return;
   const db = await openDB();
   await new Promise((ok, no) => {
     const r = db.transaction(STORE, "readwrite").objectStore(STORE).put(state, KEY);
@@ -303,7 +377,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.41";
+document.querySelector(".brand small").textContent = "正式版 v2.20.43";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -314,8 +388,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.41.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.41.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.43.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.43.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
