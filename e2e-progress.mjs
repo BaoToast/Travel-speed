@@ -184,6 +184,168 @@ ok(
   `結束時「${last.info}」`,
 );
 
+/*
+ * ── 連按兩次選檔再取消，提示也要收得掉 ──
+ *
+ * 這是 v2.20.39 自己引進的問題：舊版每次按下選檔都無條件記錄
+ * previousText，連按兩次時第二次會把提示字串本身記成「原本的文字」，
+ * 計時器回寫之後畫面就永久停在「正在讀取…」，退路已經被拆掉。
+ * 實測：連按兩次取消，等 3 秒仍在。
+ */
+{
+  const hintNow = () =>
+    page.evaluate(() => document.getElementById("fileInfo").textContent.trim());
+  await page.evaluate(() => {
+    document.getElementById("fileInfo").textContent = "尚未選取檔案";
+  });
+  const before = await hintNow();
+  /* 兩次「按下選檔」中間夾一次 focus，模擬第一次取消還沒判定就又按一次 */
+  await page.evaluate(() => document.getElementById("files").dispatchEvent(new Event("click")));
+  await page.waitForTimeout(150);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.getElementById("files").dispatchEvent(new Event("click")));
+  const during = await hintNow();
+  /* 第一輪 focus 排出的 1.2 秒計時器，不得在第二輪仍挑檔時誤觸。 */
+  await page.waitForTimeout(1400);
+  const duringSecondPicker = await hintNow();
+  ok(
+    "第一次取消的計時器不會誤判仍在進行的第二次選檔",
+    /正在讀取/.test(duringSecondPicker),
+    `第二次仍在選檔時「${duringSecondPicker}」`,
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForTimeout(2200);
+  const after = await hintNow();
+  ok(
+    "前置：連按兩次選檔時，提示確實有出現過",
+    /正在讀取/.test(during),
+    `第二次按下時「${during}」`,
+  );
+  ok(
+    "連按兩次選檔再取消，提示要收得掉（不可以永久卡住）",
+    !/正在讀取/.test(after) && after === before,
+    `原本「${before}」→ 最後「${after}」`,
+  );
+}
+
+/* ── 分頁在背景時（requestAnimationFrame 不觸發）匯入不可以卡住 ── */
+/*
+ * 為了讓「讀取中」確實被畫出來，第一次解析前改成等兩個動畫影格。
+ * 但分頁被切到背景時 requestAnimationFrame **完全不會觸發**——
+ * 少了時間退路，匯入就會永遠停在那裡。這一項就是釘住那條退路。
+ */
+{
+  await page.reload({ waitUntil: "networkidle" });
+  await page.evaluate(() => document.querySelector('[data-view="setup"]').click());
+  await page.fill("#projectCode", "NORAF");
+  await page.fill("#projectName", "背景分頁測試");
+  await page.click("#saveProject");
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('[data-view="import"]').click());
+  await page.fill("#rocYear", "115");
+  await page.selectOption("#quarter", { index: 0 });
+  /* 模擬背景分頁：rAF 註冊了但永遠不回呼 */
+  await page.evaluate(() => {
+    window.requestAnimationFrame = () => 0;
+  });
+  await page.setInputFiles("#files", batch.slice(0, 2));
+  await page.waitForTimeout(300);
+  await page.click("#preview");
+  const finished = await page.evaluate(async () => {
+    const started = performance.now();
+    while (performance.now() - started < 15000) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (!document.getElementById("preview").disabled) return Math.round(performance.now() - started);
+    }
+    return -1;
+  });
+  ok(
+    "rAF 不觸發時（分頁在背景）匯入仍然會完成，不會永遠卡住",
+    finished >= 0,
+    finished >= 0 ? `${finished}ms 內完成` : "15 秒內沒有完成——退路失效了",
+  );
+  const status = await page.evaluate(() =>
+    document.getElementById("previewStatus").textContent.trim(),
+  );
+  ok("而且真的讀出結果，不是空跑", /成功\s*2/.test(status), `狀態「${status}」`);
+}
+
+/* ── 選檔期間就要看得到提示，不是等到選完才出現 ── */
+/*
+ * 使用者回報「按下選擇檔案之後畫面什麼都沒有，等很久才跳出已選取 X 份」。
+ * 實測過：change 一送到畫面 0ms 就更新——那段等待完全在瀏覽器那一側，
+ * 我們的程式還沒被叫到。所以提示只能從「按下去」那一刻開始顯示。
+ *
+ * 這一項要驗三段，缺一段就會變成恆真：
+ *   ・按下去之後、還沒選檔前 → 看得到「正在讀取」
+ *   ・真的選了檔 → 換成「已選取 N 份」
+ *   ・按了取消（沒有 change） → 提示要自己收掉，不可以一直掛著
+ */
+{
+  await page.reload({ waitUntil: "networkidle" });
+  await page.evaluate(() => document.querySelector('[data-view="setup"]').click());
+  await page.fill("#projectCode", "PICK");
+  await page.fill("#projectName", "選檔提示測試");
+  await page.click("#saveProject");
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('[data-view="import"]').click());
+  await page.waitForTimeout(300);
+
+  const before = await page.evaluate(() =>
+    document.getElementById("fileInfo").textContent.trim(),
+  );
+  ok("前置：還沒按選擇檔案時，是「尚未選取檔案」", /尚未選取/.test(before), `「${before}」`);
+
+  /* 攔下瀏覽器的檔案對話框，模擬「已經按下去、還在挑檔案」的那一刻 */
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.click("label.drop");
+  const chooser = await chooserPromise;
+  await page.waitForTimeout(200);
+  const whilePicking = await page.evaluate(() =>
+    document.getElementById("fileInfo").textContent.trim(),
+  );
+  ok(
+    "按下選擇檔案之後，馬上看得到「正在讀取」的提示",
+    /正在讀取/.test(whilePicking),
+    `「${whilePicking}」`,
+  );
+
+  await chooser.setFiles(
+    batch.slice(0, 2).map((f) => ({ name: f.name, mimeType: f.mimeType, buffer: f.buffer })),
+  );
+  await page.waitForTimeout(600);
+  const afterPick = await page.evaluate(() =>
+    document.getElementById("fileInfo").textContent.trim(),
+  );
+  ok(
+    "真的選了檔之後，提示要換成「已選取 N 份」",
+    /已選取 2 份/.test(afterPick),
+    `「${afterPick}」`,
+  );
+
+  /* 取消：開了對話框卻不選檔，提示不可以一直掛著 */
+  const cancelChooser = page.waitForEvent("filechooser");
+  await page.click("label.drop");
+  await cancelChooser;
+  await page.waitForTimeout(200);
+  const whilePicking2 = await page.evaluate(() =>
+    document.getElementById("fileInfo").textContent.trim(),
+  );
+  ok("前置：再次按下去時提示有出現", /正在讀取/.test(whilePicking2), `「${whilePicking2}」`);
+  /* 模擬使用者關掉對話框：視窗重新取得焦點，但沒有 change */
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForTimeout(1800);
+  const afterCancel = await page.evaluate(() =>
+    document.getElementById("fileInfo").textContent.trim(),
+  );
+  ok(
+    "按了取消之後，「正在讀取」的提示要自己收掉",
+    !/正在讀取/.test(afterCancel),
+    `「${afterCancel}」`,
+  );
+}
+
 /* ── 判讀後的整理階段出錯，也不可以把畫面卡死 ── */
 /*
  * 迴圈裡每一份檔案都有自己的 try/catch，但迴圈**之後**的整理步驟
@@ -200,6 +362,41 @@ await page.waitForTimeout(400);
 await page.evaluate(() => document.querySelector('[data-view="import"]').click());
 await page.fill("#rocYear", "115");
 await page.selectOption("#quarter", { index: 0 });
+/*
+ * ⚠️ 這裡一定要**先跑一次成功的預覽**，再注入例外。
+ *
+ * 「取消匯入」在 HTML 裡的初始狀態就是 disabled，而它的啟用是在
+ * renderPreview() 裡依 pending.length 設定的。如果直接注入例外、
+ * 中間沒有成功預覽過，那顆按鈕從頭到尾都維持初始的 disabled ——
+ * 於是「出錯後要停用取消匯入」這個斷言會**恆真**，等於沒驗到。
+ *
+ * 實測過：只注入例外時 cancel disabled=true（假通過）；
+ * 先成功預覽一次再注入例外時 cancel disabled=false（抓得到）。
+ * 後者才是使用者真正的操作順序。
+ */
+await page.setInputFiles("#files", batch.slice(0, 2));
+await page.waitForTimeout(300);
+await page.click("#preview");
+await page.waitForTimeout(3000);
+const beforeCrash = await page.evaluate(() => ({
+  commitDisabled: document.getElementById("commit").disabled,
+  cancelDisabled: document.getElementById("cancelPreview").disabled,
+}));
+/*
+ * 前置只要求「取消匯入」是可按的——那才是這一輪要驗的那顆。
+ *
+ * 「確認寫入」在這裡本來就可能是停用的：本批都是新路段，還沒逐一確認，
+ * 而 renderPreview() 的條件是 `!pending.some(x => x.ok) || unchecked > 0`。
+ * 所以下面那項斷言裡「確認寫入=停用」這一半，在本情境下較弱；
+ * 它的有效性由突變測試保證——把 catch 裡的 clearPendingPreview() 拿掉，
+ * 「整理失敗後會清除未完成預覽」會確實紅字。
+ */
+ok(
+  "前置：先成功預覽一次，「取消匯入」要是可按的（否則下面的斷言會恆真）",
+  beforeCrash.cancelDisabled === false,
+  `取消=${beforeCrash.cancelDisabled ? "停用" : "可按"}；（確認寫入=${beforeCrash.commitDisabled ? "停用，本批為新路段待確認" : "可按"}）`,
+);
+
 await page.evaluate(() => {
   globalThis.PeriodDate.checkPeriodAgainstDate = () => {
     throw new Error("模擬：判讀後整理階段的非預期例外");

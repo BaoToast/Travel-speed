@@ -141,8 +141,29 @@
   const baseParseFile = parseFile;
   parseFile = async function (file, year, quarter, defSpeed) {
     const result = await baseParseFile(file, year, quarter, defSpeed);
+    /*
+     * 原型指紋要在 try **外面**取、也在外面比對。
+     *
+     * 放進 try 裡的話，assertNoPrototypePollution 丟出來的例外會被下面
+     * 那個 catch 當成「來源追溯抓取失敗」吞掉——資料照常寫入，
+     * 使用者只會看到溯源欄寫「本次讀取失敗」，完全看不出是安全中止。
+     * 中止匯入這件事必須傳得出去。
+     */
+    const fingerprint = prototypeFingerprint();
     try {
-      const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellFormula: false }),
+      /*
+       * ⚠️ 這是同一個檔案的**第二次**解析（為了抓來源儲存格位置）。
+       *
+       * 舊版在這裡自己寫了一組選項 { type, cellFormula }，少了
+       * cellHTML:false 與 bookVBA:false，而且解析後沒有比對原型——
+       * 等於 app.js 那一整套加固在這條路徑上完全不生效。
+       * 更糟的是守門測試 xlsx-hardening.test.mjs 只讀 app.js，
+       * 所以這個缺口一直是綠燈。實測：讓這一次解析污染 Object.prototype，
+       * 匯入照常完成、畫面顯示「新增 4，重複 0」，沒有任何警告。
+       *
+       * 現在改用同一組 SAFE_XLSX_READ_OPTIONS，並在解析後立刻比對原型。
+       */
+      const wb = XLSX.read(await file.arrayBuffer(), SAFE_XLSX_READ_OPTIONS),
         am = findSheetName(wb, ["上午尖峰", "上午", "AM尖峰", "AM"]),
         pm = findSheetName(wb, ["下午尖峰", "下午", "PM尖峰", "PM"]),
         hash = await digestFile(file),
@@ -170,6 +191,8 @@
         r.sourceTraceFailed = true;
       });
     }
+    /* 第二次解析也可能污染原型；這裡比對並在被污染時中止整批匯入。 */
+    assertNoPrototypePollution(fingerprint, file.name);
     return result;
   };
 
@@ -231,8 +254,58 @@
     q("representativePreview").innerHTML =
       `<h4>預計代表紀錄（尚未寫入）</h4><div class="table-wrap"><table><thead><tr><th>路段</th><th>日別</th><th>代表尖峰</th><th>方向</th><th>旅行速率</th><th>行駛速率</th><th>總延滯</th><th>LOS</th><th>來源工作表</th></tr></thead><tbody>${candidates}</tbody></table></div>`;
   }
+  /*
+   * 預覽顯示的速限與 LOS 必須是「實際會寫進去的那一組」。
+   *
+   * 問題：parseFile 是用**檔案裡那個路段名**去查速限算 LOS 的；使用者在預覽
+   * 選「合併至既有路段」（或別名自動相符）之後，真正生效的是**目標路段**的
+   * 速限——但那要等按下「確認寫入」時 remapPending 才換，而寫入後 rebuild
+   * 還會再依速限版本重算一次。於是預覽表與「預計代表紀錄」顯示的是一組數字，
+   * 寫進去的是另一組。
+   *
+   * 實測：目標路段速限 80、來源退回預設 50，同一批旅行速率
+   *   預覽 → 速限比 0.4220 → LOS D
+   *   寫入 → 速限比 0.2638 → LOS E
+   * 四筆全部差一級，代表紀錄的等級也跟著變。而手冊要使用者「寫入前務必核對」。
+   *
+   * 更麻煩的是合併會寫進別名，下一季同名檔案直接是「別名相符」、自動帶入，
+   * 使用者什麼都不用做就會再看到一次錯的預覽。
+   *
+   * 這裡在每次重畫預覽時，用**與 rebuild 相同的規則**（速限版本優先，
+   * 其次 state.limits，都沒有才沿用解析當下的值）重算，讓預覽等於結果。
+   * 不影響任何已寫入的資料：commit 之後仍然照原本的 remapPending → upsert
+   * → rebuild 流程走一次。
+   */
+  function previewWriteTarget(item) {
+    return item.roadChoice && item.roadChoice !== "__NEW__" ? item.roadChoice : item.road;
+  }
+  const parsedPreviewLimits = new WeakMap();
+  function syncPreviewLimits() {
+    if (!Array.isArray(pending)) return;
+    for (const item of pending) {
+      if (!item || !item.ok || !Array.isArray(item.rows)) continue;
+      const target = previewWriteTarget(item);
+      for (const row of item.rows) {
+        /* 記住解析當下的值，使用者改回「新路段」時才回得去 */
+        if (!parsedPreviewLimits.has(row)) parsedPreviewLimits.set(row, row.limit);
+        const version = speedFor({ ...row, road: target });
+        const base = Number(state.limits[`${row.projectCode}|${target}|${row.direction}`]);
+        row.limit = version
+          ? Number(version.speed)
+          : Number.isFinite(base) && base > 0
+            ? base
+            : parsedPreviewLimits.get(row);
+        row.limitSource = version ? version.source || "" : "";
+        row.limitVersionStart = version ? version.start : "";
+        row.ratio = row.travel == null || !row.limit ? null : row.travel / row.limit;
+        row.los = losOf(row.ratio);
+      }
+    }
+  }
+
   const baseRenderPreview = renderPreview;
   renderPreview = function () {
+    syncPreviewLimits();
     baseRenderPreview();
     previewDifferences();
   };

@@ -16,6 +16,22 @@ import { extractFunction } from "./parse-harness.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(join(here, "app.js"), "utf8");
 
+/*
+ * ⚠️ 這一支原本只讀 app.js。
+ *
+ * 但 quality-extension.js 為了抓來源儲存格位置，會對同一個檔案做**第二次**
+ * XLSX.read；舊版那一次用的是自己寫的一組較弱選項、而且解析後沒有比對原型。
+ * 因為守門測試看不到那個檔案，這個缺口一直是綠燈——實測讓第二次解析污染
+ * Object.prototype，匯入照常完成、畫面寫「新增 4，重複 0」，零警告。
+ *
+ * 所以改成掃描**所有會解析活頁簿的檔案**，逐一要求它們走同一組安全選項。
+ */
+const PARSING_FILES = ["app.js", "quality-extension.js", "excel-export.js"];
+const sources = PARSING_FILES.map((name) => [
+  name,
+  readFileSync(join(here, name), "utf8"),
+]);
+
 /** 把 SAFE_XLSX_READ_OPTIONS 那個常數宣告整段取出來。 */
 function extractConst(name) {
   const start = source.indexOf(`const ${name} = {`);
@@ -40,6 +56,30 @@ test("解析選項關掉了公式、內嵌 HTML 與 VBA", () => {
   assert.equal(sandbox.SAFE_XLSX_READ_OPTIONS.cellHTML, false);
   assert.equal(sandbox.SAFE_XLSX_READ_OPTIONS.bookVBA, false);
   assert.equal(sandbox.SAFE_XLSX_READ_OPTIONS.type, "array");
+});
+
+test("每一個會解析活頁簿的檔案都走同一組安全選項，而且解析後有比對原型", () => {
+  for (const [name, text] of sources) {
+    /*
+     * 用「整行」比對而不是括號內容：arrayBuffer() 自己就有一個右括號，
+     * 用 [^)]* 會在那裡就斷掉，變成永遠比不到選項名稱的假失敗。
+     */
+    const lines = text.split("\n");
+    const reads = lines.filter((line) => line.includes("XLSX.read("));
+    if (!reads.length) continue;
+    for (const line of reads) {
+      assert.match(
+        line,
+        /SAFE_XLSX_READ_OPTIONS/,
+        `${name} 的 XLSX.read 必須用 SAFE_XLSX_READ_OPTIONS，不能自己寫一組臨時選項：${line.trim()}`,
+      );
+    }
+    assert.match(
+      text,
+      /assertNoPrototypePollution\(/,
+      `${name} 解析完必須比對原型有沒有被污染`,
+    );
+  }
 });
 
 test("匯入真的走的是那一組安全解析選項", () => {

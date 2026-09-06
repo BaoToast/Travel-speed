@@ -303,7 +303,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.38";
+document.querySelector(".brand small").textContent = "正式版 v2.20.41";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -314,8 +314,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.38.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.38.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.41.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.41.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -582,6 +582,19 @@ function clearPendingPreview() {
   if (typeof roadAlert !== "undefined") roadAlert.style.display = "none";
   if (typeof roadBatchBar !== "undefined") roadBatchBar.style.display = "none";
   if ($("commit")) $("commit").disabled = true;
+  /*
+   * 「取消匯入」也要一起停用。
+   *
+   * 這一顆的啟用狀態是在 renderPreview() 裡依 pending.length 設定的，
+   * 但清理預覽的路徑不一定會走到 renderPreview()——判讀中途出錯時就不會。
+   * 於是會出現「pending 已經清空，取消匯入卻還亮著」的狀態：按下去
+   * 第一行就 `if (!pending.length) return;` 直接返回，使用者按了完全沒反應。
+   *
+   * 呼叫這個函式的六個地方（切換計畫、切換到別的計畫、刪除計畫、
+   * 全部清除、按下取消、判讀例外復原）都是「這份預覽不算數了」，
+   * 所以在這裡一起停用是安全的。
+   */
+  if ($("cancelPreview")) $("cancelPreview").disabled = true;
 }
 projectSwitch.onchange = async () => {
   state.activeCode = projectSwitch.value;
@@ -1612,6 +1625,68 @@ $("saveProject").onclick = async () => {
   go("import");
 };
 enableFileDrop(document.querySelector("label.drop"), $("files"));
+/*
+ * ② 選檔期間的提示。
+ *
+ * 使用者回報「按下選擇檔案之後畫面什麼都沒有，等很久才跳出已選取 X 份」。
+ * 實測過原因：change 一送到，畫面 **0ms** 就更新了——那段等待完全發生在
+ * 瀏覽器把檔案準備好之前，我們的程式那時候根本還沒被叫到，
+ * 所以沒辦法在「等待中」才開始顯示提示。
+ *
+ * 只能從「使用者按下去」的那一刻就先顯示，等 change 到了再讓原本的
+ * onchange 覆蓋成「已選取 X 份」。
+ *
+ * 取消選取時不會有 change，所以要靠視窗重新取得焦點當退路；
+ * 有選檔時 change 會很快到，這裡等 1.2 秒再判斷，避免把正常情況誤判成取消。
+ */
+(() => {
+  const input = $("files");
+  const info = $("fileInfo");
+  const HINT = "正在讀取您選擇的檔案，請稍候…";
+  let picking = false;
+  let previousText = "";
+  let cancelTimer = 0;
+  const stopPicking = () => {
+    window.clearTimeout(cancelTimer);
+    cancelTimer = 0;
+    if (!picking) return;
+    picking = false;
+    window.removeEventListener("focus", onWindowFocus);
+  };
+  const onWindowFocus = () => {
+    /*
+     * 只留一顆計時器。舊版每次 focus 都排一顆，連按兩次選檔時第一顆會在
+     * 第二次的空窗期中途觸發，把提示收掉又寫回舊字串。
+     */
+    window.clearTimeout(cancelTimer);
+    cancelTimer = window.setTimeout(() => {
+      if (!picking) return;
+      /* 等到焦點回來卻仍然沒有 change：使用者按了取消 */
+      stopPicking();
+      info.textContent = previousText || "尚未選取檔案";
+    }, 1200);
+  };
+  input.addEventListener("click", () => {
+    if (input.disabled) return;
+    /* 新一輪選檔開始時，先使上一輪取消所排的退路計時器失效。 */
+    window.clearTimeout(cancelTimer);
+    cancelTimer = 0;
+    /*
+     * ⚠️ previousText 只在「還沒進入選檔狀態」時記錄。
+     *
+     * 舊版無條件記錄，於是連按兩次選檔時，第二次會把提示字串本身記成
+     * 「原本的文字」；等計時器回寫，畫面就永久停在「正在讀取…」，
+     * 而退路已經被拆掉，再也收不掉。實測：連按兩次取消之後，
+     * 提示留在畫面上，等 3 秒也不會消失。
+     */
+    if (!picking) previousText = info.textContent;
+    picking = true;
+    info.textContent = HINT;
+    window.removeEventListener("focus", onWindowFocus);
+    window.addEventListener("focus", onWindowFocus);
+  });
+  input.addEventListener("change", stopPicking);
+})();
 $("files").onchange = () => {
   $("fileInfo").textContent = $("files").files.length
     ? `已選取 ${$("files").files.length} 份檔案`
@@ -1691,8 +1766,38 @@ $("preview").onclick = async () => {
    * 主執行緒，少了這一步進度就會整批卡到最後才跳完。
    */
   const breathe = () => new Promise((done) => setTimeout(done, 0));
+  /*
+   * ① 第一次解析之前，要**確定畫面已經重繪過**。
+   *
+   * setTimeout(0) 只是讓出一個巨集任務，不保證瀏覽器有機會畫。
+   * 實測：6 份大檔時，狀態欄停在「讀取中… 已完成 0／6 份」，
+   * 中間每 20ms 的心跳整段只跳了 1 次——單一檔案解析的過程主執行緒
+   * 完全被佔住，畫面零重繪。使用者因此看不到提示，
+   * 連作業系統的檔案對話框關閉後的殘影都留在畫面上。
+   *
+   * 這裡改用「等兩個動畫影格再走」，那時候畫面確定已經更新過。
+   * ⚠️ 分頁在背景時 requestAnimationFrame 不會觸發，所以一定要有時間退路，
+   *    否則匯入會永遠停住。
+   */
+  const paint = () =>
+    new Promise((done) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        done();
+      };
+      const fallback = setTimeout(finish, 250);
+      if (typeof requestAnimationFrame === "function")
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            clearTimeout(fallback);
+            finish();
+          }),
+        );
+    });
   showProgress(0);
-  await breathe();
+  await paint();
   pending = [];
   roadPicks = new Set();
   let done = 0;
@@ -2823,7 +2928,17 @@ function renderLimits() {
           const versions = (state.speedVersions?.[k] || []).filter(Boolean);
           const versionNote = versions.length
             ? `<div class="limit-version-note">此路段方向設有 ${versions.length} 個速限版本，實際換算 LOS 時以版本速限為準（${versions
-                .map((v) => `${esc(String(v.from || "起始"))}起 ${esc(String(v.limit))} km/h`)
+                /*
+                 * 欄位名稱要與速限版本實際存的一致：{ speed, start, end, … }。
+                 * 舊版寫 v.from 與 v.limit，兩個都不存在，於是整段印成
+                 * 「起始起 undefined km/h」——這一段的用意就是「列出實際生效的
+                 * 速限」，印出 undefined 等於這個說明完全沒有作用。
+                 * 同一支檔案別處（showQuarter(v.start)、v.speed）本來就是對的。
+                 */
+                .map(
+                  (v) =>
+                    `${esc(showQuarter(v.start) || "起始")}起 ${esc(String(v.speed ?? "未填"))} km/h`,
+                )
                 .join("、")}）；下方欄位是未被版本涵蓋的季度所使用的基準速限。</div>`
             : "";
           return `<tr><td>${esc(road)}</td><td>${esc(directionNameFor(road, direction))}</td><td><input class="speed-input" data-limit="${esc(k)}" type="number" min="1" value="${state.limits[k] || 50}">${versionNote}</td><td>${state.limitConfirmed[k] ? '<span class="status-ok">已人工確認</span>' : '<span class="status-warn">預設值，未確認</span>'}</td></tr>`;
