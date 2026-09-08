@@ -254,3 +254,38 @@ test("交付的原始碼裡沒有 CRLF", async () => {
   }
   assert.deepEqual(offenders, [], "以下檔案含 CRLF：" + offenders.join("、"));
 });
+
+/*
+ * 文件不可以宣稱一個本系統沒有的功能。
+ *
+ * v2.20.41～v2.20.43 的 README 與驗證報告都寫著「『混合時間格』仍只顯示警告」。
+ * 那是全日交通量與路口轉向才有的檢查——它們讀逐時距計數，必須判斷「一格幾分鐘」；
+ * 交通服務水準讀的是報告裡已經算好的尖峰旅行速率與延滯，沒有時間格長度的概念。
+ * 整份程式搜過，沒有任何地方產生這個提醒（健康檢查共八類，不含此項）。
+ *
+ * 這一項守的是：不可以再把那句話寫回文件，除非程式真的實作了它。
+ * 判準寫成「程式沒有 → 文件也不可以有」，所以將來真的做出這個功能時，
+ * 這一項會自己放行，不會擋住。
+ */
+test("文件不可以宣稱本系統有「混合時間格」提醒（程式沒有做這件事）", async () => {
+  const code = (
+    await Promise.all(
+      ["app.js", "quality-extension.js", "conclusion.js", "excel-export.js", "column-filter.js"].map(
+        (name) => readFile(new URL(name, root), "utf8"),
+      ),
+    )
+  ).join("\n");
+  const implemented = /混合時間格|混用了不同長度的時間格/.test(code);
+  if (implemented) return; /* 真的做出來了就不必再擋 */
+  for (const name of ["README.md", "【更新說明】請先讀我.txt"]) {
+    const text = await readFile(new URL(name, root), "utf8").catch(() => "");
+    const claims = text
+      .split("\n")
+      .filter((line) => /混合時間格/.test(line) && !/補正|並沒有|並無|不存在|已刪除/.test(line));
+    assert.deepEqual(
+      claims,
+      [],
+      `${name} 宣稱有「混合時間格」提醒，但程式沒有實作`,
+    );
+  }
+});

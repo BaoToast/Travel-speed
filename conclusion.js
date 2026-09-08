@@ -103,9 +103,16 @@
     });
   }
 
-  function pct(value) {
+  /*
+   * 百分比一律要把「小數位數」帶進來。
+   *
+   * 舊版寫死 toFixed(1)，於是使用者把小數位數改成 2 位時百分比完全不動
+   * （三支系統都是同一個毛病）。digits 是必填參數；呼叫端漏傳時，
+   * buildConclusion 會先把整份條件安全還原為 1 位，避免無聲變成 0 位。
+   */
+  function pct(value, digits) {
     if (!isNum(value)) return "—";
-    return Number(value).toFixed(1) + "%";
+    return Number(value).toFixed(digits) + "%";
   }
 
   function inScope(row, scope) {
@@ -246,7 +253,7 @@
         "速限 " +
           num(row.limit, 0) +
           " km/h、速限比 " +
-          (isNum(row.ratio) ? pct(Number(row.ratio) * 100) : "—"),
+          (isNum(row.ratio) ? pct(Number(row.ratio) * 100, digits) : "—"),
       );
     /*
      * 只勾「方向文字」時 parts 是空的。舊寫法直接回空陣列，等於這個選項
@@ -321,8 +328,7 @@
       "，" +
       (change >= 0 ? "增加" : "下降") +
       " " +
-      Math.abs(change).toFixed(1) +
-      "%"
+      pct(Math.abs(change), digits)
     );
   }
 
@@ -390,7 +396,7 @@
     ];
   }
 
-  function describeLosCount(rows) {
+  function describeLosCount(rows, digits) {
     var counts = {};
     var unknown = 0;
     for (var i = 0; i < rows.length; i += 1) {
@@ -401,7 +407,7 @@
     var parts = LOS_ORDER.filter(function (los) {
       return counts[los];
     }).map(function (los) {
-      return los + " 級 " + counts[los] + " 筆（" + pct((counts[los] / rows.length) * 100) + "）";
+      return los + " 級 " + counts[los] + " 筆（" + pct((counts[los] / rows.length) * 100, digits) + "）";
     });
     if (unknown) parts.push("無法判定 " + unknown + " 筆");
     return parts.length
@@ -411,6 +417,16 @@
 
   function buildConclusion(details, condition, meta) {
     var c = Object.assign({}, DEFAULT_CONDITION, condition || {});
+    /* 舊範本可能沒有 digits；匯入內容也可能超出畫面允許的 0～2。 */
+    var parsedDigits = Number(c.digits);
+    c.digits =
+      c.digits !== null &&
+      c.digits !== "" &&
+      Number.isInteger(parsedDigits) &&
+      parsedDigits >= 0 &&
+      parsedDigits <= 2
+        ? parsedDigits
+        : DEFAULT_CONDITION.digits;
     var m = meta || {};
     periodText =
       typeof m.showPeriod === "function"
@@ -522,7 +538,7 @@
        * 「多勾一個選項反而少寫六行」——那七個全都成了死選項。
        * 兩者互不衝突，應該各寫各的。
        */
-      if (wants("losCount")) Array.prototype.push.apply(out, describeLosCount(rows));
+      if (wants("losCount")) Array.prototype.push.apply(out, describeLosCount(rows, c.digits));
       var first = rows[0];
       var rowLines = describeRow(first, c);
       if (rowLines.length) {
@@ -541,7 +557,7 @@
 
     if (wants("losCount") && c.grouping !== "overall") {
       heading("服務水準等級統計");
-      Array.prototype.push.apply(out, describeLosCount(rows));
+      Array.prototype.push.apply(out, describeLosCount(rows, c.digits));
     }
     if (wants("worst") && c.grouping !== "byPeriod") {
       heading("服務水準最差的路段");

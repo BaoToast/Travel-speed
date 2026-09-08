@@ -51,6 +51,22 @@ const ok = (label, condition, detail = "") => {
 
 const browser = await chromium.launch(launchOptions());
 const page = await (await browser.newContext()).newPage();
+/*
+ * 搶救畫面出現時，底下不可以有東西默默壞掉。
+ *
+ * showLoadError() 會把整個 .app 換掉，但 index.html 在 app.js 之後還載入
+ * conclusion.js 與 quality-extension.js，那兩支在頂層就會去找主畫面裡的
+ * 節點（例如 `q("roadAlert").after(importPanel)`）。換得太早就會丟
+ * 「Cannot read properties of null (reading 'after')」。
+ *
+ * ⚠️ 誠實標註：**這一項在 v2.20.43 就是綠的**，因為這一支走的是「資料壞掉」
+ *    那條路——它要先 reload、再等 IndexedDB 非同步讀完，那時候所有腳本
+ *    早就跑完了。真正會踩到的是「儲存空間被封鎖」那條路（openDB 同步丟例外，
+ *    catch 立刻執行），實測未修正版紅字，見 e2e-storage-blocked.mjs。
+ *    這裡留著是**不許改壞的鎖**，不是問題重現。
+ */
+const pageErrors = [];
+page.on("pageerror", (e) => pageErrors.push(String(e.message)));
 page.on("dialog", (d) => d.accept());
 await page.goto(base, { waitUntil: "networkidle" });
 await page.waitForTimeout(800);
@@ -149,6 +165,11 @@ ok(
 ok(
   "搶救畫面要提供「下載原始資料備份」",
   await page.evaluate(() => Boolean(document.getElementById("rescueDownload"))),
+);
+ok(
+  "顯示搶救畫面的過程中不可以有未捕捉的例外",
+  pageErrors.length === 0,
+  pageErrors.slice(0, 2).join(" | ") || "沒有例外",
 );
 
 const [download] = await Promise.all([

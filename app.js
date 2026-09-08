@@ -63,12 +63,54 @@ const num = (v) => {
   },
   fmt = (v, d = 2) => (v == null ? "—" : Number(v).toFixed(d).replace(/\.00$/, ""));
 const activeProject = () => state.projects.find((p) => p.code === state.activeCode) || null;
+/*
+ * 「儲存空間被瀏覽器封鎖」與「資料讀不出來」是兩件完全不同的事，搶救畫面
+ * 要講的話正好相反：後者原始資料還在、該先備份；前者根本沒有資料可備份，
+ * 該做的是去改瀏覽器設定，而且按下「下載原始資料備份」只會再失敗一次。
+ *
+ * 實測（把 window.indexedDB 改成存取即拋錯，也就是瀏覽器設定成
+ * 「封鎖所有 Cookie／網站資料」時的實際行為）：舊版顯示的是
+ *   「儲存在瀏覽器裡的資料有一部分格式不符…您的原始資料仍然完整保留在
+ *     瀏覽器裡。」
+ * 兩句話都不成立，而且按下下載鈕會跳「備份下載失敗：IndexedDB 已被停用」。
+ * 使用者完全不知道真正的原因，也不知道怎麼解。
+ *
+ * 這個旗標讓 showLoadError() 挑對的那一套說法。
+ */
+let storageBlocked = false;
+function isStorageBlockedError(error) {
+  const name = error?.name || "";
+  return name === "SecurityError" || name === "NotAllowedError" || name === "InvalidStateError";
+}
 function openDB() {
   return new Promise((ok, no) => {
-    const r = indexedDB.open(DB, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+    storageBlocked = false;
+    let factory;
+    let r;
+    try {
+      /* 存取 indexedDB 這個屬性本身就可能丟 SecurityError，要包起來 */
+      factory = globalThis.indexedDB;
+      if (!factory || typeof factory.open !== "function") {
+        storageBlocked = true;
+        no(new Error("IndexedDB 無法使用"));
+        return;
+      }
+      /* 沿用現有版本；固定指定 1 會把較高版本資料庫誤判成 VersionError。 */
+      r = factory.open(DB);
+    } catch (error) {
+      storageBlocked = isStorageBlockedError(error) || error instanceof TypeError;
+      no(error);
+      return;
+    }
+    r.onupgradeneeded = () => {
+      if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE);
+    };
     r.onsuccess = () => ok(r.result);
-    r.onerror = () => no(r.error);
+    r.onerror = () => {
+      /* 只把明確的權限／狀態錯誤判成封鎖；其他錯誤仍保留資料搶救流程。 */
+      storageBlocked = isStorageBlockedError(r.error);
+      no(r.error);
+    };
   });
 }
 function isLegacyLosRule(x) {
@@ -159,10 +201,47 @@ async function load() {
 }
 /** 讀取失敗時鎖住存檔——存檔會覆蓋掉還留在瀏覽器裡的原始資料。 */
 let loadError = "";
+/*
+ * 搶救畫面會把整個 .app 換掉，但 index.html 在 app.js 之後還載入了
+ * conclusion.js 與 quality-extension.js，那兩支在頂層就會去找主畫面裡的
+ * 節點（例如 quality-extension.js 的 `q("roadAlert").after(importPanel)`）。
+ * 換得太早，它們拿到 null 就丟例外——實測舊版在搶救畫面出現時
+ * 主控台就有一則未捕捉的「Cannot read properties of null (reading 'after')」。
+ * 那是「畫面已經在講救援步驟、底下卻有東西壞掉」，本身也是要修的。
+ *
+ * 解法是等頁面所有腳本都跑完再換：readyState 還在 loading 就掛一次
+ * DOMContentLoaded，否則直接換。
+ */
 function showLoadError() {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", showLoadError, { once: true });
+    return;
+  }
   const shell = document.querySelector(".app") || document.body;
   const panel = document.createElement("div");
   panel.className = "load-error";
+  if (storageBlocked) {
+    /* 儲存空間根本用不了：沒有資料可備份，不要給一個必定失敗的下載鈕。 */
+    panel.innerHTML =
+      '<div class="load-error-card"><h1>瀏覽器不允許這個網站儲存資料</h1>' +
+      "<p>這個系統把資料存在您自己的瀏覽器裡，目前瀏覽器擋住了這項功能，" +
+      "所以<b>資料讀不出來、也存不進去</b>。這不是資料損壞——" +
+      "這台電腦上目前沒有本系統的資料。</p>" +
+      '<p class="load-error-reason">錯誤訊息：' +
+      esc(loadError) +
+      "</p><p>常見原因與處理方式：</p><ul class=\"load-error-list\">" +
+      "<li>瀏覽器設定成「封鎖所有 Cookie／網站資料」——請對本網站開放。</li>" +
+      "<li>使用了會阻擋本機儲存的無痕或隱私模式——請改用一般視窗。</li>" +
+      "<li>擴充套件（隱私或廣告阻擋類）擋下了本網站——請將本站加入例外。</li></ul>" +
+      '<div class="load-error-actions">' +
+      '<button class="primary" id="rescueReload">調整設定後，重新載入</button></div>' +
+      '<p class="load-error-note">在這個狀態下請不要匯入資料——' +
+      "畫面上看起來會成功，但關掉分頁就會全部消失。</p></div>";
+    shell.replaceChildren(panel);
+    const reload = document.getElementById("rescueReload");
+    if (reload) reload.onclick = () => location.reload();
+    return;
+  }
   panel.innerHTML =
     '<div class="load-error-card"><h1>無法讀取這台電腦上的資料</h1>' +
     "<p>儲存在瀏覽器裡的資料有一部分格式不符，系統為了避免把它覆蓋掉，" +
@@ -377,7 +456,7 @@ function go(id) {
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.43";
+document.querySelector(".brand small").textContent = "正式版 v2.20.46";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -388,8 +467,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.43.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.43.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.46.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.46.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
