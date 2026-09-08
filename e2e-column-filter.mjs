@@ -277,6 +277,11 @@ await page.evaluate(async () => {
   await save();
   renderAll();
   go("manager");
+  /*
+   * v2.20.47 起明細表預設收合；表頭漏斗在裡面，要先展開才量得到。
+   */
+  const details = document.querySelector("details.manager-data");
+  if (details) details.open = true;
 });
 await page.waitForTimeout(600);
 ok(

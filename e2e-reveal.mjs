@@ -80,6 +80,15 @@ await page.evaluate(async () => {
 const results = [];
 async function probe(view, label, button, result, prep) {
   await page.evaluate((v) => go(v), view);
+  /*
+   * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求）。
+   * 收著的時候裡面的按鈕不算可見，probe 會誤判成「按鈕不存在」而略過——
+   * 那是假通過。切到 Manager 一律先展開。
+   */
+  await page.evaluate(() => {
+    const details = document.querySelector("details.manager-data");
+    if (details) details.open = true;
+  });
   await page.waitForTimeout(400);
   if (prep) await prep();
   await page.evaluate(() => window.scrollTo(0, 0));

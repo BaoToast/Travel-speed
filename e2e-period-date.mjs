@@ -380,6 +380,16 @@ ok(
 await page.fill("#detailSearch", "");
 
 await page.evaluate(() => document.querySelector('[data-view="manager"]')?.click());
+/*
+ * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
+ * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
+ * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
+ */
+await page.evaluate(() => {
+  const details = document.querySelector("details.manager-data");
+  if (details) details.open = true;
+});
+
 await page.selectOption("#managerProjectFilter", "E2E-PD");
 await page.waitForTimeout(500);
 const managerPeriodText = async () =>
@@ -435,6 +445,16 @@ await page.evaluate(async () => {
 await page.reload();
 await page.waitForTimeout(900);
 await page.evaluate(() => document.querySelector('[data-view="manager"]')?.click());
+/*
+ * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
+ * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
+ * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
+ */
+await page.evaluate(() => {
+  const details = document.querySelector("details.manager-data");
+  if (details) details.open = true;
+});
+
 ok(
   "只有調查日期變更時也會提示 Manager 專案包已過期",
   await page.evaluate(() => {

@@ -80,3 +80,40 @@ test("舊版專案包沒有條件範本時，不可以把這台電腦既有的�
     "還原條件範本前必須先確認備份裡真的有這個欄位",
   );
 });
+
+/*
+ * 三段分法（順暢／尚可／壅塞）也必須跟著備份走。
+ *
+ * 它是使用者自己調的，而且會直接改變圖上的分段與趨勢圖指標的名稱
+ *（分界設 E 就叫「E 級以下路段佔比」）。換一台電腦匯入之後不見的話，
+ * 同一份資料會畫出不一樣的圖、指標名稱也不一樣，而畫面不會有任何提示。
+ *
+ * 這一項單獨寫，不放進 MUST_TRAVEL：單一計畫的專案包用單數 bandRule
+ *（就這一個計畫的設定），個人全部計畫包用複數 bandRules（整包字典），
+ * 兩邊的鍵值本來就不同名，硬塞進同一份清單會比對不到。
+ * losRule／losRules 也是同樣的情形。
+ */
+test("三段分法要跟著兩種備份走", () => {
+  const single = block("function projectPackage()", "function downloadProjectPackage");
+  assert.ok(
+    /\bbandRule\b/.test(single),
+    "projectPackage() 沒有收 bandRule——換電腦之後三段分法會回到預設，圖會變樣",
+  );
+  const portfolio = block('kind: "TLM_PORTFOLIO_PACKAGE"', "交通服務水準_個人全部計畫包.json");
+  assert.ok(
+    /\bbandRules\b/.test(portfolio),
+    "個人全部計畫包沒有收 bandRules",
+  );
+});
+
+test("匯入專案包時要把三段分法還原回來；舊包沒有時要回到預設而不是沿用別的計畫", () => {
+  const restore = block('x.kind === "TLM_PROJECT_PACKAGE"', "TLM_PORTFOLIO_PACKAGE");
+  assert.ok(
+    /state\.bandRules\[x\.project\.code\] = x\.bandRule/.test(restore),
+    "匯入時沒有把 bandRule 寫回 state.bandRules",
+  );
+  assert.ok(
+    /delete state\.bandRules\[x\.project\.code\]/.test(restore),
+    "舊版專案包沒有 bandRule 時要刪掉，回到預設值；沿用舊值會讓兩個計畫的分法混在一起",
+  );
+});

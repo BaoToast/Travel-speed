@@ -26,7 +26,17 @@ const ok = (label, condition, detail = "") => {
   if (!condition) problems.push(label + (detail ? ` — ${detail}` : ""));
 };
 
-const scripts = ["app.js", "quality-extension.js", "excel-export.js", "conclusion.js"];
+const scripts = [
+  "app.js",
+  "quality-extension.js",
+  "excel-export.js",
+  "conclusion.js",
+  /* 新加的模組也要納入，否則「只有一個檔案寫版本字樣」這條會漏掉它們。 */
+  "trend.js",
+  "trend-excel.js",
+  "column-filter.js",
+  "period-date.js",
+];
 const html = read("index.html");
 
 // 1) 只能有一個地方寫入 .brand small

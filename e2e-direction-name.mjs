@@ -306,6 +306,16 @@ await page.evaluate((json) => {
   window.__dirTestPackage = json;
 }, packageJson);
 await page.evaluate(() => document.querySelector('nav [data-view="manager"]').click());
+/*
+ * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
+ * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
+ * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
+ */
+await page.evaluate(() => {
+  const details = document.querySelector("details.manager-data");
+  if (details) details.open = true;
+});
+
 await page.waitForTimeout(500);
 await page.setInputFiles("#managerFiles", {
   name: "project.json",
@@ -324,6 +334,16 @@ await page.evaluate((name) => {
   }
 }, NAME_1);
 await page.evaluate(() => document.querySelector('nav [data-view="manager"]').click());
+/*
+ * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
+ * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
+ * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
+ */
+await page.evaluate(() => {
+  const details = document.querySelector("details.manager-data");
+  if (details) details.open = true;
+});
+
 await page.waitForTimeout(800);
 const managerText = await page.innerText("#managerRows");
 ok("Manager 比較顯示專案包裡的方向名稱", managerText.includes(NAME_1) || managerText.includes(NAME_2),

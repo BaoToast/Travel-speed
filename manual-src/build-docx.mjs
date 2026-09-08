@@ -428,7 +428,7 @@ for (const block of blocks) {
 }
 
 const doc = new Document({
-  creator: "全日交通量及車種組成",
+  creator: "交通服務水準分析系統",
   title: `交通服務水準分析系統 新手使用手冊 v${release.version}`,
   description: "適合完全沒有交通背景的新手，從匯入、檢查、分析到報表輸出與備份。",
   styles: {
@@ -465,7 +465,7 @@ const doc = new Document({
               spacing: { after: 0 },
               children: [
                 new TextRun({
-                  text: "全日交通量及車種組成 ｜ 新手使用說明手冊",
+                  text: "交通服務水準分析系統 ｜ 新手使用手冊",
                   font: FONT,
                   size: 15,
                   color: MUTED,

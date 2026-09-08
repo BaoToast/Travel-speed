@@ -574,3 +574,76 @@ th.has-col-filter {
   font-size: 12.5px;
   color: #8d3f2c;
 }
+
+/*
+ * 三段分法（順暢／尚可／壅塞）的設定區。
+ * 刻意做成 LOS 門檻底下的一個附屬區塊而不是獨立面板——它是「怎麼把 A～F
+ * 收成三段」，離不開上面那組門檻，兩者放在一起使用者才不會分開設定後對不上。
+ */
+.band-rule{margin-top:20px;padding-top:18px;border-top:1px dashed #cddae2}
+.band-rule-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.band-rule-head h4{margin:0;font-size:15px;color:#173b59}
+.band-rule-head p{margin:6px 0 0;max-width:620px;color:#65798a;line-height:1.65}
+.band-rule-grid{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0 14px}
+.band-rule-grid label{display:flex;gap:8px;align-items:center;padding:9px 13px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc;font-size:13px;color:#24465d}
+.band-rule-grid select{padding:6px 8px;border:1px solid #bdccd5;border-radius:6px;background:#fff;font:inherit}
+.band-rule-mid{font-size:12px;color:#718493}
+@media(max-width:850px){.band-rule-grid{align-items:stretch;flex-direction:column}.band-rule-grid label{justify-content:space-between}}
+
+/*
+ * 歷季趨勢圖（可勾選指標）。
+ * 勾一個＝一張大圖；勾多個＝小倍數圖，橫軸對齊方便比較。
+ * 版面靠 .trend-small 這個類切換，不做另一套 DOM。
+ */
+.trend-panel{margin-bottom:18px}
+.trend-panel .panel-head{align-items:flex-start;gap:16px;flex-wrap:wrap}
+.trend-panel .panel-head p{margin:7px 0 0;max-width:640px;color:#65798a;line-height:1.65}
+.trend-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:stretch}
+.trend-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.3}
+.trend-actions button small{font-size:10px;opacity:.85;font-weight:400}
+.trend-controls{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin:18px 0 14px}
+.trend-controls>label{display:flex;gap:8px;align-items:center;padding:9px 13px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc;font-size:13px;color:#24465d}
+.trend-controls select{padding:6px 8px;border:1px solid #bdccd5;border-radius:6px;background:#fff;font:inherit}
+.trend-metrics{flex:1 1 340px;min-width:0;margin:0;padding:10px 13px 12px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc}
+.trend-metrics legend{padding:0 6px;font-size:12px;color:#65798a}
+.trend-metrics>div{display:flex;gap:8px 16px;flex-wrap:wrap}
+.trend-metrics label{display:flex;gap:6px;align-items:center;font-size:13px;color:#24465d}
+.trend-charts{display:grid;gap:14px}
+.trend-charts.trend-small{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.trend-figure{margin:0;padding:12px 14px 14px;border:1px solid #dce5ea;border-radius:10px;background:#fff}
+.trend-figure figcaption{margin-bottom:6px;font-size:13px;font-weight:700;color:#173b59}
+.trend-figure svg{display:block;width:100%;height:auto}
+.trend-mini-note{margin:8px 0 0;font-size:11.5px;line-height:1.6;color:#65798a}
+/*
+ * ⚠️ 圖表本身的外觀（格線、軸、刻度字、折線、資料點、軸名稱）**不在這裡**。
+ *
+ * 原因是 PNG 匯出：downloadSvgAsPng 會把 SVG 序列化成
+ * data:image/svg+xml 再畫進 canvas，而那份 data URL 是**獨立文件**，
+ * 完全讀不到這個外部樣式表。規則寫在這裡的話，畫面上好好的圖，
+ * 下載下來會變成「沒有折線、沒有格線、黑色大圓點、襯線字」——
+ * 折線是 .trend-line 的 stroke 畫的，樣式一掉，polyline 預設
+ * stroke:none／fill:#000，整條線直接消失。實測過，那張圖不能用。
+ *
+ * 所以規則一律放在 app.js 的 CHART_SVG_STYLE，由圖表自己帶著走
+ * （每張 SVG 內嵌一份 <style>），畫面與 PNG 讀的是同一份，不可能分岔。
+ * 這裡只留「滑鼠互動」——那是畫面才有的事，PNG 不需要。
+ */
+.trend-dot:hover{r:7}
+.trend-script{margin-top:16px;display:grid;gap:12px}
+.trend-script-item{padding:13px 15px;border-left:3px solid #0f6f68;border-radius:0 9px 9px 0;background:#f1f7f7}
+.trend-script-item h4{margin:0 0 6px;font-size:14px;color:#173b59}
+.trend-script-item p{margin:0 0 6px;font-size:13px;line-height:1.75;color:#33566d}
+.trend-script-item ul{margin:0;padding-left:1.2em}
+.trend-script-item li{font-size:12.5px;line-height:1.7;color:#5b7183}
+.trend-caveat{margin-bottom:2px !important;color:#7a4b12 !important}
+@media(max-width:850px){.trend-controls{flex-direction:column;align-items:stretch}.trend-actions{width:100%}.trend-actions button{flex:1 1 auto}}
+/* 三段分法預設收合：這是少用的設定，展開會把下面的彙總表推出畫面外。 */
+.band-rule>summary{cursor:pointer;font-size:14px;font-weight:700;color:#173b59;padding:6px 0}
+.band-rule>summary b{font-weight:600;color:#0f6f68}
+
+/* Manager：跨計畫趨勢圖與收合的明細表 */
+.manager-trend{margin-bottom:18px}
+.manager-data>summary{cursor:pointer;padding:14px 16px;font-size:14px;font-weight:700;color:#173b59;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.manager-data>summary b{color:#0f6f68}
+.manager-data>summary small{font-weight:400;font-size:11.5px;color:#8296a4}
+/* .trend-series-label 的外觀同樣在 CHART_SVG_STYLE，理由見上方註解。 */
