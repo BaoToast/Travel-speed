@@ -122,7 +122,13 @@ README 與驗證報告從 v2.20.41 起都寫著「『混合時間格』仍只顯
 
 ## 發布證據
 
-本節在 GitHub Pages 發布後補入正式 commit、GitHub Actions 與公開網址核對結果。
+- 程式發布 commit：`46e670249cd908a594baf2a8cbcd1c173c086fdf`。
+- GitHub Actions「建置與測試」第 27 次：成功。
+- GitHub Pages「pages build and deployment」第 92 次：成功。
+- 公開網址 `https://baotoast.github.io/Travel-speed/` 已顯示 v2.20.46。
+- 公開的 `index.html`、`app.js`、`conclusion.js`、`styles.css`、本報告、PDF 及 Word 手冊
+  均與發布來源的 SHA-256 完全相同。
+- v2.20.43 舊驗證報告與兩份舊手冊均回傳 404；`.openai/hosting.json` 亦為 404。
 
 ---
 
