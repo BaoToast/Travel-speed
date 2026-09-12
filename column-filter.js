@@ -244,6 +244,17 @@
       filter,
       mount,
       anyActive: () => config.columns.some((c) => picked.get(c.name).size > 0),
+      /**
+       * 圖表下鑽等程式化操作用：直接指定某欄要保留的儲存值。
+       * 不在這裡觸發 onChange，讓呼叫端可一次設定多欄後只重畫一次。
+       */
+      set(name, values) {
+        const chosen = picked.get(name);
+        if (!chosen) return false;
+        chosen.clear();
+        for (const value of values || []) chosen.add(value);
+        return true;
+      },
       clearAll() {
         picked.forEach((set) => set.clear());
         closePanel();

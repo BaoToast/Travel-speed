@@ -133,7 +133,13 @@ await probe("roadadmin", "顯示合併影響", "#previewMerge", "#roadImpact", a
 /* 其他「結果顯示在別處」的按鈕 */
 await probe("maintenance", "執行健康檢查", "#runHealth", ".health-panel");
 await probe("summary", "重建彙總", "#rebuild", "#summaryRows");
-await probe("summary", "套用 LOS 門檻", "#applyLosRules", "#losRuleExplanation");
+/*
+ * 服務水準門檻與三段分法在 v2.20.53 搬到獨立的「判定標準」頁
+ *（原本夾在尖峰彙總那張大表格中間，使用者找不到）。
+ * 這裡跟著改成 standards——**不是放寬條件，是換一頁驗同一件事**。
+ */
+await probe("standards", "套用 LOS 門檻", "#applyLosRules", "#losRuleExplanation");
+await probe("standards", "套用三段分法", "#applyBandRule", "#bandRuleExplanation");
 await probe("conclusion", "產生草稿", "#conclusionRegenerate", "#conclusionDraft");
 await probe("speed", "套用並重算 LOS", "#applySpeed", "#speedRows");
 await probe("manager", "重設篩選", "#resetManagerFilters", "#managerRows");

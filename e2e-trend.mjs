@@ -138,11 +138,41 @@ const chartInfo = await page.evaluate(() => {
       .classList.contains("trend-small"),
   };
 });
-ok("預設勾一個指標，只有一張圖", chartInfo.figures === 1, `${chartInfo.figures} 張`);
+/*
+ * v2.20.53 起「平日＋假日」是**兩種日別各畫一張、同時顯示**，
+ * 不是混成一條線——混出來的數字不對應任何一種日別。
+ * 所以預設（日別＝平日＋假日、勾一個指標）是 2 張圖，不是 1 張。
+ */
 ok(
-  "一張圖時不可以套用小倍數圖的版面",
-  chartInfo.isSmall === false,
+  "預設勾一個指標＋平日假日兩種日別，要有兩張圖",
+  chartInfo.figures === 2,
+  `${chartInfo.figures} 張`,
 );
+ok(
+  "兩張圖時要套用小倍數圖的版面（橫軸對齊才能上下對照）",
+  chartInfo.isSmall === true,
+);
+/* 只選一種日別時才是單張大圖——不驗這個方向會被「永遠小圖」騙過去。 */
+const singleDay = await page.evaluate(() => {
+  trendState.day = "平日";
+  renderTrendPanel();
+  return {
+    figures: document.querySelectorAll("#trendCharts .trend-figure").length,
+    isSmall: document
+      .getElementById("trendCharts")
+      .classList.contains("trend-small"),
+  };
+});
+ok(
+  "只選一種日別、一個指標時要是單張大圖",
+  singleDay.figures === 1 && singleDay.isSmall === false,
+  `${singleDay.figures} 張`,
+);
+await page.evaluate(() => {
+  trendState.day = "ALL";
+  renderTrendPanel();
+});
+await page.waitForTimeout(400);
 ok(
   "資料點數要等於季度數（3 季）",
   chartInfo.periods.length === 3,
@@ -197,11 +227,12 @@ const multi = await page.evaluate(() => ({
     (node) => node.textContent,
   ),
 }));
-ok("勾第二個指標之後要變成兩張圖", multi.figures === 2, `${multi.figures} 張`);
+/* 兩個指標 × 兩種日別 ＝ 4 張。 */
+ok("勾第二個指標之後要變成四張圖（2 指標 × 2 日別）", multi.figures === 4, `${multi.figures} 張`);
 ok("多張圖時要套用小倍數圖的版面", multi.isSmall === true);
 ok(
-  "兩張圖的標題不可以一樣（否則是同一個指標畫兩次）",
-  new Set(multi.captions).size === 2,
+  "四張圖的標題都不可以一樣（否則是同一份資料畫了好幾次）",
+  new Set(multi.captions).size === 4,
   multi.captions.join(" ／ "),
 );
 
@@ -217,8 +248,9 @@ const backToOne = await page.evaluate(() => ({
     .classList.contains("trend-small"),
 }));
 ok(
-  "取消到剩一個指標時要變回大圖",
-  backToOne.figures === 1 && backToOne.isSmall === false,
+  "取消到剩一個指標時要回到兩張（該指標的平日與假日）",
+  backToOne.figures === 2,
+  `${backToOne.figures} 張`,
 );
 
 /* 全部取消時要擋下來，不可以變成空白畫面 */
@@ -245,14 +277,16 @@ const beforeBand = await page.evaluate(() => {
     values: series.points.map((point) => point.value),
   };
 });
-await page.evaluate(() => document.querySelector('[data-view="summary"]').click());
-await page.waitForTimeout(500);
 /*
- * 三段分法的設定區預設是收合的（它是少用的設定，展開會把下面的彙總表
- * 推出畫面外——e2e-reveal 抓到過）。所以這裡要先展開才能操作。
+ * 服務水準門檻與三段分法在 v2.20.53 搬到獨立的「判定標準」頁——
+ * 原本夾在尖峰彙總那張大表格中間，使用者找不到。
+ * 三段分法在那一頁預設是展開的（它不再是「少用的設定」，
+ * 而是那一頁的主角之一），但保險起見還是確保它開著。
  */
+await page.evaluate(() => document.querySelector('[data-view="standards"]').click());
+await page.waitForTimeout(500);
 await page.evaluate(() => {
-  const details = document.querySelector("details.band-rule");
+  const details = document.querySelector("#standards details.band-rule");
   if (details) details.open = true;
 });
 await page.waitForTimeout(300);
@@ -278,14 +312,22 @@ const afterBand = await page.evaluate(() => {
     scriptText: document.getElementById("trendScriptBox").innerText,
   };
 });
+/*
+ * 標題現在會帶日別（「D 級以下路段佔比（平日）」），所以比對的是**開頭**，
+ * 不是整串相等。用 includes 會太鬆——「XD 級以下路段佔比」也會過。
+ *
+ * 母體名稱在 v2.20.53 改回「路段」：v2.20.48 因為兩種日別混在一起，
+ * 才把母體叫成「路段日別紀錄」；拆開之後一張圖裡只有一種日別，
+ * 母體本來就是路段。
+ */
 ok(
   "分界改成 D 之後，指標名稱要跟著變",
-  afterBand.label === "D 級以下路段日別紀錄佔比",
+  afterBand.label.startsWith("D 級以下路段佔比"),
   `${beforeBand.label} → ${afterBand.label}`,
 );
 ok(
   "說明欄位也要跟著用新的指標名稱",
-  afterBand.scriptText.includes("D 級以下路段日別紀錄佔比"),
+  afterBand.scriptText.includes("D 級以下路段佔比"),
 );
 /*
  * 只驗名稱會被「只改文字、沒改計算」騙過去，所以要驗**計算真的吃到新分界**。
@@ -312,9 +354,9 @@ ok(
 );
 
 /* ── 五、點圖下鑽：要真的跳頁，而且真的套上篩選 ── */
-const targetPeriod = await page.evaluate(() => {
+const targetPoint = await page.evaluate(() => {
   const dot = document.querySelector("#trendCharts .trend-dot");
-  return dot ? dot.dataset.period : "";
+  return dot ? { period: dot.dataset.period, day: dot.dataset.day } : { period: "", day: "" };
 });
 await page.evaluate(() => {
   document.querySelector("#trendCharts .trend-dot").dispatchEvent(
@@ -335,13 +377,20 @@ const drill = await page.evaluate(() => {
           .filter(Boolean),
       ),
     ],
+    days: [
+      ...new Set(
+        rows
+          .map((tr) => tr.querySelectorAll("td")[2]?.innerText.trim())
+          .filter(Boolean),
+      ),
+    ],
   };
 });
 ok("點圖上的點要跳到尖峰彙總", drill.activeView === "summary", drill.activeView);
 ok(
-  "搜尋框要被自動填上那一季",
-  drill.search === targetPeriod,
-  `填了「${drill.search}」，點的是「${targetPeriod}」`,
+  "點圖下鑽使用欄位篩選，不以不精確的全文搜尋拼接條件",
+  drill.search === "",
+  `搜尋框內容：「${drill.search}」`,
 );
 /*
  * 這一項才是重點：跳過去但沒篩選就是半套。
@@ -352,6 +401,11 @@ ok(
   "表格要真的只剩那一季（篩選確實生效）",
   drill.rowCount > 0 && drill.periods.length === 1,
   `${drill.rowCount} 列、期間種類 ${drill.periods.length}：${drill.periods.join("、")}`,
+);
+ok(
+  "平假日拆圖後，點圖只可下鑽到該日別，不可又把兩種日別混回來",
+  drill.days.length === 1 && drill.days[0] === targetPoint.day,
+  `日別：${drill.days.join("、")}`,
 );
 
 
@@ -372,7 +426,12 @@ await page.evaluate(() => document.querySelector('[data-view="manager"]').click(
 await page.waitForTimeout(600);
 
 /* 先把目前計畫匯出成專案包，再當成「同事交來的包」匯進 Manager。 */
-const packJson = await page.evaluate(() => JSON.stringify(window.projectPackage()));
+const packJson = await page.evaluate(() => {
+  const pack = window.projectPackage();
+  /* 匯入包屬於外部輸入：計畫名稱即使含 HTML，也只能當普通文字顯示。 */
+  pack.project.name = "X<img>";
+  return JSON.stringify(pack);
+});
 await page.evaluate((text) => {
   const file = new File([text], "同事的專案包.json", { type: "application/json" });
   const transfer = new DataTransfer();
@@ -430,6 +489,175 @@ ok(
   /不用總數/.test(managerView.scriptText),
 );
 ok("明細表預設要收合", managerView.detailsOpen === false);
+const managerEscaping = await page.evaluate(() => ({
+  injectedNode: Boolean(document.querySelector("#managerBandScript img")),
+  textVisible: document.getElementById("managerBandScript")?.innerText.includes("<img>") || false,
+}));
+ok(
+  "匯入包的計畫名稱只能顯示成文字，不可被當成 HTML 執行",
+  !managerEscaping.injectedNode && managerEscaping.textVisible,
+  JSON.stringify(managerEscaping),
+);
+/*
+ * Manager 的「平日＋假日」同樣是**兩條線同時顯示**，不是混成一條。
+ * 一份專案包同時含平日與假日時，線的數量要是「計畫數 × 日別數」。
+ */
+const managerDaysCheck = await page.evaluate(() => {
+  const pick = (day) => {
+    managerTrendState.day = day;
+    renderManager();
+    return [
+      ...document.querySelectorAll("#managerTrendChart .trend-series-label"),
+    ].map((node) =>
+      [...node.childNodes]
+        .filter((child) => child.nodeType === 3)
+        .map((child) => child.textContent)
+        .join(""),
+    );
+  };
+  const both = pick("ALL");
+  const weekday = pick("平日");
+  managerTrendState.day = "ALL";
+  renderManager();
+  return { both, weekday };
+});
+ok(
+  "Manager 選「平日＋假日」時要一種日別一條線，不是混成一條",
+  managerDaysCheck.both.length > managerDaysCheck.weekday.length,
+  `合併 ${managerDaysCheck.both.length} 條、只選平日 ${managerDaysCheck.weekday.length} 條`,
+);
+const staleManagerDay = await page.evaluate(() => {
+  managerTrendState.day = "已不存在的日別";
+  renderManager();
+  return {
+    stateDay: managerTrendState.day,
+    selectDay: document.getElementById("managerTrendDay").value,
+    figures: document.querySelectorAll("#managerTrendChart svg").length,
+  };
+});
+ok(
+  "Manager 原選日別已不存在時要自動回到平日＋假日，圖表不可變空白",
+  staleManagerDay.stateDay === "ALL" && staleManagerDay.selectDay === "ALL" && staleManagerDay.figures > 0,
+  JSON.stringify(staleManagerDay),
+);
+
+
+/* ══ Manager 專屬三段分界：不可以回寫到任何一個計畫 ══ */
+/*
+ * 使用者明確要求的隔離：
+ *   「Manager 比較區也能設定多少分級是順暢，多少是尚可，多少是壅塞，
+ *     不能跟單一計畫的分級混在一起使用。」
+ *
+ * ⚠️ 三個假通過陷阱，這一段刻意迴避：
+ *
+ *  一、只驗「Manager 有兩個下拉」擋不住——下拉存在但寫回 state.bandRules
+ *      一樣會過，而那正是要擋的事。
+ *
+ *  二、只驗「state.bandRules 沒變」也不夠——如果 Manager 那把尺根本沒有
+ *      作用（圖還是照各計畫的尺畫），bandRules 當然也不會變，這一項會
+ *      恆真。所以要同時驗**圖真的跟著換了**。
+ *
+ *  三、驗「圖跟著換」時，兩把尺要挑成**任何資料都一定會有差**的兩把：
+ *      壅塞從 B 起（幾乎全部都算壅塞）對上壅塞只有 F（幾乎都不算）。
+ *      隨手挑兩把尺的話，剛好測資的等級都落在同一側時就沒有差異，
+ *      這一項會變成「有時綠有時紅」的爛守門。
+ */
+const applyManagerBand = async (smoothEnd, congestedStart) =>
+  page.evaluate(
+    async ([smooth, congested]) => {
+      /*
+       * 兩欄互相限制，所以要**先設順暢、觸發重排、再設壅塞**——
+       * 直接設壅塞的話，那個值可能還不在選項裡，select 會靜靜不變，
+       * 於是套用到的是舊的尺，而這一段守門就會驗到錯的東西。
+       */
+      const smoothSelect = document.getElementById("managerBandSmoothEnd");
+      const congestedSelect = document.getElementById("managerBandCongestedStart");
+      smoothSelect.value = smooth;
+      smoothSelect.dispatchEvent(new Event("change"));
+      congestedSelect.value = congested;
+      congestedSelect.dispatchEvent(new Event("change"));
+      if (congestedSelect.value !== congested)
+        return { error: `壅塞下拉設不到 ${congested}，實際是 ${congestedSelect.value}` };
+      document.getElementById("managerBandApply").click();
+      await new Promise((done) => setTimeout(done, 350));
+      const shares = [
+        ...document.querySelectorAll("#managerBandChart rect.band-congested"),
+      ].map((node) => Number(node.getAttribute("height")).toFixed(1));
+      return {
+        rule: JSON.parse(JSON.stringify(state.managerBandRule || {})),
+        projectRules: JSON.parse(JSON.stringify(state.bandRules || {})),
+        packRules: (state.manager || []).map((pack) =>
+          JSON.stringify(pack.bandRule || {}),
+        ),
+        legend: [
+          ...document.querySelectorAll("#managerBandChart .band-legend-text"),
+        ].map((node) => node.textContent),
+        congestedHeights: shares,
+        bars: document.querySelectorAll("#managerBandChart rect[class^=band-]")
+          .length,
+        script: document.getElementById("managerBandScript").innerText,
+      };
+    },
+    [smoothEnd, congestedStart],
+  );
+
+const projectRulesBefore = await page.evaluate(() =>
+  JSON.stringify(state.bandRules || {}),
+);
+/* 壅塞從 B 起：除了 A 以外全部算壅塞。 */
+const bandWide = await applyManagerBand("A", "B");
+/* 壅塞只有 F：其餘都不算壅塞。 */
+const bandNarrow = await applyManagerBand("A", "F");
+
+ok(
+  "前置：兩把尺都要真的設定成功（設不到的話下面幾項驗的是舊的尺）",
+  !bandWide.error && !bandNarrow.error,
+  [bandWide.error, bandNarrow.error].filter(Boolean).join("／"),
+);
+ok(
+  "前置：Manager 三段圖要真的畫得出柱子（畫不出來的話下面幾項會變成恆真）",
+  bandWide.bars > 0,
+  `${bandWide.bars} 段`,
+);
+ok(
+  "Manager 的分界要存在自己的地方（state.managerBandRule）",
+  bandNarrow.rule.congestedStart === "F" && bandNarrow.rule.smoothEnd === "A",
+  JSON.stringify(bandNarrow.rule),
+);
+ok(
+  "改 Manager 的分界**不可以**動到任何一個計畫的 state.bandRules",
+  JSON.stringify(bandNarrow.projectRules) === projectRulesBefore,
+  `改之前 ${projectRulesBefore}／改之後 ${JSON.stringify(bandNarrow.projectRules)}`,
+);
+ok(
+  "改 Manager 的分界也不可以動到專案包裡存的 bandRule",
+  bandNarrow.packRules.every(
+    (rule) => !/"smoothEnd":"A"/.test(rule) && !/"congestedStart":"F"/.test(rule),
+  ),
+  bandNarrow.packRules.join(" ／ "),
+);
+ok(
+  "Manager 那把尺要**真的有作用**：壅塞從 B 起與只有 F，柱子高度必須不同",
+  bandWide.congestedHeights.join("|") !== bandNarrow.congestedHeights.join("|"),
+  `壅塞從 B 起 [${bandWide.congestedHeights.join(", ")}]／只有 F [${bandNarrow.congestedHeights.join(", ")}]`,
+);
+ok(
+  "Manager 三段圖的圖例要寫出哪幾級算哪一段，而且跟著尺變",
+  bandWide.legend.some((text) => /壅塞（B、C、D、E、F）/.test(text)) &&
+    bandNarrow.legend.some((text) => /壅塞（F）/.test(text)),
+  `${bandWide.legend.join(" ／ ")}｜${bandNarrow.legend.join(" ／ ")}`,
+);
+ok(
+  "Manager 三段圖的說明要跟著尺換（不是印一段固定的話）",
+  bandWide.script !== bandNarrow.script,
+  `${(bandWide.script || "").slice(0, 50)}｜${(bandNarrow.script || "").slice(0, 50)}`,
+);
+
+ok(
+  "Manager 兩條線的名稱要標出日別",
+  managerDaysCheck.both.every((text) => /（平日）|（假日）/.test(text)),
+  managerDaysCheck.both.join(" ／ "),
+);
 ok(
   "收合時也要看得到有幾筆",
   /\d+ 筆/.test(managerView.rowsCount || ""),
@@ -446,9 +674,11 @@ ok(
 );
 
 /* 點跨計畫圖 → 明細表要展開，而且篩選要套上去 */
-const managerPeriod = await page.evaluate(() => {
+const managerPoint = await page.evaluate(() => {
   const dot = document.querySelector("#managerTrendChart .trend-dot");
-  return dot ? dot.dataset.period : "";
+  return dot
+    ? { project: dot.dataset.project, period: dot.dataset.period, day: dot.dataset.day }
+    : { project: "", period: "", day: "" };
 });
 await page.evaluate(() => {
   document
@@ -466,23 +696,195 @@ const afterManagerClick = await page.evaluate(() => ({
         .filter(Boolean),
     ),
   ],
+  projects: [
+    ...new Set(
+      [...document.querySelectorAll("#managerRows tr")]
+        .map((tr) => tr.querySelectorAll("td")[0]?.innerText.trim())
+        .filter(Boolean),
+    ),
+  ],
+  days: [
+    ...new Set(
+      [...document.querySelectorAll("#managerRows tr")]
+        .map((tr) => tr.querySelectorAll("td")[3]?.innerText.trim())
+        .filter(Boolean),
+    ),
+  ],
 }));
 ok(
   "點圖之後明細表要自動展開（只套篩選而表還收著等於沒反應）",
   afterManagerClick.detailsOpen === true,
 );
 ok(
-  "點圖之後搜尋框要被填上那一季",
-  afterManagerClick.search === managerPeriod,
-  `填了「${afterManagerClick.search}」，點的是「${managerPeriod}」`,
+  "Manager 點圖下鑽使用精確欄位篩選，不以全文搜尋拼接條件",
+  afterManagerClick.search === "",
+  `搜尋框內容：「${afterManagerClick.search}」`,
 );
 ok(
   "點圖之後明細表要真的只剩那一季",
   afterManagerClick.periods.length === 1,
   `期間種類 ${afterManagerClick.periods.length}：${afterManagerClick.periods.join("、")}`,
 );
+ok(
+  "Manager 點圖只可下鑽到該計畫與該日別",
+  afterManagerClick.projects.length === 1 &&
+    afterManagerClick.projects[0].startsWith(managerPoint.project + " ") &&
+    afterManagerClick.days.length === 1 &&
+    afterManagerClick.days[0] === managerPoint.day,
+  `計畫：${afterManagerClick.projects.join("、")}｜日別：${afterManagerClick.days.join("、")}`,
+);
 
 ok("整段流程不可以留下未捕捉的例外", errors.length === 0, errors.slice(0, 2).join(" | "));
+
+
+
+/* ── 「平日＋假日」是同時顯示兩張圖，不是混成一條線 ── */
+/*
+ * 使用者明確指出過的坑：「平日+假日 這類條件，指的是同時顯示，因為這類
+ * 計算，加總起來沒有應用的意義」。
+ *
+ * 在這個系統裡「混」不是相加而是**混在一起算平均／算比例**——結果同樣是
+ * 一個不對應平日也不對應假日的數字，業主問「所以平日到底多少」時答不出來。
+ *
+ * ⚠️ 只驗「圖的張數變成兩張」不夠：兩張都畫同一份混合資料也會過。
+ * 所以要驗**兩張圖的值不一樣**，而且各自等於單獨選那一種日別時的值。
+ */
+const daySplit = await page.evaluate(() => {
+  const pick = (day) => {
+    trendState.day = day;
+    return trendSeriesList().map((series) => ({
+      label: series.label,
+      day: series.day,
+      values: series.points.map((point) => point.value),
+    }));
+  };
+  const both = pick("ALL");
+  const weekday = pick("平日");
+  const holiday = pick("假日");
+  trendState.day = "ALL";
+  renderTrendPanel();
+  return { both, weekday, holiday };
+});
+ok(
+  "選「平日＋假日」時要產生兩張圖（一種日別一張），不是一張混合的",
+  daySplit.both.length === 2,
+  daySplit.both.map((s) => s.label).join("、"),
+);
+ok(
+  "兩張圖的標題要標出各自的日別",
+  daySplit.both.every((s) => /（平日）|（假日）/.test(s.label)),
+  daySplit.both.map((s) => s.label).join("、"),
+);
+ok(
+  "「平日」那張的值要與單獨選平日時完全相同（沒有被假日汙染）",
+  JSON.stringify(daySplit.both.find((s) => s.day === "平日")?.values) ===
+    JSON.stringify(daySplit.weekday[0]?.values),
+  `合併時 ${JSON.stringify(daySplit.both.find((s) => s.day === "平日")?.values)}｜單獨 ${JSON.stringify(daySplit.weekday[0]?.values)}`,
+);
+ok(
+  "「假日」那張的值要與單獨選假日時完全相同",
+  JSON.stringify(daySplit.both.find((s) => s.day === "假日")?.values) ===
+    JSON.stringify(daySplit.holiday[0]?.values),
+  `合併時 ${JSON.stringify(daySplit.both.find((s) => s.day === "假日")?.values)}｜單獨 ${JSON.stringify(daySplit.holiday[0]?.values)}`,
+);
+/*
+ * 母體名稱：拆開之後一張圖裡只有一種日別，所以是「路段」。
+ * v2.20.48 的「路段日別紀錄」是為了描述混合後的資料，拆開後不再適用。
+ */
+ok(
+  "拆開之後母體要叫「路段」，不可以再叫「路段日別紀錄」",
+  daySplit.both.every((s) => !s.label.includes("路段日別紀錄")),
+  daySplit.both.map((s) => s.label).join("、"),
+);
+
+/* ══ 下載幾張圖，就真的要收到幾個檔 ══ */
+/*
+ * 使用者實測回報：「LOS 圖表選擇下載高解析圖片，右下角提示成功 6 張圖，
+ * 但實際上我只收到一張。」
+ *
+ * 成因：舊版對每一張圖各觸發一次下載，而瀏覽器對「同一個手勢連續自動
+ * 下載多個檔案」有節流——沒允許就只有第一個會過，**而且不會拋任何錯誤**。
+ * 提示又是照迴圈次數數的，所以它數了 6 次、說了 6 張，實際只有 1 張。
+ *
+ * ⚠️ 假通過陷阱：
+ *  一、只驗「按了之後有下載事件」擋不住——舊版也有（第一張）。
+ *      要驗**實際攔到的下載次數**與提示說的一致。
+ *  二、只驗「提示有出現」更擋不住——提示本來就會出現，只是在說謊。
+ *  三、Playwright 在無頭 Chromium 底下對 blob 下載的檔名一律回報
+ *      "download"，所以檔名不能用 suggestedFilename 驗，改成攔截
+ *      <a> 的 click 直接讀當下的 download 屬性。
+ */
+const multiDownload = await page.evaluate(async () => {
+  /* 攔下所有 <a download> 的點擊，記下檔名，並且**不要真的下載**。 */
+  const grabbed = [];
+  const original = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {
+    if (this.hasAttribute("download")) {
+      grabbed.push(this.getAttribute("download"));
+      return;
+    }
+    return original.apply(this, arguments);
+  };
+  /* 勾多個指標 → 畫面上會有多張圖。 */
+  const boxes = [...document.querySelectorAll("#trendMetricBoxes input")];
+  const before = boxes.map((box) => box.checked);
+  boxes.slice(0, 3).forEach((box) => {
+    if (!box.checked) box.click();
+  });
+  await new Promise((done) => setTimeout(done, 500));
+  const figures = document.querySelectorAll("#trendCharts .trend-figure svg").length;
+  let toastText = "";
+  const toastNode = document.getElementById("toast");
+  const observer = new MutationObserver(() => {
+    if (toastNode.textContent) toastText = toastNode.textContent;
+  });
+  observer.observe(toastNode, { childList: true, characterData: true, subtree: true });
+  await document.getElementById("trendDownloadPng").onclick();
+  await new Promise((done) => setTimeout(done, 900));
+  observer.disconnect();
+  HTMLAnchorElement.prototype.click = original;
+  /*
+   * ⚠️ 把勾選還原成進來時的樣子。
+   * 不還原的話後面那幾項（「選平日＋假日要產生兩張圖」）會看到 4 張，
+   * 紅字指向的卻是這一段留下的殘留狀態——那種紅字最浪費時間。
+   */
+  boxes.forEach((box, index) => {
+    if (box.checked !== before[index]) box.click();
+  });
+  await new Promise((done) => setTimeout(done, 400));
+  return { figures, grabbed, toastText };
+});
+ok(
+  "前置：要真的畫出多張圖（只有一張的話下面幾項會變成恆真）",
+  multiDownload.figures >= 2,
+  `${multiDownload.figures} 張`,
+);
+ok(
+  "前置：要真的攔到下載動作（攔不到的話下面幾項會變成恆真）",
+  multiDownload.grabbed.length > 0,
+  `攔到 ${multiDownload.grabbed.length} 次：${multiDownload.grabbed.join("、")}`,
+);
+ok(
+  "多張圖時只可以觸發**一次**下載（連續多次會被瀏覽器擋掉，使用者只收到第一張）",
+  multiDownload.grabbed.length === 1,
+  `觸發了 ${multiDownload.grabbed.length} 次：${multiDownload.grabbed.join("、")}`,
+);
+ok(
+  "多張圖要打包成 ZIP，副檔名必須是 .zip",
+  /\.zip$/.test(multiDownload.grabbed[0] || ""),
+  multiDownload.grabbed[0] || "（沒有檔名）",
+);
+ok(
+  "提示不可以斷言「已下載」——網頁無法知道檔案有沒有真的落地",
+  !/已下載/.test(multiDownload.toastText),
+  multiDownload.toastText,
+);
+ok(
+  "提示說的張數要與實際打包的張數一致，不可以照迴圈次數數",
+  new RegExp(`裡面有 ${multiDownload.figures} 張圖`).test(multiDownload.toastText),
+  `圖 ${multiDownload.figures} 張，提示是「${multiDownload.toastText}」`,
+);
+
 
 await browser.close();
 server.close();

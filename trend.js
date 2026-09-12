@@ -593,6 +593,8 @@
       });
       series.projectCode = group.code;
       series.projectName = group.name;
+      /* 平日與假日拆線後，下鑽必須知道這一條線是哪個日別。 */
+      series.day = group.day || "";
       /* 這個計畫最少的一季有幾條路段——樣本太少要在畫面上標記 */
       series.smallestSample = series.points.reduce(function (min, point) {
         if (!(point.valueSize > 0)) return min;
@@ -746,15 +748,161 @@
     return lines.join("\n");
   }
 
+
+  /* ── 三段分法（順暢／尚可／壅塞）的組成 ──────────────────────
+   *
+   * 使用者要的圖：「多少路段是順暢、多少是尚可、多少是壅塞」，逐季看變化。
+   *
+   * ⚠️ 三件事一定要守住：
+   *
+   * 一、**分界從外面傳進來，這裡不做預設判斷**。單一計畫用它自己的分界，
+   *     Manager 用 Manager 自己那一把尺；同一支程式算，兩邊各給各的規則。
+   *     在這裡寫死或補預設值，就會出現「圖上分成三段，但不知道是誰的尺」。
+   *
+   * 二、**平日與假日不加總**。呼叫端一種日別給一份 rows，這裡不碰日別。
+   *     把兩種日別的路段數加起來，得到的柱子不對應任何一天。
+   *
+   * 三、**判定不出等級的那幾筆要算出來、講出來，不可以默默丟掉**。
+   *     丟掉的話佔比的分母會縮小，圖上看起來一切正常，
+   *     但「100% 壅塞」可能其實是「唯一算得出來的那一條是壅塞」。
+   */
+  function bandOfGrade(los, bands) {
+    var index = GRADES.indexOf(String(los || ""));
+    if (index < 0) return null;
+    if (index <= GRADES.indexOf(bands.smoothEnd)) return "smooth";
+    if (index >= GRADES.indexOf(bands.congestedStart)) return "congested";
+    return "fair";
+  }
+
+  /**
+   * 一批彙總紀錄 → 逐季的三段組成。
+   *
+   * rows：state.summaries 那種形狀（一路段一日別一季一筆代表紀錄）。
+   * bands：{ smoothEnd, congestedStart }，由呼叫端決定。
+   */
+  function buildBandSeries(rows, options) {
+    var opts = options || {};
+    var bands = opts.bands || { smoothEnd: "B", congestedStart: "E" };
+    var periods = [];
+    var byPeriod = {};
+    (rows || []).forEach(function (row) {
+      var period = row.period;
+      if (!period) return;
+      if (!byPeriod[period]) {
+        byPeriod[period] = { period: period, rows: [] };
+        periods.push(period);
+      }
+      byPeriod[period].rows.push(row);
+    });
+    periods.sort(function (a, b) {
+      return typeof opts.comparePeriod === "function"
+        ? opts.comparePeriod(a, b)
+        : String(a).localeCompare(String(b));
+    });
+    if (opts.completePeriods !== false) {
+      periods = completeQuarterRange(periods);
+      periods.forEach(function (period) {
+        if (!byPeriod[period]) byPeriod[period] = { period: period, rows: [] };
+      });
+    }
+    var points = periods.map(function (period) {
+      var own = byPeriod[period].rows;
+      var counts = { smooth: 0, fair: 0, congested: 0 };
+      var unknown = 0;
+      own.forEach(function (row) {
+        var band = bandOfGrade(row.los, bands);
+        if (band) counts[band] += 1;
+        else unknown += 1;
+      });
+      var graded = counts.smooth + counts.fair + counts.congested;
+      return {
+        period: period,
+        counts: counts,
+        unknown: unknown,
+        graded: graded,
+        size: own.length,
+        /* 佔比的分母是**判定得出等級的筆數**，不是全部筆數。 */
+        shares: graded
+          ? {
+              smooth: (counts.smooth / graded) * 100,
+              fair: (counts.fair / graded) * 100,
+              congested: (counts.congested / graded) * 100,
+            }
+          : null,
+      };
+    });
+    var gradesOf = bandGradeGroups(bands);
+    return {
+      bands: bands,
+      grades: gradesOf,
+      /* 圖例要寫出「哪幾級算這一段」，看圖的人才知道尺是怎麼訂的。 */
+      legend: [
+        { key: "smooth", name: "順暢", grades: gradesOf.smooth },
+        { key: "fair", name: "尚可", grades: gradesOf.fair },
+        { key: "congested", name: "壅塞", grades: gradesOf.congested },
+      ],
+      periods: periods,
+      points: points,
+    };
+  }
+
+  /** 三段各自涵蓋哪幾級。中間那一段是算出來的，不讓使用者分別設。 */
+  function bandGradeGroups(bands) {
+    var smoothEnd = GRADES.indexOf(bands.smoothEnd);
+    var congestedStart = GRADES.indexOf(bands.congestedStart);
+    return {
+      smooth: GRADES.slice(0, smoothEnd + 1),
+      fair: GRADES.slice(smoothEnd + 1, congestedStart),
+      congested: GRADES.slice(congestedStart),
+    };
+  }
+
+  /**
+   * 將多條趨勢數列排到同一組季度欄位，供 Excel 匯出使用。
+   *
+   * 平日與假日可能從不同季度開始，或其中一種日別少一季；若直接沿用
+   * 第一條數列的季度，後面的值會被貼到錯誤季別。這裡先取季度聯集，
+   * 再逐季以 period 精確對位，缺少的季度保留 null（Excel 會畫成斷線）。
+   */
+  function alignTrendSeriesForExcel(list, comparePeriod) {
+    var periods = [];
+    (list || []).forEach(function (item) {
+      (item.points || []).forEach(function (point) {
+        if (periods.indexOf(point.period) < 0) periods.push(point.period);
+      });
+    });
+    periods.sort(comparePeriod || function (a, b) { return String(a).localeCompare(String(b)); });
+    return {
+      periods: periods,
+      series: (list || [])
+        .filter(function (item) { return !item.ordinal; })
+        .map(function (item) {
+          return {
+            label: item.label,
+            unit: item.unit,
+            values: periods.map(function (period) {
+              var point = (item.points || []).find(function (candidate) {
+                return candidate.period === period;
+              });
+              return point ? point.value : null;
+            }),
+          };
+        }),
+    };
+  }
+
   return {
     TREND_METRICS: TREND_METRICS,
     TREND_GRADES: GRADES,
     trendMetricLabel: metricLabel,
     buildTrendSeries: buildTrendSeries,
+    buildBandSeries: buildBandSeries,
+    bandGradeGroups: bandGradeGroups,
     describeTrendChart: describeTrendChart,
     trendScript: trendScript,
     trendFormatValue: formatValue,
     buildCrossProjectTrend: buildCrossProjectTrend,
     describeCrossProjectTrend: describeCrossProjectTrend,
+    alignTrendSeriesForExcel: alignTrendSeriesForExcel,
   };
 });

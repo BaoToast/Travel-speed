@@ -268,20 +268,41 @@ const result = await page.evaluate(async () => {
       false,
     ),
   });
-  cases.push({
-    name: "單一計畫大圖（序數等級）",
-    markup: trendChartSvg(
-      {
-        metric: "worstLos",
-        label: "最差服務水準等級",
-        unit: "級",
-        digits: 0,
-        ordinal: true,
-        points: points(10).map((p) => ({ ...p, value: 3 })),
-      },
-      false,
-    ),
-  });
+  /*
+   * 序數等級：值刻意用 D(3) 與 E(4)，就是使用者在線上看到的那張圖的形狀。
+   * 全部同值的話「點畫在哪一格」驗不出來——每一格都一樣高。
+   */
+  const ordinalMarkup = trendChartSvg(
+    {
+      metric: "worstLos",
+      label: "最差服務水準等級",
+      unit: "級",
+      digits: 0,
+      ordinal: true,
+      points: points(10).map((p, i) => ({ ...p, value: i < 6 ? 3 : 4 })),
+    },
+    false,
+  );
+  cases.push({ name: "單一計畫大圖（序數等級）", markup: ordinalMarkup });
+  /*
+   * 小倍數圖也要驗：畫布只有 214px 高，六條格線＋六個字母＋點上的等級
+   * 全部擠在一起，這是最容易疊字的組合。24 季再加上點上的字母更狠。
+   */
+  for (const n of [10, 24])
+    cases.push({
+      name: `單一計畫小倍數圖（序數等級 ${n} 季）`,
+      markup: trendChartSvg(
+        {
+          metric: "worstLos",
+          label: "最差服務水準等級",
+          unit: "級",
+          digits: 0,
+          ordinal: true,
+          points: points(n).map((p, i) => ({ ...p, value: (i % 6) })),
+        },
+        true,
+      ),
+    });
   /* 缺季（折線要斷開）也要驗版面，斷線那一段最容易讓標籤算錯位置。 */
   cases.push({
     name: "單一計畫大圖（中間缺 3 季）",
@@ -318,6 +339,105 @@ const result = await page.evaluate(async () => {
   }));
   cases.push({ name: "跨計畫圖（4 計畫、長名稱、末季幾乎同值）", markup: crossProjectChartSvg(cross) });
   cases.push({ name: "跨計畫圖（2 計畫）", markup: crossProjectChartSvg(cross.slice(0, 2)) });
+
+  /*
+   * 三段圖（順暢／尚可／壅塞）。這張圖的字最多：圖例三段、每一段上的
+   * 條數、柱上方的「＋N 未判定」、X 軸季度、兩個軸名稱——全部擠在同一
+   * 張畫布上，是最容易疊字的一張。大圖、小倍數圖、24 季都要驗。
+   */
+  const bandRows = (n, withUnknown) => {
+    const rows = [];
+    for (let i = 0; i < n; i += 1) {
+      const period = `${112 + Math.floor(i / 4)}Q${(i % 4) + 1}`;
+      const congested = Math.min(9, Math.round(i * 0.7));
+      for (let k = 0; k < 9; k += 1)
+        rows.push({
+          period,
+          los: k < congested ? "E" : k < congested + 3 ? "C" : "A",
+          day: "平日",
+        });
+      if (withUnknown && i % 3 === 0) rows.push({ period, los: "", day: "平日" });
+    }
+    return rows;
+  };
+  const bandSeries = (n, withUnknown) =>
+    buildBandSeries(bandRows(n, withUnknown), {
+      bands: { smoothEnd: "B", congestedStart: "E" },
+      comparePeriod: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+    });
+  for (const n of [4, 12, 24])
+    cases.push({
+      name: `三段圖大圖（${n} 季）`,
+      markup: bandChartSvg(bandSeries(n, true), false),
+    });
+  for (const n of [8, 24])
+    cases.push({
+      name: `三段圖小倍數圖（${n} 季）`,
+      markup: bandChartSvg(bandSeries(n, false), true),
+    });
+  /*
+   * Manager 的跨計畫三段圖是**另一段程式**畫的，要單獨驗。
+   * 計畫名稱很長、而且柱下有兩行字（季度與 N），是它獨有的擠法。
+   */
+  const managerBandItems = [
+    "示範捷運延伸線示範標第二期工程",
+    "示範市區道路服務水準調查",
+    "示範3",
+    "示範四號計畫案",
+  ].map((name, k) => {
+    const series = bandSeries(6, k === 0);
+    const valued = series.points.filter((point) => point.shares);
+    return { name, code: "P" + k, series, last: valued[valued.length - 1] };
+  });
+  cases.push({
+    name: "Manager 三段圖（4 計畫、長名稱）",
+    markup: managerBandChartSvg(managerBandItems, {
+      smoothEnd: "B",
+      congestedStart: "E",
+    }),
+  });
+  cases.push({
+    name: "Manager 三段圖（2 計畫）",
+    markup: managerBandChartSvg(managerBandItems.slice(0, 2), {
+      smoothEnd: "B",
+      congestedStart: "E",
+    }),
+  });
+
+  /* 缺季（淺色空槽）也要驗版面，空槽那一格最容易讓標籤算錯位置。 */
+  cases.push({
+    name: "三段圖大圖（中間缺季）",
+    markup: bandChartSvg(
+      buildBandSeries(
+        [
+          ...bandRows(2, false),
+          ...bandRows(2, false).map((row) => ({ ...row, period: "113Q3" })),
+        ],
+        {
+          bands: { smoothEnd: "B", congestedStart: "E" },
+          comparePeriod: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+        },
+      ),
+      false,
+    ),
+  });
+  /*
+   * Manager 的跨計畫圖是**另一段程式**在畫格線，所以序數等級要在這裡
+   * 再驗一次——只驗單一計畫圖的話，Manager 那張圖照樣會漏掉 C。
+   */
+  cases.push({
+    name: "跨計畫圖（序數等級）",
+    markup: crossProjectChartSvg(
+      cross.slice(0, 2).map((item) => ({
+        ...item,
+        label: "最差服務水準等級",
+        unit: "級",
+        digits: 0,
+        ordinal: true,
+        points: item.points.map((p, i) => ({ ...p, value: i % 2 ? 3 : 4 })),
+      })),
+    ),
+  });
 
   const report = [];
   for (const item of cases)
@@ -359,8 +479,91 @@ const result = await page.evaluate(async () => {
   };
 
 
+  /*
+   * ── 序數等級軸：刻度、點的高度、點上的字母 ──
+   *
+   * 使用者實際看到的錯：縱軸只印出 A B D E F（**C 不見了**），
+   * 而且資料點畫在 D 與 E 中間，旁邊卻說它是 D。
+   *
+   * 成因是「六個等級、跨距 5」卻沿用 4 格格線：刻度值變成
+   * 5／3.75／2.5／1.25／0，Math.round 之後就是 F E D B A，
+   * 那個 D 其實畫在 2.5 的高度上。
+   *
+   * ⚠️ 假通過陷阱：只驗「縱軸有字」或「有六個刻度」都擋不住——
+   * 前者印什麼都過；後者只要多印一格就過，字母對不對、點在不在
+   * 對的那一格上都沒驗到。所以這裡驗三件事，缺一不可：
+   *   ① 由上到下逐字等於 F E D C B A。
+   *   ② 值為 3 的點，圓心 y **等於**標著 D 的那一格的 y。
+   *   ③ 每一個畫出來的點旁邊都有對應的等級字母。
+   */
+  host.innerHTML = ordinalMarkup;
+  const oSvg = host.querySelector("svg");
+  /*
+   * 刻度的 y 取**格線本身**，不取文字外框的中心。
+   * 文字是以基線定位、又刻意下移 4px，用文字外框比會有半個像素的
+   * 系統性誤差——那種誤差會逼人把容差放寬到 0.5px 以上，而 0.5px
+   * 剛好也是「差半級」以外的東西都塞得進去的寬度，等於自己把守門
+   * 拆掉。格線與刻度文字是同一個迴圈依序產生的，索引一一對應。
+   */
+  const gridYs = [...oSvg.querySelectorAll("line.trend-grid")].map((n) =>
+    Number(n.getAttribute("y1")),
+  );
+  const tickTextsInOrder = [...oSvg.querySelectorAll("text.trend-tick")]
+    .filter((n) => !/Q[1-4]/.test(n.textContent))
+    .map((n) => n.textContent.trim());
+  const ordinal = {
+    ticks: tickTextsInOrder
+      .map((text, i) => ({ text, y: gridYs[i] }))
+      .sort((a, b) => a.y - b.y),
+    dots: [...oSvg.querySelectorAll("circle.trend-dot")].map((n) => ({
+      x: Number(n.getAttribute("cx")),
+      y: Number(n.getAttribute("cy")),
+    })),
+    labels: [...oSvg.querySelectorAll("text.trend-point-label")].map((n) => ({
+      text: n.textContent.trim(),
+      x: Number(n.getAttribute("x")),
+      y: Number(n.getAttribute("y")),
+    })),
+  };
+
+  /*
+   * ── 三段圖：堆疊起來一定要剛好是整根柱 ──
+   *
+   * 這是三段圖版本的「點位有沒有落在軸上」。三段是 100% 堆疊，所以
+   * 三段的高度加起來必須**剛好等於**繪圖區的高度；差一點就代表某一段
+   * 被算少了（有幾條路段憑空消失）或被算多了（重複計算）。
+   *
+   * ⚠️ 假通過陷阱：只驗「有三個色塊」擋不住——三段各畫成 33% 也會有
+   * 三個色塊。要驗**加起來的高度**，而且要與繪圖區高度逐像素比對。
+   */
+  host.innerHTML = bandChartSvg(bandSeries(6, true), false);
+  const bandStack = (() => {
+    const svg = host.querySelector("svg");
+    const grids = [...svg.querySelectorAll("line.trend-grid")].map((node) =>
+      Number(node.getAttribute("y1")),
+    );
+    const plot = Math.max(...grids) - Math.min(...grids);
+    const byX = new Map();
+    for (const rect of svg.querySelectorAll("rect")) {
+      const cls = rect.getAttribute("class") || "";
+      /* 圖例色塊也用同一組配色類別，要先排除，否則會被當成資料柱。 */
+      if (cls.includes("band-legend-key")) continue;
+      if (!/^band-(smooth|fair|congested)$/.test(cls)) continue;
+      const x = Number(rect.getAttribute("x")).toFixed(1);
+      byX.set(x, (byX.get(x) || 0) + Number(rect.getAttribute("height")));
+    }
+    const totals = [...byX.values()];
+    return {
+      plot,
+      bars: totals.length,
+      worst: totals.length
+        ? Math.max(...totals.map((value) => Math.abs(value - plot)))
+        : Infinity,
+    };
+  })();
+
   host.remove();
-  return { report, pixels, exportShape };
+  return { report, pixels, exportShape, ordinal, bandStack };
 });
 
 /* ── 一、版面 ── */
@@ -402,6 +605,89 @@ ok(
   !((noUnit?.axisTitles || [])[0] || "").includes("（）"),
   (noUnit?.axisTitles || [])[0] || "",
 );
+
+/* ── 二之二、服務水準等級軸：六級就要有六格，點要落在自己那一格上 ── */
+{
+  const o = result.ordinal || {};
+  const tickTexts = (o.ticks || []).map((t) => t.text);
+  ok(
+    "服務水準縱軸要印滿 A～F 六級（舊版會漏掉 C）",
+    tickTexts.join("") === "FEDCBA",
+    `由上到下實際印出：${tickTexts.join("、") || "（沒有刻度）"}`,
+  );
+  const dTick = (o.ticks || []).find((t) => t.text === "D");
+  const eTick = (o.ticks || []).find((t) => t.text === "E");
+  /* 測資前六點是 D(3)、後四點是 E(4)。 */
+  const dDots = (o.dots || []).slice(0, 6);
+  const eDots = (o.dots || []).slice(6);
+  ok(
+    "前置：等級測資要真的畫出十個點（畫不出來的話下面幾項會變成恆真）",
+    (o.dots || []).length === 10,
+    `${(o.dots || []).length} 個點`,
+  );
+  const dGap = dTick && dDots.length
+    ? Math.max(...dDots.map((p) => Math.abs(p.y - dTick.y)))
+    : Infinity;
+  const eGap = eTick && eDots.length
+    ? Math.max(...eDots.map((p) => Math.abs(p.y - eTick.y)))
+    : Infinity;
+  ok(
+    "標成 D 的點要**畫在**標著 D 的那一條格線上（舊版差了半級）",
+    dGap <= 0.5,
+    `最大誤差 ${Number.isFinite(dGap) ? dGap.toFixed(1) : "－"}px`,
+  );
+  ok(
+    "標成 E 的點要畫在標著 E 的那一條格線上",
+    eGap <= 0.5,
+    `最大誤差 ${Number.isFinite(eGap) ? eGap.toFixed(1) : "－"}px`,
+  );
+  const labelTexts = (o.labels || []).map((l) => l.text);
+  const single = result.report.find((r) => r.name === "單一計畫大圖（序數等級）");
+  ok(
+    "單一計畫等級圖的縱軸名稱也要寫「（A～F）」",
+    (single?.axisTitles || [])[0] === "最差服務水準等級（A～F）",
+    (single?.axisTitles || [])[0] || "（沒有縱軸名稱）",
+  );
+  ok(
+    "每一個資料點旁邊要直接標出等級，不用回頭對照縱軸",
+    labelTexts.length === 10,
+    `標了 ${labelTexts.length} 個：${labelTexts.join("") || "（一個都沒有）"}`,
+  );
+  ok(
+    "點上標的等級要與該點的值一致（DDDDDDEEEE）",
+    labelTexts.join("") === "DDDDDDEEEE",
+    labelTexts.join("") || "（一個都沒有）",
+  );
+}
+
+{
+  const crossOrdinal = result.report.find((r) => r.name === "跨計畫圖（序數等級）");
+  const ticks = (crossOrdinal?.yTicks || []).join("");
+  ok(
+    "等級軸的名稱要寫「（A～F）」，不可以寫成「（等級）」那種重複的講法",
+    (crossOrdinal?.axisTitles || [])[0] === "最差服務水準等級（A～F）",
+    (crossOrdinal?.axisTitles || [])[0] || "（沒有縱軸名稱）",
+  );
+  ok(
+    "Manager 跨計畫圖的服務水準縱軸也要印滿六級",
+    ticks === "FEDCBA",
+    `實際印出：${(crossOrdinal?.yTicks || []).join("、") || "（沒有刻度）"}`,
+  );
+}
+
+{
+  const stack = result.bandStack || {};
+  ok(
+    "前置：三段圖要真的畫出柱子（畫不出來的話下一項會變成恆真）",
+    stack.bars >= 4,
+    `${stack.bars} 根柱`,
+  );
+  ok(
+    "三段堆疊起來要剛好等於整根柱（少一段代表有路段憑空消失）",
+    Number.isFinite(stack.worst) && stack.worst <= 0.5,
+    `繪圖區高 ${Number(stack.plot).toFixed(1)}px，最大誤差 ${Number(stack.worst).toFixed(2)}px`,
+  );
+}
 
 /* ── 三、刻度要落在好看的整數上 ── */
 const kmh = result.report.find((r) => r.name === "單一計畫大圖 24 季（km/h）");

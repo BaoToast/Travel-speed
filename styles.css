@@ -600,7 +600,22 @@ th.has-col-filter {
 .trend-panel .panel-head p{margin:7px 0 0;max-width:640px;color:#65798a;line-height:1.65}
 .trend-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:stretch}
 .trend-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.3}
-.trend-actions button small{font-size:10px;opacity:.85;font-weight:400}
+/*
+ * ⚠️ 按鈕裡的補充說明一定要 color:inherit。
+ *
+ * 使用者實際回報：「下載可編輯趨勢圖按鍵的說明文字被按鈕本身的深藍色
+ * 遮蓋住了，看不清楚寫了什麼。」
+ *
+ * 成因：這幾顆按鈕在 .panel-head 裡，而上面有一條 `.panel-head small
+ * {color:var(--muted)}`（灰 #697985）。這一條沒有寫 color，所以那顆
+ * 深藍底的 .primary 按鈕上，說明文字就被塗成灰色——灰字配深藍底的
+ * 對比只有 1.6:1，等於看不見。白底的 .outline 按鈕剛好看得到，
+ * 所以只有其中一顆壞掉，很容易被漏掉。
+ *
+ * color:inherit 讓說明文字跟著按鈕自己的文字色走：深藍底就是白字、
+ * 白底就是深藍字，日後再加任何配色的按鈕都不會再出這個問題。
+ */
+.trend-actions button small{font-size:10px;opacity:.85;font-weight:400;color:inherit}
 .trend-controls{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin:18px 0 14px}
 .trend-controls>label{display:flex;gap:8px;align-items:center;padding:9px 13px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc;font-size:13px;color:#24465d}
 .trend-controls select{padding:6px 8px;border:1px solid #bdccd5;border-radius:6px;background:#fff;font:inherit}
@@ -647,3 +662,63 @@ th.has-col-filter {
 .manager-data>summary b{color:#0f6f68}
 .manager-data>summary small{font-weight:400;font-size:11.5px;color:#8296a4}
 /* .trend-series-label 的外觀同樣在 CHART_SVG_STYLE，理由見上方註解。 */
+
+/* ── Manager 專屬的三段分界設定 ──────────────────────────────
+ * 刻意與各計畫那一組長得像，但底色不同、而且標題直接寫「只用於這一頁」，
+ * 免得使用者以為在這裡改也會改到專案包裡的設定。
+ */
+.manager-band-rule{margin:14px 0 18px;padding:14px 16px;border:1px solid #d3e2ea;border-left:4px solid var(--blue);border-radius:9px;background:#f6fbfd}
+.manager-band-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.manager-band-head b{color:var(--navy)}
+.manager-band-head span{font-size:12px;color:#4d6878}
+.manager-band-head button{margin-left:auto;padding:7px 12px;font-size:12px}
+.manager-band-rule>p{margin:8px 0 12px;font-size:12.5px;line-height:1.7;color:#5a7488}
+.manager-band-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.manager-band-controls label{display:flex;gap:7px;align-items:center;padding:8px 12px;border:1px solid #cbd7dd;border-radius:8px;background:#fff;font-size:13px;color:#24465d}
+.manager-band-controls select{padding:5px 7px;border:1px solid #bdccd5;border-radius:6px;background:#fff;font:inherit}
+.manager-band-hint{font-size:12px;color:#697985}
+.manager-band-explanation{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.manager-band-explanation>span{padding:7px 11px;border:1px solid #dce5ea;border-radius:7px;background:#fff;font-size:12px;color:#3d5a6c}
+.manager-band-explanation .manager-band-warn{flex:1 1 100%;border-color:#f0d3a8;background:#fff7e9;color:#7a5a2e;line-height:1.7}
+.manager-band-chart-title{margin:22px 0 10px;font-size:15px;color:var(--navy)}
+@media(max-width:850px){.manager-band-controls{flex-direction:column;align-items:stretch}.manager-band-head button{margin-left:0}}
+
+/* ── 側欄分區與頁面區塊的色條 ────────────────────────────────
+ * 五個功能區各有一個代表色。側欄的按鈕左緣與頁面裡對應區塊的左緣
+ * 用同一個顏色，眼睛就能把「我在側欄點的」與「畫面上這一塊」連起來。
+ */
+.nav-zone{padding:14px 15px 5px;font-size:10.5px;letter-spacing:.16em;color:#7fa6bd;font-weight:800}
+nav>.nav-zone:first-child{padding-top:4px}
+nav button[data-view]{position:relative}
+nav button.zone-in::before,nav button.zone-set::before,nav button.zone-data::before,
+nav button.zone-chart::before,nav button.zone-out::before{
+  content:"";position:absolute;left:5px;top:11px;bottom:11px;width:3px;border-radius:2px;opacity:.85}
+nav button.zone-in::before{background:#8f82cf}
+nav button.zone-set::before{background:#5aa9e0}
+nav button.zone-data::before{background:#e0bb63}
+nav button.zone-chart::before{background:#5cc09a}
+nav button.zone-out::before{background:#dc7d74}
+nav button[data-view]{padding-left:20px}
+
+/* 尖峰彙總留下的捷徑列：設定搬走了，但「現在是怎麼判的」不能藏起來。 */
+.rule-shortcut{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:15px 20px;border-left:4px solid var(--blue)}
+.rule-shortcut>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.rule-shortcut b{color:var(--navy);font-size:13.5px}
+.rule-shortcut span{font-size:12.5px;color:#4d6878;line-height:1.7}
+.rule-shortcut button{margin-left:auto;white-space:nowrap}
+@media(max-width:700px){.rule-shortcut button{margin-left:0;width:100%}}
+
+/* 圖與說明文字：寬螢幕並排，窄螢幕說明自動移到圖的下方。 */
+.figure-with-note{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,300px);gap:14px;align-items:start}
+@media(max-width:1080px){.figure-with-note{grid-template-columns:1fr}}
+.figure-with-note>.trend-script{margin:0}
+
+
+/* ── 側欄捲軸 ────────────────────────────────────────────────
+ * 側欄本來就是 flex 直排、選單自己可捲（見上方 aside 與 nav 的規則），
+ * 分區之後項目變多、更常需要捲動，但深色底上看不到捲軸，
+ * 使用者不會知道下面還有東西。這裡只補捲軸的外觀，不動版面。
+ */
+aside nav::-webkit-scrollbar{width:6px}
+aside nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:3px}
+aside nav{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent}

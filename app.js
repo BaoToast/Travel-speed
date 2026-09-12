@@ -45,6 +45,15 @@ const emptyState = () => ({
   losRules: {},
   /* 三段分界（順暢／尚可／壅塞）依計畫分別保存，見 DEFAULT_BAND_RULE。 */
   bandRules: {},
+  /*
+   * Manager 比較頁自己的三段分界，**與 bandRules 完全隔離**。
+   *
+   * 使用者的原話：「Manager 比較區也能設定多少分級是順暢…不能跟單一計畫
+   * 的分級混在一起使用。」所以這一把尺獨立存放、獨立套用，
+   * 改它不會動到任何一個計畫的 bandRules，反之亦然。
+   * 沒設定過時是 undefined，由 managerBands() 回預設。
+   */
+  managerBandRule: undefined,
   imports: [],
   last: { year: "", quarter: "2", time: "" },
   /*
@@ -459,6 +468,7 @@ const titles = {
   summary: "尖峰彙總",
   roadadmin: "路段管理",
   speed: "路段速限",
+  standards: "判定標準",
   charts: "LOS 圖表",
   conclusion: "結論草稿產生器",
   manager: "Manager 比較",
@@ -478,12 +488,18 @@ function go(id) {
   if (id === "charts") {
     renderCharts();
     renderTrendPanel();
+    renderBandPanel();
+  }
+  /* 判定標準頁的兩組設定要在進頁時反映目前計畫的值。 */
+  if (id === "standards") {
+    renderLosRules?.();
+    renderBandRule();
   }
 }
 document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => go(b.dataset.view)));
 document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.48";
+document.querySelector(".brand small").textContent = "正式版 v2.20.54";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 const printGuide = document.createElement("button");
 printGuide.className = "outline";
@@ -494,8 +510,8 @@ printGuide.onclick = () => window.print();
 const manualLinks = document.createElement("div");
 manualLinks.className = "manual-download";
 manualLinks.innerHTML =
-  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.48.pdf" download>下載完整新手手冊 PDF</a>' +
-  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.48.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
+  '<a class="primary" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.54.pdf" download>下載完整新手手冊 PDF</a>' +
+  '<a class="outline" href="./manuals/交通服務水準分析系統_新手使用手冊_v2.20.54.docx" download title="可自行編輯的 Word 版本">Word 版</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -544,7 +560,7 @@ const managerTrendBox = document.createElement("div");
 managerTrendBox.id = "managerTrendBox";
 managerTrendBox.className = "panel manager-trend";
 managerTrendBox.innerHTML =
-  '<div class="trend-controls"><label>指標<select id="managerTrendMetric"></select></label><label>日別<select id="managerTrendDay"></select></label><label id="managerTrendGradeWrap">共同壅塞門檻<select id="managerTrendGrade"></select></label></div><div id="managerTrendChart" class="trend-charts"></div><div id="managerTrendScript" class="trend-script"></div>';
+  '<div class="trend-controls"><label>指標<select id="managerTrendMetric"></select></label><label>日別<select id="managerTrendDay"></select></label></div><div class="manager-band-rule"><div class="manager-band-head"><b>跨計畫共同分界（只用於這一頁）</b><span id="managerBandSummary"></span><button class="outline" id="managerBandReset">恢復預設</button></div><p>各計畫自己的三段分界原封不動，這一頁一律改用同一把尺——不然縱軸雖然同名，分子卻不是同一件事，比例不能直接比較。</p><div class="manager-band-controls"><label>順暢：A 到<select id="managerBandSmoothEnd"></select></label><label>壅塞：<select id="managerBandCongestedStart"></select>到 F</label><span class="manager-band-hint">尚可＝中間剩下的等級，自動計算</span><button class="primary" id="managerBandApply">套用</button></div><div id="managerBandExplanation" class="manager-band-explanation"></div></div><div class="figure-with-note"><div id="managerTrendChart" class="trend-charts"></div><div id="managerTrendScript" class="trend-script"></div></div><h4 class="manager-band-chart-title">跨計畫三段組成</h4><div class="figure-with-note"><div id="managerBandChart" class="trend-charts"></div><div id="managerBandScript" class="trend-script"></div></div>';
 /*
  * 掛在「資料明細」那個收合區塊**前面**——圖是主角，表是下一層。
  * 不要用已經被移除的 #managerChartGrid 當錨點：那個元素在這一版拿掉了，
@@ -3188,6 +3204,7 @@ $("applyBandRule").onclick = async () => {
     return toast("順暢的下界必須排在壅塞的上界之前");
   state.bandRules[p.code] = { smoothEnd, congestedStart };
   renderBandRule();
+  renderRuleShortcut();
   rebuild();
   await save();
   toast(`三段分法已保存：${bandLabels().congested}；趨勢圖的佔比指標改為「${bandLabels().congestedShareLabel}」`);
@@ -3197,6 +3214,7 @@ $("resetBandRule").onclick = async () => {
   if (!p) return toast("請先建立或選擇計畫");
   delete state.bandRules[p.code];
   renderBandRule();
+  renderRuleShortcut();
   rebuild();
   await save();
   toast("三段分法已恢復預設（順暢 A、B／尚可 C、D／壅塞 E、F）");
@@ -3427,6 +3445,205 @@ function download(data, name, type = "application/json") {
 function downloadBlob(blob, name) {
   triggerDownload(URL.createObjectURL(blob), name);
 }
+
+/**
+ * 把一張或多張圖表 SVG 變成高解析 PNG 交給使用者。
+ *
+ * ⚠️ **多張時一律打包成一個 ZIP，不可以連續觸發多次下載。**
+ *
+ * 使用者實測回報：「LOS 圖表選擇下載高解析圖片，右下角提示成功 6 張圖，
+ * 但實際上我只收到一張。」——瀏覽器對「同一個手勢連續自動下載多個檔案」
+ * 有節流：Chrome 會跳「要下載多個檔案嗎？」的許可，沒允許就只有第一個
+ * 會過，而且**不會拋出任何錯誤**。舊版的提示是照迴圈次數數的，
+ * 所以它數了 6 次、說了 6 張，實際只有 1 張。
+ *
+ * 一個 ZIP 只觸發一次下載，就沒有節流問題，提示的數字也一定是真的。
+ * 只有一張時直接給 PNG——為了一張圖叫使用者解壓縮是多餘的。
+ */
+async function svgFigureToPngBlob(svg, scale = 2) {
+  const box = svg.viewBox.baseVal;
+  const canvas = document.createElement("canvas");
+  canvas.width = box.width * scale;
+  canvas.height = box.height * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  /* 白底：透明底貼到深色版面上，圖上的字會看不見。 */
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, box.width, box.height);
+  const image = new Image();
+  const svgText = new XMLSerializer().serializeToString(svg);
+  await new Promise((done, fail) => {
+    image.onload = done;
+    image.onerror = fail;
+    image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText);
+  });
+  ctx.drawImage(image, 0, 0, box.width, box.height);
+  return new Promise((done) => canvas.toBlob(done, "image/png"));
+}
+
+const safeFileName = (text) => String(text || "").replace(/[\\/:*?"<>|]/g, "_");
+
+/**
+ * items：[{ svg, name }]。name 不含副檔名。
+ * 回傳實際交出去的檔案數與形式，呼叫端據此寫提示——**提示不可以自己數**。
+ */
+async function downloadChartImages(items, zipName) {
+  const usable = items.filter((item) => item.svg);
+  if (!usable.length) return { count: 0, mode: "none" };
+  if (usable.length === 1) {
+    const blob = await svgFigureToPngBlob(usable[0].svg);
+    downloadBlob(blob, safeFileName(usable[0].name) + ".png");
+    return { count: 1, mode: "png" };
+  }
+  if (typeof JSZip !== "function") {
+    /*
+     * 沒有 JSZip 時退回逐張下載，但**要明講可能被瀏覽器擋掉**，
+     * 不可以照張數報成功——那正是舊版說謊的地方。
+     */
+    for (const item of usable) {
+      const blob = await svgFigureToPngBlob(item.svg);
+      downloadBlob(blob, safeFileName(item.name) + ".png");
+      await new Promise((done) => setTimeout(done, 400));
+    }
+    return { count: usable.length, mode: "loose" };
+  }
+  const zip = new JSZip();
+  for (const item of usable) {
+    const blob = await svgFigureToPngBlob(item.svg);
+    zip.file(safeFileName(item.name) + ".png", blob);
+  }
+  const out = await zip.generateAsync({ type: "blob" });
+  downloadBlob(out, safeFileName(zipName) + ".zip");
+  return { count: usable.length, mode: "zip" };
+}
+
+/** 依實際交出去的形式寫提示，不照迴圈次數數。 */
+function chartDownloadToast(result) {
+  if (!result.count) return toast("目前沒有可以下載的圖");
+  /*
+   * ⚠️ 這裡**不可以斷言「已下載」**。
+   *
+   * 網頁沒有辦法知道檔案有沒有真的落到使用者的下載資料夾：瀏覽器可能
+   * 因為「這個網站曾經被拒絕自動下載多個檔案」而靜靜擋掉，網頁端收不到
+   * 任何錯誤。使用者實測回報過兩次「提示說已下載，但一個檔案都沒有」。
+   * 所以提示只說「送出了什麼」，並附上找不到檔案時該去哪裡看。
+   */
+  const hint = "；若下載資料夾裡沒有，請檢查瀏覽器是否封鎖了本站的自動下載";
+  if (result.mode === "png")
+    return toast("已送出 1 張圖（只有圖，說明文字請用「複製說明文字」）" + hint);
+  if (result.mode === "zip")
+    return toast(
+      `已送出 1 個 ZIP，裡面有 ${result.count} 張圖（瀏覽器會擋住連續多次下載，所以改成一次給一包）` +
+        hint,
+    );
+  return toast(
+    `已送出 ${result.count} 張圖，但瀏覽器可能只允許第一張——請確認下載資料夾，缺的話一張一張下載`,
+  );
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+ *  側欄分區
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 使用者的話：「讓使用者一目了然知道資料匯入區、參數設定區、圖表區、
+ * 多計劃比較區等等各大功能區。」
+ *
+ * 舊版側欄是 15 個項目平鋪，順序照當初做出來的先後排，不是照使用流程，
+ * 所以找東西只能從頭看到尾。
+ *
+ * ⚠️ 這裡**只重排與加小標，不動任何功能、不改任何 data-view 與按鈕 id**。
+ * 三支系統用同一套分區名稱與順序，換一支也不用重新學。
+ *
+ * ⚠️ 一定要等所有擴充頁都掛好才能排（Manager 比較、匯入紀錄、資料維護、
+ * 路段管理在 app.js 裡插入，成果交付在 quality-extension.js 裡插入，
+ * 而那一支是在 app.js 之後才載入的）。所以掛在 window load 上跑。
+ */
+const NAV_ZONES = [
+  { title: "", views: ["home", "guide"] },
+  { title: "一　資料匯入", views: ["import", "importlog"] },
+  { title: "二　參數設定", views: ["setup", "roadadmin", "speed", "standards"] },
+  { title: "三　資料檢視", views: ["detail", "summary"] },
+  { title: "四　圖表與比較", views: ["charts", "manager"] },
+  { title: "五　產出與維護", views: ["conclusion", "delivery", "maintenance", "backup"] },
+];
+/** 每一區的代表色，與頁面裡區塊左緣的色條同一組。 */
+const NAV_ZONE_CLASS = ["", "zone-in", "zone-set", "zone-data", "zone-chart", "zone-out"];
+
+
+/**
+ * 尖峰彙總留下的「目前套用的判定標準」摘要。
+ *
+ * 設定本身搬到「判定標準」頁了，但**「現在是怎麼判的」不能跟著藏起來**——
+ * 看表格的人必須知道這些等級是用哪一組門檻、哪一種三段分法算出來的。
+ */
+function renderRuleShortcut() {
+  const node = $("ruleShortcutText");
+  if (!node) return;
+  const rules = rulesFor();
+  const labels = bandLabels();
+  const grades = labels.grades;
+  node.textContent =
+    "門檻 A≥" + rules.A + "／B≥" + rules.B + "／C≥" + rules.C +
+    "／D≥" + rules.D + "／E≥" + rules.E +
+    "　·　順暢 " + grades.smooth.join("、") +
+    "／尚可 " + (grades.fair.length ? grades.fair.join("、") : "無") +
+    "／壅塞 " + grades.congested.join("、");
+}
+document.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-goto]");
+  if (button) go(button.dataset.goto);
+});
+
+function arrangeNav() {
+  const nav = document.querySelector("nav");
+  if (!nav || nav.dataset.zoned === "1") return;
+  const buttons = new Map(
+    [...nav.querySelectorAll("button[data-view]")].map((node) => [
+      node.dataset.view,
+      node,
+    ]),
+  );
+  const placed = new Set();
+  const frag = document.createDocumentFragment();
+  NAV_ZONES.forEach((zone, index) => {
+    const own = zone.views.map((view) => buttons.get(view)).filter(Boolean);
+    if (!own.length) return;
+    if (zone.title) {
+      const head = document.createElement("div");
+      head.className = "nav-zone";
+      head.textContent = zone.title;
+      frag.append(head);
+    }
+    own.forEach((button) => {
+      /*
+       * ⚠️ classList.add("") 會丟 SyntaxError（DOMTokenList 不接受空字串），
+       * 而「開始」那一區本來就沒有色條。有色條才加。
+       */
+      const zoneClass = NAV_ZONE_CLASS[index];
+      if (zoneClass) button.classList.add(zoneClass);
+      frag.append(button);
+      placed.add(button.dataset.view);
+    });
+  });
+  /*
+   * 沒有列在分區表裡的按鈕（日後新增而忘了歸類）**不可以憑空消失**，
+   * 一律排在最後並標成「其他」——寧可版面不好看，也不要有人找不到功能。
+   */
+  const rest = [...buttons.entries()].filter(([view]) => !placed.has(view));
+  if (rest.length) {
+    const head = document.createElement("div");
+    head.className = "nav-zone";
+    head.textContent = "其他";
+    frag.append(head);
+    rest.forEach(([, button]) => frag.append(button));
+  }
+  nav.append(frag);
+  nav.dataset.zoned = "1";
+}
+window.addEventListener("load", arrangeNav);
+globalThis.arrangeNav = arrangeNav;
+
 function projectPackage() {
   const p = activeProject();
   if (!p) return null;
@@ -3649,6 +3866,12 @@ function purgeProject(code) {
     if (k.startsWith(`${code}|`)) delete state.reportDrafts[k];
   state.operations = (state.operations || []).filter((x) => x.projectCode !== code);
   delete state.losRules[code];
+  /*
+   * 三段分界也要跟著刪。留著的話，日後建立同代碼的新計畫會**沉默地**
+   * 沿用上一個計畫的分界——圖上分成三段，而使用者從來沒設定過那把尺。
+   * 這與 losRules 是同一類問題，那一項已經有守門，這一項是補上的。
+   */
+  delete state.bandRules[code];
   delete state.anomalyRules[code];
   if (state.activeCode === code) state.activeCode = state.projects[0]?.code || "";
   clearPendingPreview();
@@ -3892,7 +4115,39 @@ function managerFilteredRows() {
   return managerFilter.filter(managerSearchedRows());
 }
 /** Manager 的圖要看哪一個指標、哪一個日別。 */
-var managerTrendState = { metric: "congestedShare", day: "ALL", congestedStart: null };
+/**
+ * Manager 的圖要看哪一個指標、哪一個日別，以及 **Manager 自己那一把尺**。
+ *
+ * ⚠️ Manager 的三段分界與各計畫的分界**完全隔離**，這是使用者明確要求的：
+ *
+ *   「Manager 比較區也能設定多少分級是順暢，多少是尚可，多少是壅塞，
+ *     不能跟單一計畫的分級混在一起使用。因為如果只有單一計畫，可能適用
+ *     AB 是順暢 CD 是尚可 EF 是壅塞，也可能兩個不同分級的混在一起比較，
+ *     一起比較時可能有新的分級規則。」
+ *
+ * 所以：
+ *  一、Manager 這把尺存在 state.managerBandRule，**不寫回任何一個計畫**
+ *      的 state.bandRules；各專案包裡的 bandRule 原封不動。
+ *  二、跨計畫的每一張圖、每一個指標名稱、每一段講稿，一律只用這把尺。
+ *      混用的話縱軸雖然同名，分子卻不是同一件事，比例不能直接比較。
+ *  三、畫面上要寫出現在用的是哪一把尺，看圖的人才知道怎麼分的。
+ */
+var managerTrendState = { metric: "congestedShare", day: "ALL" };
+
+/** Manager 自己的三段分界。壞掉的設定一律回預設，不讓畫面掛掉。 */
+function managerBands() {
+  const saved = state.managerBandRule || {};
+  const smoothEnd = LOS_GRADES.indexOf(String(saved.smoothEnd));
+  const congestedStart = LOS_GRADES.indexOf(String(saved.congestedStart));
+  const ok =
+    smoothEnd >= 0 &&
+    congestedStart >= 0 &&
+    smoothEnd < congestedStart &&
+    congestedStart <= LOS_GRADES.length - 1;
+  return ok
+    ? { smoothEnd: LOS_GRADES[smoothEnd], congestedStart: LOS_GRADES[congestedStart] }
+    : { ...DEFAULT_BAND_RULE };
+}
 
 /**
  * 跨計畫趨勢圖。
@@ -3909,19 +4164,36 @@ function renderManagerCharts(rows) {
   box.hidden = !packs.length;
   if (!packs.length) return;
 
+  /*
+   * 各專案包自己的分界只拿來當「第一次進來時的預設值」——大家都一樣時
+   * 就沿用，不一樣時回系統預設。之後一律以使用者在這一頁設的為準，
+   * 而且**永遠不寫回任何一個計畫**。
+   */
   const starts = [...new Set(packs.map((pack) =>
     pack.bandRule?.congestedStart || DEFAULT_BAND_RULE.congestedStart,
   ))];
-  if (!managerTrendState.congestedStart)
-    managerTrendState.congestedStart = starts.length === 1
-      ? starts[0]
-      : DEFAULT_BAND_RULE.congestedStart;
-  const populationLabel = managerTrendState.day === "ALL" ? "路段日別紀錄" : "路段";
-  const sampleLabel = managerTrendState.day === "ALL" ? "筆路段日別紀錄" : "條";
-  $("managerTrendGrade").innerHTML = LOS_GRADES.map((grade) =>
-    `<option value="${grade}"${grade === managerTrendState.congestedStart ? " selected" : ""}>${grade} 級以下</option>`,
-  ).join("");
-  $("managerTrendGradeWrap").hidden = managerTrendState.metric !== "congestedShare";
+  const smoothEnds = [...new Set(packs.map((pack) =>
+    pack.bandRule?.smoothEnd || DEFAULT_BAND_RULE.smoothEnd,
+  ))];
+  if (!state.managerBandRule)
+    state.managerBandRule = {
+      smoothEnd: smoothEnds.length === 1 ? smoothEnds[0] : DEFAULT_BAND_RULE.smoothEnd,
+      congestedStart: starts.length === 1 ? starts[0] : DEFAULT_BAND_RULE.congestedStart,
+    };
+  const bands = managerBands();
+  managerTrendState.congestedStart = bands.congestedStart;
+  renderManagerBandRule(bands, packs);
+  /*
+   * ⚠️ 母體一律是「路段」「條」。
+   *
+   * 日別拆分前為了描述「平日＋假日混在一起」那份資料，把母體改稱
+   * 「路段日別紀錄」——那是在替混合後的數字找一個講得通的名字。
+   * 日別拆分後兩種日別是**各畫一條線**（見下方 managerDays），
+   * 一條線裡就只有一種日別，母體本來就是路段；再叫「路段日別紀錄」
+   * 反而是錯的，會讓人以為那條線含兩種日別。
+   */
+  const populationLabel = "路段";
+  const sampleLabel = "條";
 
   /* 指標下拉：名稱要跟著各自的分界走，所以用目前選的日別重新組一次 */
   const metricSelect = $("managerTrendMetric");
@@ -3935,6 +4207,12 @@ function renderManagerCharts(rows) {
       )}</option>`,
   ).join("");
   const days = [...new Set(rows.map((row) => row.day))].filter(Boolean).sort();
+  /*
+   * 刪除／重匯專案包後，先前選的日別可能已不存在。若仍沿用舊值，
+   * 下拉畫面看似回到第一項，實際計算卻會拿不存在的日別，整頁圖表變空白。
+   */
+  if (managerTrendState.day !== "ALL" && !days.includes(managerTrendState.day))
+    managerTrendState.day = "ALL";
   $("managerTrendDay").innerHTML =
     '<option value="ALL">平日＋假日</option>' +
     days
@@ -3948,17 +4226,31 @@ function renderManagerCharts(rows) {
    * state.manager 存的是整份專案包：{ project: {code,name}, summaries, bandRule… }。
    * 要取 pack.project.code，不是 pack.code——這一段第一次寫錯過。
    */
+  /*
+   * ⚠️ 「平日＋假日」是**兩條線同時顯示**，不是混成一條。
+   *
+   * 混在一起算出來的平均旅行速率不對應平日、也不對應假日；壅塞佔比會變成
+   * 兩種日別的混合比例。業主問「所以平日到底多少」的時候答不出來。
+   * 這與單一計畫那張圖是同一條規則（見 trendDaysForState 的說明）。
+   */
+  const managerDays =
+    managerTrendState.day === "ALL"
+      ? days.slice()
+      : [managerTrendState.day];
   const groups = packs
-    .map((pack) => {
+    .flatMap((pack) => managerDays.map((day) => ({ pack, day })))
+    .map(({ pack, day }) => {
       const code = pack.project?.code || "";
       const own = rows.filter(
-        (row) =>
-          row.projectCode === code &&
-          (managerTrendState.day === "ALL" || row.day === managerTrendState.day),
+        (row) => row.projectCode === code && row.day === day,
       );
       return {
         code: code,
-        name: pack.project?.name || code,
+        day: day,
+        /* 同時顯示兩種日別時，名稱要帶出是哪一種，否則兩條線分不出來。 */
+        name:
+          (pack.project?.name || code) +
+          (managerDays.length > 1 ? "（" + day + "）" : ""),
         rows: own,
       };
     })
@@ -3994,7 +4286,225 @@ function renderManagerCharts(rows) {
         : "") +
       "</section>"
     : "";
+
+  renderManagerBandChart(groups, bands);
 }
+
+/**
+ * 跨計畫三段圖：一個計畫一根柱，看「哪一個計畫壅塞的比例最高」。
+ *
+ * ⚠️ **一律用 Manager 這一把尺**（bands 由呼叫端傳進來，就是
+ * managerBands()），不用各計畫自己的分界。混用的話「壅塞佔比」在甲計畫
+ * 指的是 E、F，在乙計畫可能是 D 以下，兩根柱子放在一起比較毫無意義。
+ *
+ * ⚠️ 取**各計畫最後一個算得出來的季度**，不是把所有季度加起來——
+ * 各計畫的季度起訖不一樣，加起來的柱子不對應任何一個時間點。
+ * 每一根柱子上都標出是哪一季、幾條路段。
+ */
+
+/**
+ * 跨計畫三段圖的 SVG：一個計畫一根 100% 堆疊柱。
+ *
+ * 與單一計畫那張圖共用同一套配色與圖例寫法（CHART_SVG_STYLE），
+ * 看的人不必重新學一次怎麼讀。
+ *
+ * ⚠️ 每一根柱子下面要標出**是哪一季、幾條路段**。各計畫最新一季不見得
+ * 是同一季，不標的話兩根柱子看起來像同一個時間點的比較。
+ */
+function managerBandChartSvg(items, bands) {
+  const width = 780;
+  const height = 372;
+  const left = 84;
+  const right = width - 30;
+  const top = 56;
+  const bottom = height - 84;
+  const py = (value) => bottom - (value / 100) * (bottom - top);
+
+  let grid = "";
+  for (let line = 0; line <= 4; line += 1) {
+    const y = top + ((bottom - top) * line) / 4;
+    grid +=
+      `<line class="trend-grid" x1="${left}" y1="${y}" x2="${right}" y2="${y}"/>` +
+      `<text class="trend-tick" x="${left - 8}" y="${y + 4}" text-anchor="end">${100 - line * 25}%</text>`;
+  }
+
+  const slot = (right - left) / items.length;
+  const barWidth = Math.max(10, Math.min(64, slot * 0.55));
+  const ORDER = [
+    { key: "congested", cls: "band-congested", name: "壅塞", dark: false },
+    { key: "fair", cls: "band-fair", name: "尚可", dark: true },
+    { key: "smooth", cls: "band-smooth", name: "順暢", dark: false },
+  ];
+  let bars = "";
+  let labels = "";
+  items.forEach((item, index) => {
+    const cx = left + slot * (index + 0.5);
+    const x = cx - barWidth / 2;
+    let cursor = 0;
+    ORDER.forEach((part) => {
+      const share = item.last.shares[part.key];
+      if (!(share > 0)) return;
+      const y0 = py(cursor + share);
+      const y1 = py(cursor);
+      cursor += share;
+      bars +=
+        `<rect class="${part.cls}" x="${x}" y="${y0}" width="${barWidth}" height="${Math.max(0.6, y1 - y0)}" rx="1"><title>${esc(
+          `${item.name}　${part.name}：${item.last.counts[part.key]} 條（${share.toFixed(1)}%）`,
+        )}</title></rect>`;
+      if (y1 - y0 >= 15 && barWidth >= 26)
+        labels +=
+          `<text class="${part.dark ? "band-seg-label-dark" : "band-seg-label"}" x="${cx}" y="${(y0 + y1) / 2 + 4}" text-anchor="middle">${share.toFixed(0)}%</text>`;
+    });
+    if (item.last.unknown)
+      labels += `<text class="trend-tick" x="${cx}" y="${py(100) - 5}" text-anchor="middle">＋${item.last.unknown} 未判定</text>`;
+    /* 計畫名稱太長就截斷，寧可截也不要衝出畫布外被切掉一半。 */
+    labels +=
+      `<text class="trend-tick" x="${cx}" y="${bottom + 18}" text-anchor="middle">${esc(
+        clampLabel(item.name, slot - 6, 11),
+      )}</text>` +
+      `<text class="trend-tick" x="${cx}" y="${bottom + 39}" text-anchor="middle">${esc(
+        managerPeriodLabel(item.last.period, item.code) + "　N=" + item.last.graded,
+      )}</text>`;
+  });
+
+  const groups = bandGradeGroups(bands);
+  const legendItems = [
+    { key: "smooth", name: "順暢", grades: groups.smooth },
+    { key: "fair", name: "尚可", grades: groups.fair },
+    { key: "congested", name: "壅塞", grades: groups.congested },
+  ].filter((item) => item.grades.length);
+  const legendGap = 150;
+  const legendStart =
+    left + (right - left) / 2 - ((legendItems.length - 1) * legendGap) / 2;
+  const legend = legendItems
+    .map((item, index) => {
+      const x = legendStart + index * legendGap;
+      const cls =
+        item.key === "smooth"
+          ? "band-smooth"
+          : item.key === "fair"
+            ? "band-fair"
+            : "band-congested";
+      return (
+        `<rect class="band-legend-key ${cls}" x="${x - 46}" y="${top - 30}" width="12" height="12" rx="2"/>` +
+        `<text class="band-legend-text" x="${x - 30}" y="${top - 20}">${esc(
+          item.name + "（" + item.grades.join("、") + "）",
+        )}</text>`
+      );
+    })
+    .join("");
+
+  return (
+    `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="跨計畫三段組成">` +
+    CHART_SVG_STYLE +
+    `<text class="axis-title" transform="translate(20,${top + (bottom - top) / 2}) rotate(-90)" text-anchor="middle">路段佔比（%）</text>` +
+    `<text class="axis-title" x="${left + (right - left) / 2}" y="${height - 12}" text-anchor="middle">計畫（各自最新一季）</text>` +
+    legend +
+    grid +
+    `<line class="trend-axis" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}"/>` +
+    bars +
+    labels +
+    "</svg>"
+  );
+}
+
+function renderManagerBandChart(groups, bands) {
+  const box = $("managerBandChart");
+  if (!box) return;
+  const items = (groups || [])
+    .map((group) => {
+      const series = buildBandSeries(group.rows, {
+        bands,
+        comparePeriod: (a, b) => periodIndex(a) - periodIndex(b),
+      });
+      const valued = series.points.filter((point) => point.shares);
+      const last = valued[valued.length - 1] || null;
+      return { name: group.name, code: group.code, series, last };
+    })
+    .filter((item) => item.last);
+  managerBandItems = items;
+  box.innerHTML = items.length
+    ? managerBandChartSvg(items, bands)
+    : '<p class="empty-block">目前的篩選條件下沒有可比較的資料。</p>';
+
+  const script = $("managerBandScript");
+  if (!script) return;
+  if (!items.length) {
+    script.innerHTML = "";
+    return;
+  }
+  const groupsOf = bandGradeGroups(bands);
+  const worst = items.reduce((acc, item) =>
+    item.last.shares.congested > acc.last.shares.congested ? item : acc,
+  );
+  const best = items.reduce((acc, item) =>
+    item.last.shares.congested < acc.last.shares.congested ? item : acc,
+  );
+  const lines = [
+    "這張圖用**同一把尺**比較各計畫最新一季的三段組成：順暢＝" +
+      groupsOf.smooth.join("、") +
+      "；尚可＝" +
+      (groupsOf.fair.length ? groupsOf.fair.join("、") : "無") +
+      "；壅塞＝" +
+      groupsOf.congested.join("、") +
+      "。各計畫自己的分界沒有被更動。",
+    "壅塞比例最高的是 " +
+      worst.name +
+      "：" +
+      worst.last.shares.congested.toFixed(1) +
+      "%（" +
+      worst.last.counts.congested +
+      " / " +
+      worst.last.graded +
+      " 條，" +
+      managerPeriodLabel(worst.last.period, worst.code) +
+      "）。",
+  ];
+  if (best !== worst)
+    lines.push(
+      "最低的是 " +
+        best.name +
+        "：" +
+        best.last.shares.congested.toFixed(1) +
+        "%（" +
+        best.last.counts.congested +
+        " / " +
+        best.last.graded +
+        " 條，" +
+        managerPeriodLabel(best.last.period, best.code) +
+        "）。",
+    );
+  const periods = [...new Set(items.map((item) => item.last.period))];
+  if (periods.length > 1)
+    lines.push(
+      "⚠️ 各計畫最新一季**不是同一季**（" +
+        items
+          .map((item) => item.name + "＝" + managerPeriodLabel(item.last.period, item.code))
+          .join("、") +
+        "）。比的是「各自最新的狀況」，不是同一個時間點。",
+    );
+  const thin = items.filter((item) => item.last.graded < 5);
+  if (thin.length)
+    lines.push(
+      "⚠️ " +
+        thin.map((item) => item.name + "（" + item.last.graded + " 條）").join("、") +
+        " 判定得出等級的路段不到 5 條，比例會跳得很大，不要照著講「差很多」。",
+    );
+  const unknown = items.filter((item) => item.last.unknown);
+  if (unknown.length)
+    lines.push(
+      unknown.map((item) => item.name + "（＋" + item.last.unknown + " 條）").join("、") +
+        " 有判定不出等級的路段，那幾條沒有進到分母裡。",
+    );
+  script.innerHTML =
+    '<section class="trend-script-item"><h4>跨計畫三段組成</h4>' +
+    lines
+      /* 計畫名稱來自匯入包，必須先跳脫再套粗體標記，避免名稱被當成 HTML。 */
+      .map((line) => "<p>" + esc(line).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>") + "</p>")
+      .join("") +
+    "</section>";
+}
+var managerBandItems = [];
 var managerTrendSeries = [];
 var managerTrendDescription = null;
 
@@ -4029,6 +4539,20 @@ var CHART_SVG_STYLE =
   ".trend-dot{fill:#0f6f68;stroke:#fff;stroke-width:2;cursor:pointer}" +
   ".trend-empty-text{fill:#8296a4;font-size:13px}" +
   ".trend-series-label{font-size:11.5px;font-weight:700}" +
+  ".trend-point-label{fill:#0f6f68;font-size:11.5px;font-weight:700}" +
+  /*
+   * 三段圖的配色。
+   * 三段而不是六段的理由見 DEFAULT_BAND_RULE 的長註解——六段配色過不了
+   * 對比檢核，色盲讀者一定會有兩段分不出來。這三個色除了色相不同，
+   * **明度也刻意拉開**（順暢最亮、壅塞最暗），列印成灰階也分得出來。
+   */
+  ".band-smooth{fill:#2f8f6b}" +
+  ".band-fair{fill:#d9a441}" +
+  ".band-congested{fill:#b4453d}" +
+  ".band-empty{fill:#eef2f4}" +
+  ".band-seg-label{fill:#fff;font-size:10.5px;font-weight:700}" +
+  ".band-seg-label-dark{fill:#3c4b55;font-size:10.5px;font-weight:700}" +
+  ".band-legend-text{fill:#4a5f6b;font-size:11px;font-weight:700}" +
   ".chart-title{fill:#173b59;font-size:13.5px;font-weight:700}" +
   ".axis-title{fill:#5b7183;font-size:11.5px;font-weight:700}" +
   "</style>";
@@ -4194,12 +4718,15 @@ function crossProjectChartSvg(list) {
   let min;
   let max;
   let tickDigits = 0;
+  /* 等級是序數，一格一級；理由與單一計畫圖相同（見那一段的長註解）。 */
+  let gridCount = 4;
   if (sample.unit === "%") {
     min = 0;
     max = 100;
   } else if (sample.ordinal) {
     min = 0;
     max = 5;
+    gridCount = 5;
   } else {
     const lo = Math.min(...values);
     const hi = Math.max(...values);
@@ -4218,9 +4745,9 @@ function crossProjectChartSvg(list) {
   const py = (value) => bottom - ((Number(value) - min) / span) * (bottom - top);
 
   let grid = "";
-  for (let line = 0; line <= 4; line += 1) {
-    const y = top + ((bottom - top) * line) / 4;
-    const value = max - (span * line) / 4;
+  for (let line = 0; line <= gridCount; line += 1) {
+    const y = top + ((bottom - top) * line) / gridCount;
+    const value = max - (span * line) / gridCount;
     grid +=
       `<line class="trend-grid" x1="${left}" y1="${y}" x2="${right}" y2="${y}"/>` +
       `<text class="trend-tick" x="${left - 8}" y="${y + 4}" text-anchor="end">${esc(
@@ -4250,7 +4777,7 @@ function crossProjectChartSvg(list) {
     .join("");
 
   const sampleUnit = sample.ordinal
-    ? sample.label + "（等級）"
+    ? sample.label + "（A～F）"
     : axisTitleText(sample.label, sample.unit);
   const axisMarkup =
     `<text class="axis-title" transform="translate(20,${
@@ -4297,7 +4824,7 @@ function crossProjectChartSvg(list) {
           if (!point || point.value == null) return "";
           return `<circle class="trend-dot" style="fill:${color}" data-period="${esc(period)}" data-project="${esc(
             series.projectCode,
-          )}" cx="${px(index)}" cy="${py(point.value)}" r="4.5"><title>${esc(
+          )}" data-day="${esc(series.day || "")}" cx="${px(index)}" cy="${py(point.value)}" r="4.5"><title>${esc(
             `${series.projectName}　${managerPeriodLabel(period, series.projectCode)}　${
               series.label
             }：${trendFormatValue(point.value, series)}${
@@ -4311,7 +4838,14 @@ function crossProjectChartSvg(list) {
       /* 線尾直接寫計畫名稱與路段數，省掉來回對照圖例 */
       const last = [...series.points].reverse().find((point) => point.value != null);
       const lastIndex = last ? periods.indexOf(last.period) : -1;
-      if (last && lastIndex >= 0)
+      if (last && lastIndex >= 0) {
+        /*
+         * 正式趨勢資料使用 valueSize；舊備份或獨立呼叫端可能只有 gradedSize／
+         * sampleSize。圖上不可因此出現 N=undefined，並且名稱寬度也必須用
+         * 實際會畫出的 N 計算，否則線尾標籤會互相重疊。
+         */
+        const lastSize =
+          last.valueSize ?? last.gradedSize ?? last.sampleSize ?? 0;
         endLabels.push({
           color,
           x: px(lastIndex) + 10,
@@ -4320,17 +4854,20 @@ function crossProjectChartSvg(list) {
           text:
             clampLabel(
               series.projectName,
-              width - (px(lastIndex) + 10) - nameWidth(`（N=${last.valueSize}）`) - 8,
+              width - (px(lastIndex) + 10) - nameWidth(`（N=${lastSize}）`) - 8,
               labelFont,
-            ) + `（N=${last.valueSize}）`,
+            ) + `（N=${lastSize}）`,
           /* 真的長到要截斷時，滑鼠移上去仍看得到完整名稱。 */
-          full: `${series.projectName}（N=${last.valueSize}）`,
+          full: `${series.projectName}（N=${lastSize}）`,
         });
+      }
       return path + dots;
     })
     .join("");
 
-  const endMarkup = spreadLabels(endLabels, 15, height - 84)
+  /* 11.5px 粗體中文字在不同瀏覽器實際外框可能超過 15px；留 18px 才不會
+   * 在兩個計畫末季等級相同時上下相疊。 */
+  const endMarkup = spreadLabels(endLabels, 18, height - 84)
     .map(
       (item) =>
         `<text class="trend-series-label" style="fill:${item.color}" x="${item.x}" y="${item.y}"><title>${esc(
@@ -5193,9 +5730,11 @@ function renderAll() {
   renderSummaries();
   renderLosRules();
   renderBandRule();
+  renderRuleShortcut();
   renderLimits();
   renderCharts();
   renderTrendPanel();
+  renderBandPanel();
   renderManager();
   renderImportLog();
   refreshMaintenance();
@@ -5244,20 +5783,47 @@ load();
 var trendState = { road: "ALL", day: "ALL", metrics: ["congestedShare"] };
 
 /** 目前計畫、依畫面選擇篩出來的彙總紀錄。趨勢圖與說明共用這一批。 */
-function trendRowsForState() {
+function trendRowsForState(day) {
+  var wanted = day === undefined ? trendState.day : day;
   return state.summaries.filter(function (row) {
     if (row.projectCode !== state.activeCode) return false;
     if (trendState.road !== "ALL" && row.road !== trendState.road) return false;
-    if (trendState.day !== "ALL" && row.day !== trendState.day) return false;
+    if (wanted !== "ALL" && row.day !== wanted) return false;
     return true;
   });
 }
 
-function trendScopeText() {
+/**
+ * 這次要畫哪幾種日別。
+ *
+ * ⚠️ 「平日＋假日」的意思是**兩種各畫一張、同時顯示**，
+ * 不是把兩種混在一起算成一個數字。
+ *
+ * 混在一起算出來的東西沒有應用意義：平均旅行速率會變成一個
+ * 「不對應平日也不對應假日」的速率，壅塞路段佔比會變成兩種日別的
+ * 混合比例——業主問「所以平日到底多少」的時候答不出來。
+ * 這是使用者明確指出過的坑：「平日+假日 這類條件，指的是同時顯示，
+ * 因為這類計算，加總起來沒有應用的意義」。
+ */
+function trendDaysForState() {
+  if (trendState.day !== "ALL") return [trendState.day];
+  /* 只列出目前真的有資料的日別，避免畫出一張永遠空白的圖。 */
+  var found = [];
+  state.summaries.forEach(function (row) {
+    if (row.projectCode !== state.activeCode) return;
+    if (trendState.road !== "ALL" && row.road !== trendState.road) return;
+    if (row.day && found.indexOf(row.day) < 0) found.push(row.day);
+  });
+  found.sort();
+  return found.length ? found : ["平日"];
+}
+
+function trendScopeText(day) {
+  var shown = day === undefined ? trendState.day : day;
   return (
     (trendState.road === "ALL" ? "全部路段" : trendState.road) +
     "（" +
-    (trendState.day === "ALL" ? "平日＋假日" : trendState.day) +
+    (shown === "ALL" ? "平日＋假日" : shown) +
     "）"
   );
 }
@@ -5281,7 +5847,13 @@ function trendChartSvg(series, small) {
    * 等級是序數，不是量。縱軸寫「（級）」會讓人以為 A 到 F 之間可以取
    * 平均，所以名稱後面直接標明是等級刻度。
    */
-  if (series.ordinal) axisTitle = series.label + "（等級）";
+  /*
+   * 序數指標的縱軸名稱寫「（A～F）」，不寫「（等級）」。
+   *
+   * 「最差服務水準等級（等級）」讀起來重複；「（A～F）」同時做到兩件事：
+   * 說明這條軸不是量而是等級，而且直接告訴看圖的人刻度的範圍是什麼。
+   */
+  if (series.ordinal) axisTitle = series.label + "（A～F）";
   var axisMarkup =
     '<text class="axis-title" transform="translate(' +
     (small ? 15 : 20) +
@@ -5334,6 +5906,19 @@ function trendChartSvg(series, small) {
   } else if (series.ordinal) {
     min = 0;
     max = 5;
+    /*
+     * ⚠️ 等級是**序數**，每一條格線必須剛好對應一個等級。
+     *
+     * 這裡以前沿用「大圖 4 格、小圖 2 格」，但等級有 A～F 共六級、
+     * 跨距是 5。4 格的話刻度值會是 5／3.75／2.5／1.25／0，
+     * 經 Math.round 之後印出 F／E／D／B／A——**C 整個不見了**，
+     * 而且那個「D」其實畫在 2.5 的高度上。於是資料點在 3（D）
+     * 的位置，看起來會落在標著 D 與標著 E 的兩條線中間，
+     * 圖上就出現「這一點在 D 與 E 之間，卻說它是 D」。
+     *
+     * 六級就是六條線，一格一級，這是唯一不會錯位的畫法。
+     */
+    gridCount = 5;
   } else {
     var lo = Math.min.apply(null, values);
     var hi = Math.max.apply(null, values);
@@ -5396,6 +5981,8 @@ function trendChartSvg(series, small) {
       return (
         '<circle class="trend-dot" data-period="' +
         esc(point.period) +
+        '" data-day="' +
+        esc(series.day || "") +
         '" cx="' +
         px(index) +
         '" cy="' +
@@ -5408,6 +5995,53 @@ function trendChartSvg(series, small) {
       );
     })
     .join("");
+
+  /*
+   * 等級要直接標在點上。
+   *
+   * 使用者的原話：「希望能在這個趨勢圖上標示出該資料點是什麼服務水準，
+   * 這樣不用一直往左對照 Y 軸」——對照長條圖上方那一排「D D E E」。
+   * 等級只有一個字母，寬度固定，所以照實際字寬算得下就全部印。
+   *
+   * ⚠️ 兩件事一定要處理，否則會變成「修了一半」：
+   *  一、最高等級 F 的點就畫在 top 上，標籤放上面會被 viewBox 切掉。
+   *      畫不下時改放點的下面。
+   *  二、季度多的時候字會擠在一起。與 X 軸標籤共用同一支 labelStride，
+   *      不是自己另外估一套。
+   */
+  var pointLabels = "";
+  if (series.ordinal) {
+    var letters = points.map(function (point) {
+      return point.value == null
+        ? ""
+        : TREND_GRADES[Math.round(Number(point.value))] || "";
+    });
+    var labelStrideValue = labelStride(
+      letters.filter(Boolean),
+      right - left,
+      tickSize,
+    );
+    var lift = small ? 9 : 12;
+    pointLabels = points
+      .map(function (point, index) {
+        if (point.value == null || !letters[index]) return "";
+        if (index % labelStrideValue !== 0 && index !== points.length - 1)
+          return "";
+        var y = py(point.value);
+        /* 上面放不下就放下面——寧可換邊，也不要被切掉。 */
+        var labelY = y - lift < top + 2 ? y + lift + 2 : y - lift;
+        return (
+          '<text class="trend-point-label" x="' +
+          px(index) +
+          '" y="' +
+          labelY +
+          '" text-anchor="middle">' +
+          esc(letters[index]) +
+          "</text>"
+        );
+      })
+      .join("");
+  }
 
   /*
    * X 軸標籤要間隔印。
@@ -5459,6 +6093,7 @@ function trendChartSvg(series, small) {
     xLabels +
     lines +
     dots +
+    pointLabels +
     "</svg>"
   );
 }
@@ -5508,21 +6143,41 @@ function trendPointTooltip(point, series) {
 
 /** 把目前勾選的指標各算一份 series。圖、說明、匯出全部讀這個回傳值。 */
 function trendSeriesList() {
-  var rows = trendRowsForState();
   var congestedStart = bandsFor().congestedStart;
-  var populationLabel = trendState.day === "ALL" ? "路段日別紀錄" : "路段";
-  var sampleLabel = trendState.day === "ALL" ? "筆路段日別紀錄" : "條";
-  return trendState.metrics.map(function (metric) {
-    return buildTrendSeries(rows, {
-      metric: metric,
-      congestedStart: congestedStart,
-      populationLabel: populationLabel,
-      sampleLabel: sampleLabel,
-      comparePeriod: function (a, b) {
-        return periodIndex(a) - periodIndex(b);
-      },
+  var days = trendDaysForState();
+  var list = [];
+  /*
+   * 一個指標 × 一種日別＝一張圖。
+   *
+   * 選「平日＋假日」時是**兩張圖同時顯示**（勾一個指標就是兩張小圖，
+   * 橫軸對齊，可以直接上下對照），不是把兩種日別混成一條線——
+   * 混出來的數字不對應任何一種日別，業主問「平日到底多少」時答不出來。
+   *
+   * ⚠️ 因此母體名稱一律是「路段」「條」。
+   * 日別拆分前為了描述「平日＋假日混在一起」那份資料，把母體改稱
+   * 「路段日別紀錄」——那是在替混合後的數字找一個講得通的名字。
+   * 拆開之後每一張圖裡就只有一種日別，母體本來就是路段，
+   * 再叫「路段日別紀錄」反而是錯的（會讓人以為那張圖含兩種日別）。
+   */
+  trendState.metrics.forEach(function (metric) {
+    days.forEach(function (day) {
+      var series = buildTrendSeries(trendRowsForState(day), {
+        metric: metric,
+        congestedStart: congestedStart,
+        populationLabel: "路段",
+        sampleLabel: "條",
+        comparePeriod: function (a, b) {
+          return periodIndex(a) - periodIndex(b);
+        },
+      });
+      /* 日別要寫進標題與檔名，否則兩張圖長得一樣、匯出還會同名互相覆蓋。 */
+      series.day = day;
+      series.label =
+        days.length > 1 ? series.label + "（" + day + "）" : series.label;
+      list.push(series);
     });
   });
+  return list;
 }
 
 /** 說明文字。與圖同一份 series，不重算。 */
@@ -5530,13 +6185,293 @@ function trendDescriptions(list) {
   var labels = bandLabels();
   return list.map(function (series) {
     return describeTrendChart(series, {
-      scopeText: trendScopeText(),
+      /* 說明要講的是**這一張圖**的日別，不是選單上那個「平日＋假日」。 */
+      scopeText: trendScopeText(series.day),
       bandText: labels.congested.replace(/^壅塞（|）$/g, ""),
       showPeriod: function (period) {
         return projectPeriodLabel(period, state.activeCode);
       },
     });
   });
+}
+
+
+/**
+ * 三段圖：逐季的順暢／尚可／壅塞組成（100% 堆疊）。
+ *
+ * ── 為什麼是 100% 堆疊，不是三條折線或三根並排的柱 ──────────
+ * 這張圖回答的是「這一季的路段裡，有多少比例卡住了」。三段加起來
+ * 一定是 100%，堆疊柱把這件事直接畫出來；三條折線要看的人自己在心裡
+ * 相加，而並排的柱又會讓人去比「順暢的柱和壅塞的柱誰高」——那個比較
+ * 沒有意義。
+ *
+ * ⚠️ 每一段上直接標數字（幾條／百分比），不用回頭對照縱軸——
+ * 使用者明確要求過：「不用一直往左對照 Y 軸」。段太薄放不下就不印，
+ * 硬印會疊到隔壁那一段上。
+ *
+ * ⚠️ 分母是**判定得出等級的條數**，不是全部條數。判定不出來的那幾條
+ * 另外寫在柱子上方，不可以默默丟掉——丟掉的話「100% 壅塞」可能其實是
+ * 「唯一算得出來的那一條是壅塞」。
+ */
+function bandChartSvg(series, small) {
+  var width = small ? 380 : 780;
+  var height = small ? 232 : 366;
+  var left = small ? 58 : 84;
+  var right = width - (small ? 16 : 30);
+  var top = small ? 40 : 56;
+  var bottom = height - (small ? 52 : 72);
+  var tickSize = 11;
+  var points = series.points || [];
+  var drawable = points.filter(function (point) {
+    return point.shares;
+  });
+  if (!points.length || !drawable.length)
+    return (
+      '<svg viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="沒有資料">' +
+      CHART_SVG_STYLE +
+      '<text x="' + width / 2 + '" y="' + height / 2 +
+      '" text-anchor="middle" class="trend-empty-text">這個條件下沒有可繪製的資料</text></svg>'
+    );
+
+  var span = 100;
+  var py = function (value) {
+    return bottom - (value / span) * (bottom - top);
+  };
+  var grid = "";
+  for (var line = 0; line <= 4; line += 1) {
+    var y = top + ((bottom - top) * line) / 4;
+    var value = 100 - line * 25;
+    grid +=
+      '<line class="trend-grid" x1="' + left + '" y1="' + y + '" x2="' + right + '" y2="' + y + '"/>' +
+      '<text class="trend-tick" x="' + (left - 8) + '" y="' + (y + 4) + '" text-anchor="end">' +
+      value + "%</text>";
+  }
+
+  /* 柱寬：留白至少與柱同寬的一半，柱子才不會黏在一起。 */
+  var slot = (right - left) / points.length;
+  var barWidth = Math.max(6, Math.min(small ? 26 : 42, slot * 0.62));
+  var bars = "";
+  var labels = "";
+  var ORDER = [
+    { key: "congested", cls: "band-congested", dark: false },
+    { key: "fair", cls: "band-fair", dark: true },
+    { key: "smooth", cls: "band-smooth", dark: false },
+  ];
+  points.forEach(function (point, index) {
+    var cx = left + slot * (index + 0.5);
+    var x = cx - barWidth / 2;
+    if (!point.shares) {
+      /* 整季沒有資料：畫一個淺色空槽，看得出「這一季是空的」而不是 0%。 */
+      bars +=
+        '<rect class="band-empty" x="' + x + '" y="' + py(100) +
+        '" width="' + barWidth + '" height="' + (bottom - py(100)) + '" rx="2"/>';
+      return;
+    }
+    var cursor = 0;
+    ORDER.forEach(function (part) {
+      var share = point.shares[part.key];
+      if (!(share > 0)) return;
+      var y0 = py(cursor + share);
+      var y1 = py(cursor);
+      cursor += share;
+      bars +=
+        '<rect class="' + part.cls + '" x="' + x + '" y="' + y0 +
+        '" width="' + barWidth + '" height="' + Math.max(0.6, y1 - y0) + '" rx="1"><title>' +
+        esc(
+          projectPeriodLabel(point.period, state.activeCode) + "　" +
+          (part.key === "smooth" ? "順暢" : part.key === "fair" ? "尚可" : "壅塞") +
+          "：" + point.counts[part.key] + " 條（" + share.toFixed(1) + "%）",
+        ) +
+        "</title></rect>";
+      /* 段太薄就不印字——硬印會疊到隔壁那一段上。 */
+      if (y1 - y0 >= 14 && barWidth >= 22)
+        labels +=
+          '<text class="' + (part.dark ? "band-seg-label-dark" : "band-seg-label") +
+          '" x="' + cx + '" y="' + ((y0 + y1) / 2 + 4) + '" text-anchor="middle">' +
+          point.counts[part.key] + "</text>";
+    });
+    /*
+     * 判定不出等級的條數寫在柱子上方，不可以只藏在 tooltip 裡。
+     *
+     * ⚠️ 但季度一多（實測 24 季）柱子會很窄，第一根柱子的這行字會往左
+     * 蓋到縱軸最上面那個「100%」刻度上。放不下就不印——圖旁邊的說明文字
+     * 一定會講出「有幾季存在判定不出等級的路段」，資訊不會消失。
+     */
+    if (point.unknown) {
+      const text = "＋" + point.unknown + " 未判定";
+      let textWidth = 0;
+      for (let i = 0; i < text.length; i += 1)
+        textWidth += text.charCodeAt(i) > 255 ? tickSize : tickSize * 0.58;
+      const half = textWidth / 2;
+      if (cx - half > left + 2 && cx + half < right - 2)
+        labels +=
+          '<text class="trend-tick" x="' + cx + '" y="' + (py(100) - 2) +
+          '" text-anchor="middle">' + esc(text) + "</text>";
+    }
+  });
+
+  var periodTexts = points.map(function (point) {
+    return projectPeriodLabel(point.period, state.activeCode);
+  });
+  var stride = labelStride(periodTexts, right - left, tickSize);
+  var xLabels = points
+    .map(function (point, index) {
+      var show = index % stride === 0 || index === points.length - 1;
+      if (show && index !== points.length - 1 && stride > 1)
+        if (points.length - 1 - index < stride) show = false;
+      return show
+        ? '<text class="trend-tick" x="' + (left + slot * (index + 0.5)) +
+            '" y="' + (bottom + (small ? 23 : 18)) + '" text-anchor="middle">' +
+            esc(periodTexts[index]) + "</text>"
+        : "";
+    })
+    .join("");
+
+  /*
+   * 圖例畫在**圖裡面**，而且要寫出「哪幾級算這一段」。
+   * 畫在圖外的話，這張圖存成 PNG 貼進簡報之後，看的人不知道尺是怎麼訂的
+   * ——而那正是業主最可能當場質疑的地方。
+   */
+  var legendItems = (series.legend || []).filter(function (item) {
+    return item.grades && item.grades.length;
+  });
+  var legendGap = small ? 108 : 150;
+  var legendStart =
+    left + (right - left) / 2 - ((legendItems.length - 1) * legendGap) / 2;
+  var legend = legendItems
+    .map(function (item, index) {
+      var x = legendStart + index * legendGap;
+      var cls =
+        item.key === "smooth"
+          ? "band-smooth"
+          : item.key === "fair"
+            ? "band-fair"
+            : "band-congested";
+      return (
+        /* 圖例色塊多掛一個類別，量測時才分得出「這不是資料柱」。 */
+        '<rect class="band-legend-key ' + cls + '" x="' + (x - 46) + '" y="' + (top - 30) +
+        '" width="12" height="12" rx="2"/>' +
+        '<text class="band-legend-text" x="' + (x - 30) + '" y="' + (top - 20) + '">' +
+        esc(item.name + "（" + item.grades.join("、") + "）") + "</text>"
+      );
+    })
+    .join("");
+
+  return (
+    '<svg viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="' +
+    esc("三段分法組成 歷季變化") + '">' +
+    CHART_SVG_STYLE +
+    '<text class="axis-title" transform="translate(' + (small ? 15 : 20) + "," +
+    (top + (bottom - top) / 2) + ') rotate(-90)" text-anchor="middle">路段佔比（%）</text>' +
+    '<text class="axis-title" x="' + (left + (right - left) / 2) + '" y="' +
+    (height - (small ? 12 : 16)) + '" text-anchor="middle">季度</text>' +
+    legend +
+    grid +
+    '<line class="trend-axis" x1="' + left + '" y1="' + bottom + '" x2="' + right + '" y2="' + bottom + '"/>' +
+    xLabels +
+    bars +
+    labels +
+    "</svg>"
+  );
+}
+
+
+/**
+ * 三段圖面板。
+ *
+ * ⚠️ **平日與假日各畫一張，不加總**。這是使用者踩過的坑：
+ * 「把平日和假日的車輛數加總起來，是沒有意義的圖表」——三段圖同理，
+ * 把兩種日別的路段數堆進同一根柱子，那根柱子不對應任何一天。
+ */
+function renderBandPanel() {
+  var panel = $("bandPanel");
+  if (!panel) return;
+  var own = state.summaries.filter(function (row) {
+    return row.projectCode === state.activeCode;
+  });
+  panel.hidden = !own.length;
+  if (!own.length) return;
+
+  var bands = bandsFor();
+  var days = [...new Set(own.map(function (row) { return row.day; }))]
+    .filter(Boolean)
+    .sort();
+  if (!days.length) days = [""];
+  var seriesList = days.map(function (day) {
+    var rows = day ? own.filter(function (row) { return row.day === day; }) : own;
+    var series = buildBandSeries(rows, {
+      bands: bands,
+      comparePeriod: function (a, b) {
+        return periodIndex(a) - periodIndex(b);
+      },
+    });
+    series.day = day;
+    return series;
+  });
+
+  var small = seriesList.length > 1;
+  $("bandCharts").className = small ? "trend-charts trend-small" : "trend-charts";
+  $("bandCharts").innerHTML = seriesList
+    .map(function (series) {
+      return (
+        '<figure class="trend-figure">' +
+        (series.day ? "<figcaption>" + esc(series.day) + "</figcaption>" : "") +
+        bandChartSvg(series, small) +
+        "</figure>"
+      );
+    })
+    .join("");
+
+  /* 說明文字只讀上面那一份 series，不回頭重算。 */
+  $("bandScriptBox").innerHTML = seriesList
+    .map(function (series) {
+      var valued = series.points.filter(function (point) { return point.shares; });
+      if (!valued.length) return "";
+      var first = valued[0];
+      var last = valued[valued.length - 1];
+      var lines = [
+        "這張圖把 A～F 六級收成三段：" +
+          series.legend
+            .filter(function (item) { return item.grades.length; })
+            .map(function (item) { return item.name + "＝" + item.grades.join("、"); })
+            .join("；") +
+          "。分母是**判定得出等級**的路段數，不是全部路段數。",
+        "壅塞比例：從 " +
+          projectPeriodLabel(first.period, state.activeCode) + " 的 " +
+          first.shares.congested.toFixed(1) + "%（" + first.counts.congested + " / " + first.graded + " 條），到 " +
+          projectPeriodLabel(last.period, state.activeCode) + " 的 " +
+          last.shares.congested.toFixed(1) + "%（" + last.counts.congested + " / " + last.graded + " 條）。",
+      ];
+      var thin = valued.filter(function (point) { return point.graded > 0 && point.graded < 5; });
+      if (thin.length)
+        lines.push(
+          "⚠️ 有 " + thin.length + " 季判定得出等級的路段不到 5 條，比例會跳得很大——" +
+            "3 條的話比例只可能是 0%、33%、67%、100%，不要照著講「大幅上升」。",
+        );
+      var unknown = valued.filter(function (point) { return point.unknown; });
+      if (unknown.length)
+        lines.push(
+          "有 " + unknown.length + " 季存在判定不出等級的路段（柱子上方標「＋N 未判定」），" +
+            "那幾條沒有進到分母裡。",
+        );
+      var gaps = series.points.filter(function (point) { return !point.shares; });
+      if (gaps.length)
+        lines.push(
+          "有 " + gaps.length + " 季整季沒有資料（圖上是淺色的空槽），不是「那幾季 0%」。",
+        );
+      return (
+        '<div class="trend-script-item"><b>' +
+        esc(series.day ? series.day + " 三段組成" : "三段組成") +
+        "</b>" +
+        lines
+          .map(function (line) {
+            return "<p>" + esc(line).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>") + "</p>";
+          })
+          .join("") +
+        "</div>"
+      );
+    })
+    .join("");
 }
 
 function renderTrendPanel() {
@@ -5635,10 +6570,230 @@ function renderTrendPanel() {
 $("trendRoad").onchange = (e) => {
   trendState.road = e.target.value;
   renderTrendPanel();
+  renderBandPanel();
+};
+function legacyTrendDayChangeUnused(e) {
+  trendState.day = e.target.value;
+  renderTrendPanel();
+  renderBandPanel();
+}
+function legacyTrendMetricBoxesChangeUnused(e) {
+  const key = e.target?.dataset?.trendMetric;
+  if (!key) return;
+  const next = new Set(trendState.metrics);
+  if (e.target.checked) next.add(key);
+  else next.delete(key);
+  /*
+   * 至少要留一個指標。全部取消的話畫面會空掉，而使用者通常只是想
+   * 「換一個看」——那時候應該是換，不是變成空白。
+   */
+  if (!next.size) {
+    e.target.checked = true;
+    return toast("至少要勾選一個指標");
+  }
+  trendState.metrics = TREND_METRICS.map((m) => m.key).filter((k) => next.has(k));
+  renderTrendPanel();
+  renderBandPanel();
+}
+
+/*
+ * 點圖上的點 → 跳到尖峰彙總，並把篩選套上去。
+ *
+ * 使用者特別交代這一項「要確實能自動跳轉及篩選功能正確」，
+ * 所以這裡不是只捲動畫面：真的把搜尋框填成那一季，讓下面的表只剩那些列。
+ */
+function legacyTrendChartsClickUnused(e) {
+  const dot = e.target?.closest?.("[data-period]");
+  if (!dot) return;
+  const period = dot.dataset.period;
+  const search = $("summarySearch");
+  if (search) {
+    search.value = "";
+  }
+  summaryFilter.clearAll();
+  summaryFilter.set("期間", [period]);
+  if (dot.dataset.day) summaryFilter.set("日別", [dot.dataset.day]);
+  renderSummaries();
+  /*
+   * 直接呼叫 go()，不要靠 querySelector 去找一顆按鈕。
+   * 找按鈕的寫法在按鈕改名或搬家時會**安靜失效**——畫面沒跳過去，
+   * 但也不會報錯，使用者只會覺得「點了沒反應」。實測就踩到這一個。
+   */
+  go("summary");
+  setTimeout(() => {
+    $("summarySearch")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 120);
+  toast(
+    `已跳到尖峰彙總，並篩出 ${projectPeriodLabel(period, state.activeCode)}` +
+      (dot.dataset.day ? ` ${dot.dataset.day}` : "") +
+      " 的資料",
+  );
+}
+
+/*
+ * 可編輯 Excel。
+ *
+ * 沿用既有的 exportLosWorkbook()——它產生的是 OOXML 原生折線／長條圖
+ *（c:lineChart／c:barChart），資料表就在同一張工作表上，圖以儲存格範圍為
+ * 來源，所以在 Excel 裡改數字圖會跟著動。Excel 2007 以上、LibreOffice、
+ * WPS 都開得起來，不需要新版。
+ *
+ * 誠實說明（也寫在按鈕上）：Excel 匯出的是**逐路段的 LOS 與速率**，
+ * 不是畫面上這幾張「佔比／平均」的趨勢圖。那幾張目前只提供高解析 PNG。
+ * 原因是它們的資料是跨路段彙總出來的，要在 Excel 裡重現同一份彙總得再寫
+ * 一套公式，而兩套算法遲早會分岔——那正是這次要避免的事。
+ */
+/*
+ * 可編輯 Excel：**趨勢圖本身**變成原生 Excel 折線圖。
+ *
+ * 使用者的原話：「我下載下來，形成可編輯的圖，excel 裡面圖本身就是圖，
+ * 文字說明可以放在 excel 其他欄位，使用者可以針對圖做修正或直接拿去簡報使用。」
+ *
+ * 所以這一份活頁簿有三張表：數值（可改，改了圖跟著動）、原生折線圖、講稿文字。
+ * 講稿放在自己的工作表，**不印在圖上**——那些話是簡報者要用講的。
+ *
+ * ⚠️ 表格裡寫的是畫面上那張圖**已經算好的那一份數值**，不是把彙總邏輯用
+ * Excel 公式再實作一次。再實作一次就有第二套算法，兩套遲早分岔，
+ * 而分岔時沒有人會發現——使用者只會看到 Excel 與網頁不一樣。
+ */
+async function legacyTrendDownloadXlsxUnused() {
+  const list = trendSeriesList();
+  if (!list.length) return toast("請先勾選至少一個指標");
+  /*
+   * 平日與假日可能不是從同一季開始，也可能其中一種日別少一季。
+   * Excel 的共同類別軸必須取所有數列的季度聯集；若只拿第一張圖的季度，
+   * 第二張圖的值會被貼到錯的季別，甚至尾端被截掉。
+   */
+  const aligned = alignTrendSeriesForExcel(list, function (a, b) {
+    return periodIndex(a) - periodIndex(b);
+  });
+  const periods = aligned.periods;
+  if (!periods.length) return toast("目前的條件下沒有可匯出的季度");
+  const labels = periods.map(function (period) {
+    return projectPeriodLabel(period, state.activeCode);
+  });
+  /*
+   * 序數指標（最差服務水準等級）不匯出成折線——A～F 是等級不是量，
+   * 畫成折線會讓人以為 C 與 D 之間可以取平均。它的值留在說明工作表裡。
+   */
+  const series = aligned.series;
+  if (!series.length)
+    return toast("「最差服務水準等級」是等級不是數量，不適合做成折線圖；請再勾一個數值型指標");
+  const sections = trendDescriptions(list).map(function (description) {
+    return {
+      title: description.title,
+      /*
+       * caveats 是陣列（「判讀時要注意」可能有好幾條），不是單一字串。
+       * 寫成 description.caveat 會是 undefined，被 filter 掉之後整段
+       * 注意事項就靜靜消失——而那正是業主最可能當場問的一段。
+       */
+      lines: [description.meaning, description.observed]
+        .concat(description.caveats || [])
+        .filter(Boolean),
+    };
+  });
+  try {
+    const blob = await TrendExcel.build(series, periods, labels, sections);
+    downloadBlob(
+      blob,
+      ((state.activeCode || "計畫") + "_" + trendScopeText() + "_歷季趨勢.xlsx").replace(
+        /[\\/:*?"<>|]/g,
+        "_",
+      ),
+    );
+    toast("可編輯 Excel 已下載：圖是原生 Excel 折線圖，說明文字在「圖表說明」工作表");
+  } catch (e) {
+    toast(e.message || "Excel 匯出失敗");
+  }
+}
+
+/**
+ * 三段圖的說明文字：複製到剪貼簿。
+ *
+ * ⚠️ 這裡讀的是**畫面上那一份**（#bandScriptBox 的文字），不回頭重算。
+ * 重算會出現「畫面上寫 A、複製出來是 B」——而被貼進報告的是複製出來的那一份。
+ */
+async function legacyBandCopyScriptUnused() {
+  const box = $("bandScriptBox");
+  const text = (box?.innerText || "").trim();
+  if (!text) return toast("目前沒有可以複製的說明文字");
+  const full =
+    text + "\n\n本段文字由系統依圖上同一份資料自動產生，正式引用前請核對原始檔。";
+  try {
+    await navigator.clipboard.writeText(full);
+    toast("三段圖的說明文字已複製，可以直接貼進簡報或報告");
+  } catch {
+    download(full, `三段圖說明_${state.activeCode || "計畫"}.txt`);
+    toast("瀏覽器不允許複製，已改為下載成 .txt");
+  }
+}
+
+/** 多張三段圖合併成單一 ZIP，避免瀏覽器阻擋連續下載。 */
+$("bandDownloadPng").onclick = async () => {
+  const figures = [...document.querySelectorAll("#bandCharts .trend-figure")];
+  if (!figures.length) return toast("目前沒有可以下載的圖");
+  const result = await downloadChartImages(
+    figures.map((figure) => ({
+      svg: figure.querySelector("svg"),
+      name:
+        `${state.activeCode || "計畫"}_三段分法` +
+        (figure.querySelector("figcaption")?.textContent
+          ? "_" + figure.querySelector("figcaption").textContent
+          : ""),
+    })),
+    `${state.activeCode || "計畫"}_三段分法圖`,
+  );
+  chartDownloadToast(result);
+};
+
+async function legacyTrendCopyScriptUnused() {
+  const list = trendSeriesList();
+  if (!list.length) return toast("請先勾選指標");
+  const text = trendDescriptions(list).map(trendScript).join("\n\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("說明文字已複製，可以直接貼進簡報或報告");
+  } catch {
+    /* 沒有剪貼簿權限時不要靜靜失敗，改成下載成檔案 */
+    download(text, `趨勢圖說明_${state.activeCode || "計畫"}.txt`);
+    toast("瀏覽器不允許複製，已改為下載成 .txt");
+  }
+}
+
+/**
+ * 高解析度 PNG。
+ *
+ * 兩倍解析度、白底、圖片下方附說明文字——這樣沒有新版 Excel 的人
+ * 拿到一張圖就有完整的話可以講，直接貼進投影片即可。
+ * 透明底不行：貼到深色版面上文字會看不見。
+ */
+$("trendDownloadPng").onclick = async () => {
+  const figures = [...document.querySelectorAll("#trendCharts .trend-figure svg")];
+  if (!figures.length) return toast("目前沒有可以下載的圖");
+  const list = trendSeriesList();
+  const scope = trendState.road === "ALL" ? "全部路段" : trendState.road;
+  /*
+   * 匯出的圖**只有圖，不附說明文字**。
+   *
+   * 使用者的原話：「下載下來的圖本來就該只有圖，不能有文字，否則貼到簡報上時，
+   * 看到那些應該由簡報者說明的文字展示在上方這樣才奇怪。」——說明是給簡報者
+   * 講的，不是印在投影片上的。說明文字留在畫面上圖的旁邊，並且有一顆
+   * 「複製說明」可以貼進簡報備忘稿。
+   */
+  const result = await downloadChartImages(
+    figures.map((svg, index) => ({
+      svg,
+      /* label 已經帶了日別（見 trendSeriesList），這裡只補路段範圍。 */
+      name: `${state.activeCode || "計畫"}_${list[index]?.label || "趨勢圖"}_${scope}`,
+    })),
+    `${state.activeCode || "計畫"}_歷季趨勢圖_${scope}`,
+  );
+  chartDownloadToast(result);
 };
 $("trendDay").onchange = (e) => {
   trendState.day = e.target.value;
   renderTrendPanel();
+  renderBandPanel();
 };
 $("trendMetricBoxes").onchange = (e) => {
   const key = e.target?.dataset?.trendMetric;
@@ -5656,6 +6811,7 @@ $("trendMetricBoxes").onchange = (e) => {
   }
   trendState.metrics = TREND_METRICS.map((m) => m.key).filter((k) => next.has(k));
   renderTrendPanel();
+  renderBandPanel();
 };
 
 /*
@@ -5670,9 +6826,12 @@ $("trendCharts").onclick = (e) => {
   const period = dot.dataset.period;
   const search = $("summarySearch");
   if (search) {
-    search.value = period;
-    search.dispatchEvent(new Event("input", { bubbles: true }));
+    search.value = "";
   }
+  summaryFilter.clearAll();
+  summaryFilter.set("期間", [period]);
+  if (dot.dataset.day) summaryFilter.set("日別", [dot.dataset.day]);
+  renderSummaries();
   /*
    * 直接呼叫 go()，不要靠 querySelector 去找一顆按鈕。
    * 找按鈕的寫法在按鈕改名或搬家時會**安靜失效**——畫面沒跳過去，
@@ -5682,7 +6841,11 @@ $("trendCharts").onclick = (e) => {
   setTimeout(() => {
     $("summarySearch")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, 120);
-  toast(`已跳到尖峰彙總，並篩出 ${projectPeriodLabel(period, state.activeCode)} 的資料`);
+  toast(
+    `已跳到尖峰彙總，並篩出 ${projectPeriodLabel(period, state.activeCode)}` +
+      (dot.dataset.day ? ` ${dot.dataset.day}` : "") +
+      " 的資料",
+  );
 };
 
 /*
@@ -5714,9 +6877,11 @@ $("trendCharts").onclick = (e) => {
 $("trendDownloadXlsx").onclick = async () => {
   const list = trendSeriesList();
   if (!list.length) return toast("請先勾選至少一個指標");
-  const periods = list[0].points.map(function (point) {
-    return point.period;
+  /* 各日別可能涵蓋不同季度，Excel 類別軸使用全部數列的季度聯集。 */
+  const aligned = alignTrendSeriesForExcel(list, function (a, b) {
+    return periodIndex(a) - periodIndex(b);
   });
+  const periods = aligned.periods;
   if (!periods.length) return toast("目前的條件下沒有可匯出的季度");
   const labels = periods.map(function (period) {
     return projectPeriodLabel(period, state.activeCode);
@@ -5725,19 +6890,7 @@ $("trendDownloadXlsx").onclick = async () => {
    * 序數指標（最差服務水準等級）不匯出成折線——A～F 是等級不是量，
    * 畫成折線會讓人以為 C 與 D 之間可以取平均。它的值留在說明工作表裡。
    */
-  const series = list
-    .filter(function (item) {
-      return !item.ordinal;
-    })
-    .map(function (item) {
-      return {
-        label: item.label,
-        unit: item.unit,
-        values: item.points.map(function (point) {
-          return point.value;
-        }),
-      };
-    });
+  const series = aligned.series;
   if (!series.length)
     return toast("「最差服務水準等級」是等級不是數量，不適合做成折線圖；請再勾一個數值型指標");
   const sections = trendDescriptions(list).map(function (description) {
@@ -5767,6 +6920,28 @@ $("trendDownloadXlsx").onclick = async () => {
     toast(e.message || "Excel 匯出失敗");
   }
 };
+
+/**
+ * 三段圖的說明文字：複製到剪貼簿。
+ *
+ * ⚠️ 這裡讀的是**畫面上那一份**（#bandScriptBox 的文字），不回頭重算。
+ * 重算會出現「畫面上寫 A、複製出來是 B」——而被貼進報告的是複製出來的那一份。
+ */
+$("bandCopyScript").onclick = async () => {
+  const box = $("bandScriptBox");
+  const text = (box?.innerText || "").trim();
+  if (!text) return toast("目前沒有可以複製的說明文字");
+  const full =
+    text + "\n\n本段文字由系統依圖上同一份資料自動產生，正式引用前請核對原始檔。";
+  try {
+    await navigator.clipboard.writeText(full);
+    toast("三段圖的說明文字已複製，可以直接貼進簡報或報告");
+  } catch {
+    download(full, `三段圖說明_${state.activeCode || "計畫"}.txt`);
+    toast("瀏覽器不允許複製，已改為下載成 .txt");
+  }
+};
+
 $("trendCopyScript").onclick = async () => {
   const list = trendSeriesList();
   if (!list.length) return toast("請先勾選指標");
@@ -5788,48 +6963,6 @@ $("trendCopyScript").onclick = async () => {
  * 拿到一張圖就有完整的話可以講，直接貼進投影片即可。
  * 透明底不行：貼到深色版面上文字會看不見。
  */
-$("trendDownloadPng").onclick = async () => {
-  const figures = [...document.querySelectorAll("#trendCharts .trend-figure svg")];
-  if (!figures.length) return toast("目前沒有可以下載的圖");
-  const list = trendSeriesList();
-  for (let index = 0; index < figures.length; index += 1) {
-    const svg = figures[index];
-    const box = svg.viewBox.baseVal;
-    const scale = 2;
-    /*
-     * 匯出的圖**只有圖，不附說明文字**。
-     *
-     * 使用者的原話：「下載下來的圖本來就該只有圖，不能有文字，否則貼到簡報上時，
-     * 看到那些應該由簡報者說明的文字展示在上方這樣才奇怪。」——說明是給簡報者
-     * 講的，不是印在投影片上的。說明文字留在畫面上圖的旁邊，並且有一顆
-     * 「複製說明」可以貼進簡報備忘稿。
-     */
-    const canvas = document.createElement("canvas");
-    canvas.width = box.width * scale;
-    canvas.height = box.height * scale;
-    const ctx = canvas.getContext("2d");
-    ctx.scale(scale, scale);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, box.width, box.height);
-    const image = new Image();
-    const svgText = new XMLSerializer().serializeToString(svg);
-    await new Promise((done, fail) => {
-      image.onload = done;
-      image.onerror = fail;
-      image.src =
-        "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText);
-    });
-    ctx.drawImage(image, 0, 0, box.width, box.height);
-    const blob = await new Promise((done) => canvas.toBlob(done, "image/png"));
-    const name =
-      `${state.activeCode || "計畫"}_${list[index].label}_${trendScopeText()}.png`.replace(
-        /[\\/:*?"<>|]/g,
-        "_",
-      );
-    downloadBlob(blob, name);
-  }
-  toast(`已下載 ${figures.length} 張高解析圖片`);
-};
 
 /*
  * 現在匯出的圖**只有圖、沒有文字**，所以原本把圖說折行畫在圖片下方的
@@ -5849,9 +6982,110 @@ $("managerTrendDay").onchange = (e) => {
   managerTrendState.day = e.target.value;
   renderManager();
 };
-$("managerTrendGrade").onchange = (e) => {
-  managerTrendState.congestedStart = e.target.value;
+/**
+ * Manager 的三段分界設定介面。
+ *
+ * 與各計畫那一組刻意長得一樣（兩個下拉，中間「尚可」是算出來的），
+ * 但**存的地方不同、也不互相影響**。畫面上一定要寫清楚這一點，
+ * 否則使用者會以為在這裡改也會改到專案包裡的設定。
+ */
+function renderManagerBandRule(bands, packs) {
+  const smooth = $("managerBandSmoothEnd");
+  const congested = $("managerBandCongestedStart");
+  if (!smooth || !congested) return;
+  const congestedIndex = LOS_GRADES.indexOf(bands.congestedStart);
+  const smoothIndex = LOS_GRADES.indexOf(bands.smoothEnd);
+  /* 不合法的選項直接不列出來，比讓使用者選了才報錯好。 */
+  smooth.innerHTML = LOS_GRADES.slice(0, LOS_GRADES.length - 1)
+    .map((grade, index) =>
+      index < congestedIndex
+        ? `<option value="${grade}"${grade === bands.smoothEnd ? " selected" : ""}>${grade}</option>`
+        : "",
+    )
+    .join("");
+  congested.innerHTML = LOS_GRADES.map((grade, index) =>
+    index > smoothIndex
+      ? `<option value="${grade}"${grade === bands.congestedStart ? " selected" : ""}>${grade}</option>`
+      : "",
+  ).join("");
+  const groups = bandGradeGroups(bands);
+  $("managerBandSummary").textContent =
+    "目前：順暢 " + groups.smooth.join("、") +
+    "／尚可 " + (groups.fair.length ? groups.fair.join("、") : "無") +
+    "／壅塞 " + groups.congested.join("、");
+  /*
+   * 各計畫自己的尺與這一頁的尺不同時要明講——那正是使用者擔心的情形：
+   * 「兩個不同分級的混在一起比較」。不講的話圖看起來一切正常。
+   */
+  const differing = (packs || []).filter((pack) => {
+    const own = pack.bandRule || DEFAULT_BAND_RULE;
+    return (
+      (own.smoothEnd || DEFAULT_BAND_RULE.smoothEnd) !== bands.smoothEnd ||
+      (own.congestedStart || DEFAULT_BAND_RULE.congestedStart) !== bands.congestedStart
+    );
+  });
+  $("managerBandExplanation").innerHTML =
+    `<span><b>順暢（${esc(groups.smooth.join("、"))}）</b></span>` +
+    `<span><b>尚可（${groups.fair.length ? esc(groups.fair.join("、")) : "無"}）</b></span>` +
+    `<span><b>壅塞（${esc(groups.congested.join("、"))}）</b></span>` +
+    `<span>這一頁的佔比指標：<b>${esc(bands.congestedStart)} 級以下路段佔比</b></span>` +
+    (differing.length
+      ? `<span class="manager-band-warn">⚠️ 有 ${differing.length} 個計畫自己的分界與這一把尺不同（${esc(
+          differing
+            .map((pack) => pack.project?.name || pack.project?.code || "未命名")
+            .join("、"),
+        )}）。這一頁一律用上面這把尺重算，<b>不會改到那幾個專案包裡的設定</b>。</span>`
+      : "");
+}
+
+/*
+ * 兩個下拉互相限制，但**要能一次走到任何一組合法的分界**。
+ *
+ * ⚠️ 這裡踩過一次：選項是「順暢下界一定在壅塞上界之前」才列出來的，
+ * 所以目前是「順暢到 B／壅塞從 D 起」時，壅塞那一欄根本沒有 B 這個選項。
+ * 使用者想改成「順暢只有 A／壅塞從 B 起」時，先動哪一個都會被擋住。
+ * 改成任一欄變動就立刻重排另一欄的選項（還沒按套用，只是重排），
+ * 兩步之內一定到得了。
+ */
+function refreshManagerBandOptions() {
+  const smooth = $("managerBandSmoothEnd");
+  const congested = $("managerBandCongestedStart");
+  if (!smooth || !congested) return;
+  let smoothIndex = LOS_GRADES.indexOf(smooth.value);
+  let congestedIndex = LOS_GRADES.indexOf(congested.value);
+  if (smoothIndex < 0) smoothIndex = 0;
+  if (congestedIndex <= smoothIndex)
+    congestedIndex = Math.min(smoothIndex + 1, LOS_GRADES.length - 1);
+  renderManagerBandRule(
+    {
+      smoothEnd: LOS_GRADES[smoothIndex],
+      congestedStart: LOS_GRADES[congestedIndex],
+    },
+    state.manager || [],
+  );
+}
+$("managerBandSmoothEnd").onchange = refreshManagerBandOptions;
+$("managerBandCongestedStart").onchange = refreshManagerBandOptions;
+
+$("managerBandApply").onclick = async () => {
+  const smoothEnd = $("managerBandSmoothEnd").value;
+  const congestedStart = $("managerBandCongestedStart").value;
+  if (LOS_GRADES.indexOf(smoothEnd) >= LOS_GRADES.indexOf(congestedStart))
+    return toast("順暢的下界必須排在壅塞的上界之前");
+  /* ⚠️ 只寫 state.managerBandRule，**絕對不碰 state.bandRules**。 */
+  state.managerBandRule = { smoothEnd, congestedStart };
   renderManager();
+  await save();
+  toast(
+    `跨計畫共同分界已套用：壅塞＝${congestedStart} 到 F；各計畫自己的分界沒有被更動`,
+  );
+};
+
+$("managerBandReset").onclick = async () => {
+  delete state.managerBandRule;
+  renderManager();
+  await save();
+  toast("跨計畫共同分界已恢復預設（順暢 A、B／尚可 C、D／壅塞 E、F）");
 };
 /*
  * 點跨計畫圖上的點 → 展開下面的明細表並套上篩選。
@@ -5866,17 +7100,23 @@ $("managerTrendChart").onclick = (e) => {
   const details = document.querySelector(".manager-data");
   if (details) details.open = true;
   const search = $("managerSearch");
-  if (search) {
-    search.value = dot.dataset.period;
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  }
+  if (search) search.value = "";
+  $("managerProjectFilter").value = dot.dataset.project || "";
+  managerFilter.clearAll();
+  managerFilter.set("期間", [dot.dataset.period]);
+  if (dot.dataset.day) managerFilter.set("日別", [dot.dataset.day]);
+  renderManager();
   setTimeout(() => {
     document.querySelector(".manager-data")?.scrollIntoView({
       behavior: "smooth",
       block: "start",
     });
   }, 120);
-  toast(`已展開明細並篩出 ${dot.dataset.period} 的資料`);
+  toast(
+    `已展開明細並篩出 ${dot.dataset.project || ""} ${dot.dataset.period}` +
+      (dot.dataset.day ? ` ${dot.dataset.day}` : "") +
+      " 的資料",
+  );
 };
 $("managerCopyScript").onclick = async () => {
   if (!managerTrendDescription) return toast("目前沒有可複製的說明");
@@ -5890,13 +7130,21 @@ $("managerCopyScript").onclick = async () => {
   }
 };
 $("managerDownloadPng").onclick = async () => {
-  const svg = document.querySelector("#managerTrendChart svg");
-  if (!svg) return toast("目前沒有可以下載的圖");
-  await downloadSvgAsPng(
-    svg,
-    `跨計畫比較_${managerTrendSeries[0]?.label || "趨勢"}.png`,
+  /* 這一頁有兩張圖（歷季趨勢與三段組成），一起打包給使用者。 */
+  const result = await downloadChartImages(
+    [
+      {
+        svg: document.querySelector("#managerTrendChart svg"),
+        name: "跨計畫歷季趨勢",
+      },
+      {
+        svg: document.querySelector("#managerBandChart svg"),
+        name: "跨計畫三段組成",
+      },
+    ],
+    "跨計畫比較圖",
   );
-  toast("已下載高解析圖片");
+  chartDownloadToast(result);
 };
 
 /**

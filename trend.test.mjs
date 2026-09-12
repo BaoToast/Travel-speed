@@ -33,7 +33,36 @@ const {
   describeTrendChart,
   trendScript,
   trendMetricLabel,
+  alignTrendSeriesForExcel,
 } = require("./trend.js");
+
+test("Excel 匯出以所有數列的季度聯集精確對位，缺季保留空白", () => {
+  const aligned = alignTrendSeriesForExcel(
+    [
+      {
+        label: "平日",
+        unit: "km/h",
+        points: [
+          { period: "113Q1", value: 10 },
+          { period: "113Q3", value: 30 },
+        ],
+      },
+      {
+        label: "假日",
+        unit: "km/h",
+        points: [
+          { period: "113Q2", value: 20 },
+          { period: "113Q3", value: 33 },
+          { period: "113Q4", value: 40 },
+        ],
+      },
+    ],
+    (a, b) => Number(a.slice(0, 3)) * 4 + Number(a.at(-1)) - (Number(b.slice(0, 3)) * 4 + Number(b.at(-1))),
+  );
+  assert.deepEqual(aligned.periods, ["113Q1", "113Q2", "113Q3", "113Q4"]);
+  assert.deepEqual(aligned.series[0].values, [10, null, 30, null]);
+  assert.deepEqual(aligned.series[1].values, [null, 20, 33, 40]);
+});
 
 /** 每一季給一組等級，組出彙總紀錄。 */
 function rowsFrom(byPeriod, extra = []) {
@@ -493,4 +522,125 @@ test("跨計畫壅塞佔比必須套同一個共同門檻，不能各用各的�
   );
   assert.deepEqual(list.map((series) => series.congestedStart), ["E", "E"]);
   assert.deepEqual(list.map((series) => series.points[0].value), [50, 50]);
+});
+
+const Trend = require("./trend.js");
+
+/* ── 三段分法（順暢／尚可／壅塞）的組成 ───────────────────── */
+
+test("三段的分母是「判定得出等級」的條數，不是全部條數", () => {
+  /*
+   * ⚠️ 這一項守的是報告會不會寫錯。判定不出等級的那幾條若被算進分母，
+   * 壅塞比例會被稀釋；若被默默丟掉而不講出來，「100% 壅塞」可能其實是
+   * 「唯一算得出來的那一條是壅塞」。兩種都會被抄進報告。
+   */
+  const series = Trend.buildBandSeries(
+    [
+      { period: "113Q1", los: "A" },
+      { period: "113Q1", los: "C" },
+      { period: "113Q1", los: "E" },
+      { period: "113Q1", los: "" },
+      { period: "113Q1", los: "－" },
+    ],
+    { bands: { smoothEnd: "B", congestedStart: "E" } },
+  );
+  const point = series.points[0];
+  assert.equal(point.size, 5, "全部筆數");
+  assert.equal(point.graded, 3, "判定得出等級的筆數");
+  assert.equal(point.unknown, 2, "判定不出來的要數出來，不可以默默丟掉");
+  /* 分母是 3 不是 5：1/3 = 33.3%，不是 1/5 = 20%。 */
+  assert.equal(Math.round(point.shares.congested * 10) / 10, 33.3);
+  assert.notEqual(Math.round(point.shares.congested * 10) / 10, 20);
+});
+
+test("三段的分界一律由呼叫端傳進來，換一把尺結果就要跟著換", () => {
+  /*
+   * ⚠️ 這一項守的是使用者特別交代的事：Manager 有自己的尺，不能跟單一
+   * 計畫混用。同一批資料換一把尺，答案必須不同——若這裡在內部寫死或補
+   * 預設值，兩邊會得到同一個結果，而畫面上還各自標著不同的分界。
+   */
+  const rows = [
+    { period: "113Q1", los: "B" },
+    { period: "113Q1", los: "C" },
+    { period: "113Q1", los: "D" },
+    { period: "113Q1", los: "E" },
+  ];
+  const strict = Trend.buildBandSeries(rows, {
+    bands: { smoothEnd: "B", congestedStart: "E" },
+  }).points[0];
+  const loose = Trend.buildBandSeries(rows, {
+    bands: { smoothEnd: "A", congestedStart: "D" },
+  }).points[0];
+  assert.deepEqual(strict.counts, { smooth: 1, fair: 2, congested: 1 });
+  assert.deepEqual(loose.counts, { smooth: 0, fair: 2, congested: 2 });
+  assert.notDeepEqual(strict.counts, loose.counts, "換尺結果一定要不同");
+});
+
+test("整季沒有資料時 shares 要是 null，不可以是三個 0", () => {
+  /*
+   * 三個 0 會被畫成一根空柱（或高度 0 的柱），看起來像「那一季 0% 壅塞」。
+   * null 才畫得出「這一季沒調查」。
+   */
+  const series = Trend.buildBandSeries(
+    [
+      { period: "113Q1", los: "E" },
+      { period: "114Q1", los: "E" },
+    ],
+    { bands: { smoothEnd: "B", congestedStart: "E" } },
+  );
+  assert.deepEqual(
+    series.points.map((point) => point.period),
+    ["113Q1", "113Q2", "113Q3", "113Q4", "114Q1"],
+    "缺季要補齊，X 軸間距才對應真實時間",
+  );
+  assert.equal(series.points[1].shares, null);
+  assert.notDeepEqual(series.points[1].shares, {
+    smooth: 0,
+    fair: 0,
+    congested: 0,
+  });
+});
+
+test("圖例要寫出哪幾級算哪一段，中間那一段是算出來的", () => {
+  const series = Trend.buildBandSeries([{ period: "113Q1", los: "C" }], {
+    bands: { smoothEnd: "B", congestedStart: "E" },
+  });
+  assert.deepEqual(
+    series.legend.map((item) => [item.name, item.grades.join("")]),
+    [
+      ["順暢", "AB"],
+      ["尚可", "CD"],
+      ["壅塞", "EF"],
+    ],
+  );
+  /* 順暢與壅塞相鄰時，「尚可」是空的——空的就不可以硬湊出一段。 */
+  const noFair = Trend.buildBandSeries([{ period: "113Q1", los: "C" }], {
+    bands: { smoothEnd: "B", congestedStart: "C" },
+  });
+  assert.deepEqual(noFair.grades.fair, []);
+});
+
+test("三段的三個比例加起來一定是 100%，不可以有第四段或漏掉的等級", () => {
+  /*
+   * ⚠️ 六個等級必須恰好被三段瓜分完。少一級的話那幾條路段會憑空消失，
+   * 圖上看起來一切正常，但比例是錯的。
+   */
+  for (const bands of [
+    { smoothEnd: "A", congestedStart: "B" },
+    { smoothEnd: "B", congestedStart: "E" },
+    { smoothEnd: "D", congestedStart: "F" },
+  ]) {
+    const groups = Trend.bandGradeGroups(bands);
+    const all = [...groups.smooth, ...groups.fair, ...groups.congested];
+    assert.deepEqual(all, ["A", "B", "C", "D", "E", "F"], JSON.stringify(bands));
+    assert.equal(new Set(all).size, 6, "不可以有等級被算進兩段");
+    const point = Trend.buildBandSeries(
+      ["A", "B", "C", "D", "E", "F"].map((los) => ({ period: "113Q1", los })),
+      { bands },
+    ).points[0];
+    assert.equal(point.graded, 6);
+    const total =
+      point.shares.smooth + point.shares.fair + point.shares.congested;
+    assert.ok(Math.abs(total - 100) < 1e-9, `加起來是 ${total}`);
+  }
 });
