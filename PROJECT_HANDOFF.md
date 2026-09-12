@@ -338,13 +338,13 @@ node check-version.mjs
 
 每次維護固定流程：
 
-Claude 修改／修復  
-→ Claude 提供完整檔案與修改說明  
-→ GPT 獨立進行風險導向複查  
-→ GPT 發現問題時直接修正  
-→ 執行必要且完整的 regression／test／TypeScript／lint／build（專案有什麼就跑什麼；不適用需明示）  
-→ 全部必要驗證通過後發布 GitHub／GitHub Pages  
-→ GPT 提供完整修改、版本、commit、測試結果與高風險資訊  
+Claude 修改／修復<br>
+→ Claude 提供完整檔案與修改說明<br>
+→ GPT 獨立進行風險導向複查<br>
+→ GPT 發現問題時直接修正<br>
+→ 執行必要且完整的 regression／test／TypeScript／lint／build（專案有什麼就跑什麼；不適用需明示）<br>
+→ 全部必要驗證通過後發布 GitHub／GitHub Pages<br>
+→ GPT 提供完整修改、版本、commit、測試結果與高風險資訊<br>
 → Claude Opus High 再做第二次獨立複查。
 
 GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，就省略獨立驗證。Claude 的說明是審查線索，不是測試證據。每次候選包應隔離於舊版，先驗 SHA-256／檔案完整性，再從正確基準檢查；不得混入上一候選包資產。
