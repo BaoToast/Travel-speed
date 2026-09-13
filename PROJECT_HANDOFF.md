@@ -389,6 +389,19 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 9. 交付至少含最新完整程式 ZIP、Pages 包（若該版流程需要）、驗證報告、SHA-256 清單與給 Claude 的獨立交接說明。給 Claude 的說明不可混在正式程式包內，除非既有交付規格明確要求。
 10. 不得把原始交通調查 Excel、正式 Project 資料、Manager 私有備份、瀏覽器資料庫或任何敏感資料上傳公開 Repository。
 
+### 15.1 正式工程資料與使用者交付檔案分流規則
+
+1. 正式 Repository、`PROJECT_HANDOFF.md`、Git metadata、正式原始碼、測試、工程交接資料，以及任何新舊 GPT 換代時需要長期保存的工程基準資料，必須保存在正式 Repository／正式工作區及 GitHub；不得把 Downloads 當作唯一或長期保存位置。
+2. 使用者平常會定期整理 Downloads，因此任何需要長期保存、供下一代 GPT 接手、工程追溯、版本控制或作為正式基準的資料，不得只存在 Downloads。
+3. Downloads 定義為「使用者交換／交付區」，不是正式 Repository 或工程基準的長期保存位置。
+4. GPT 每次完成程式修改、複查、修正或發布後，如果依既有工作流程需要交付檔案給使用者，例如完整程式包、ZIP、Claude 二次複查包、修改後檔案、修改說明、測試／驗證報告、SHA-256 清單，或其他供使用者下載、檢查或轉交 Claude 的成果，仍必須正常提供為使用者可下載的交付檔案，使使用者可在 Downloads 中取得。
+5. 不得因正式 Repository 位於 `Documents\Codex`，而把一般使用者交付成果只留在 Repository 深層資料夾，導致使用者難以取得。
+6. 使用者交付檔案可以存在 Downloads，因其屬可整理的交換成果；但如果其中某項資料同時也是正式工程基準或未來 GPT 接手所必需，正式版本必須另外保存在 Repository 並納入適當的 Git 版本控制，不能只依賴 Downloads 中的副本。
+7. 新舊 GPT 對話換代時，`PROJECT_HANDOFF.md` 仍是正式工程交接基準；應更新同一份 `PROJECT_HANDOFF.md`，不得建立 `PROJECT_HANDOFF_2.md`、`PROJECT_HANDOFF_3.md` 等平行交接文件。
+8. 未來任何 GPT 接手本程式時，都必須維持以下分流，兩者不得混為同一種保存用途：
+   - 正式工程／交接資料 → 正式 Repository + GitHub。
+   - 使用者取得的成果／交換檔 → 可下載交付檔案／Downloads。
+
 ## 16. 長期開發禁止事項與已授權決策
 
 - 不為未來三系統整併而重構本系統；維持模組化與可移植性即可。
