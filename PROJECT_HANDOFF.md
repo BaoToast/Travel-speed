@@ -5,8 +5,8 @@
 ## 0. 文件狀態與事實來源
 
 - 本文件建立日期：2026-09-13；最近更新：2026-09-19（Asia/Taipei）。
-- 最新功能正式版基準 commit：`2888a319032ec7d7bcba59e794ef499157e1bc67`，訊息為 `Release Travel-speed v2.20.65`。
-- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `2888a319...` 作為程式功能基準。
+- 最新功能正式版基準 commit：`111892943b2b83539062e5bf10d224690b25bda0`，訊息為 `Release Travel-speed v2.20.66`。
+- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `11189294...` 作為程式功能基準。
 - 事實優先順序：目前可重現的 Repository／程式碼／Git／測試結果，高於舊聊天、舊交接文字、README 或其他說明。若彼此衝突，必須指出差異；無法驗證者標示「待確認」，不得猜測。
 
 ## 1. 正確程式與 Repository 身分
@@ -25,8 +25,8 @@
 | Git origin（fetch／push） | `https://github.com/BaoToast/Travel-speed.git` |
 | 正式 GitHub Pages | `https://baotoast.github.io/Travel-speed/` |
 | branch | `main` |
-| 功能正式版基準 commit | `2888a319032ec7d7bcba59e794ef499157e1bc67` |
-| 目前程式／正式發布版本 | `v2.20.65` |
+| 功能正式版基準 commit | `111892943b2b83539062e5bf10d224690b25bda0` |
+| 目前程式／正式發布版本 | `v2.20.66` |
 | 版本唯一來源 | `app.js` 內的 `APP_VERSION`；`check-version.mjs` 會檢查 HTML、手冊、驗證檔及資產 query string 一致性 |
 
 本機資料夾名 `repo` 很通用，不能只靠名稱判斷；每次接手都必須同時核對完整路徑、`.git`、origin、branch、`app.js` 版本與 GitHub Repository。三個交通系統不得混用資料夾或規則。
@@ -43,7 +43,7 @@
 
 本系統是純前端、可離線運作的單頁網站。每位同事可在自己的瀏覽器建立多個 Project，匯入各季度路段平均旅行速率調查檔、確認速限、檢查品質、製作圖表、文字草稿與成果包。Manager 跨計畫比較已於 2026-09-13 依使用者決定整組移除，不得自行加回。
 
-目前主體、路段管理、速限與 LOS／三段規則作用域、主工具列、資料異常檢查、趨勢、結論草稿、成果匯出、備份／還原與新手手冊均已完成。v2.20.65 已完成高風險全專案複查；本文件後段保存實際測試證據。現階段工作原則是：修正錯誤、補缺漏功能、驗證結果；不要為未來平台整併而重構，也不要改變已確認計算規則。
+目前主體、路段管理、速限與 LOS／三段規則作用域、主工具列、資料異常檢查、趨勢、結論草稿、成果匯出、備份／還原與新手手冊均已完成。v2.20.65 已完成高風險全專案複查；v2.20.66 再完成 applied／inapplicable 屬性語意的低風險修正與完整回歸。本文件後段保存實際測試證據。現階段工作原則是：修正錯誤、補缺漏功能、驗證結果；不要為未來平台整併而重構，也不要改變已確認計算規則。
 
 資料不會上傳伺服器，存於目前網域、目前瀏覽器的 IndexedDB。同一網址在另一台電腦、另一個瀏覽器或另一個網域不會自動看到原資料；清除網站資料也會移除資料。換電腦或清除前必須下載 Project／全部計畫備份。
 
@@ -76,13 +76,13 @@
 | `vendor/xlsx.full.min.js` | SheetJS 0.20.3 瀏覽器版，Excel 讀取 |
 | `vendor/jszip.min.js` | 成果 ZIP 匯出 |
 | `manual-src/*` | 手冊單一來源與 PDF 產生器；本版不再交付 DOCX |
-| `manuals/*v2.20.65*` | 當版可下載新手手冊；正式包只能保留當版一組 |
+| `manuals/*v2.20.66*` | 當版可下載新手手冊；正式包只能保留當版一組 |
 | `*.test.mjs` | Node 單元、契約、回歸與安全測試 |
 | `e2e-*.mjs` | Playwright 瀏覽器端流程測試 |
 | `generate-test-fixtures.mjs` | 產生 6 份匿名 Excel 測資供 E2E 使用；不等同實際業務檔案驗證 |
 | `check-version.mjs` | 版本、資產引用、手冊及交付文件一致性檢查 |
 | `ooxml-check.mjs` | 檢查匯出 Excel 的 OOXML 結構與元素順序 |
-| `VALIDATION_v2.20.65.md` | v2.20.65 的 Claude 修改摘要、GPT 獨立複查、修正與測試證據 |
+| `VALIDATION_v2.20.66.md` | v2.20.66 的 Claude 二次複查、GPT 獨立確認、修正、反證與測試證據；同檔保留前版歷史摘要 |
 | `.github/workflows/ci.yml` | GitHub Actions 測試門；不部署 |
 
 ### 3.3 state 主要資料結構
@@ -285,7 +285,7 @@
 
 ### 目前未發現的項目
 
-- v2.20.65 完成 GPT 高風險全專案複查與修正後，沒有尚未修復的已知正式功能 Bug。
+- v2.20.66 完成 GPT 低風險複查、反證與完整回歸後，沒有尚未修復的已知正式功能 Bug。
 
 ### 待確認／尚未在本次重新驗證
 
@@ -324,7 +324,19 @@ node check-version.mjs
 
 ### 12.3 最後一次已實際完成的正式驗證
 
-對應版本 `v2.20.65`、功能 commit `2888a319032ec7d7bcba59e794ef499157e1bc67`：
+對應版本 `v2.20.66`、功能 commit `111892943b2b83539062e5bf10d224690b25bda0`：
+
+- 風險：低風險；只修正 `inapplicableHtml()` 的機器可讀屬性互斥，沒有變更 parser、資料、公式、篩選結果、畫面文字或匯出。因 helper 為共用程式，仍抽查全部呼叫位置並執行完整回歸。
+- 修正前新增守門會以退出碼 1 精確列出三句矛盾說明；修正後聚焦 E2E 全綠。另在獨立副本移除三個 applied 標記反證，季度、路段、日別均抓到 LOS／旅行速率兩塊「寫不適用卻變動」，證明反向守門有效。
+- Node／契約／回歸：230 項，228 通過、0 失敗、2 項依設計略過；正式 Repository 沒有 Claude 環境使用的真實檔案，因此不得把其 253／253 宣稱列為本輪獨立證實。
+- Playwright E2E：56／56 依序通過；先產生 6 份匿名 fixtures，沒有並行。
+- 手冊：v2.20.66 PDF 25 頁逐頁渲染並檢視，未見裁切、重疊、缺字或異常空白頁。
+- GitHub Actions：建置與測試 run `35446287153` 成功；Pages run `35446286843` 成功，均對應功能 commit `111892943b2b83539062e5bf10d224690b25bda0`。
+- 線上 `https://baotoast.github.io/Travel-speed/` 已顯示 v2.20.66；線上 `index.html`、`app.js` 與 v2.20.66 手冊 SHA-256 均逐檔等於 Repository；新手冊 HTTP 200，舊 v2.20.65 手冊 URL 為 404。
+- production build／TypeScript／lint：不適用，因專案是純靜態且沒有這些腳本；單檔試用版由 `build-tryout.mjs` 產生。
+- 本次不改 UI 版面或 Excel 匯出；沒有重複人工 Office 驗證。前版 v2.20.65 已完成 1536×864／1366×768 逐頁檢視與真實 Microsoft Excel 開啟確認。
+
+前一版 v2.20.65、功能 commit `2888a319032ec7d7bcba59e794ef499157e1bc67` 的完整複查證據：
 
 - 風險：Parser、主工具列、LOS／速限／三段規則作用域、圖表、匯出、導覽與共用資料流跨模組，採高風險全專案複查。
 - Node／契約／回歸：230 項，228 通過、0 失敗、2 項依設計略過。
@@ -447,7 +459,7 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 - 已保存 Parser、資料結構、Project、方向名稱、速限版本、規則作用域與匯出契約。
 - 已列出高風險歷史 Bug、Root cause 類型與 regression 防線。
 - 已完整保存 Claude/GPT 分工與風險導向複查規則，而非只寫一句名稱。
-- 已區分 v2.20.65 實際通過證據、歷史證據與尚未驗證事項。
+- 已區分 v2.20.66 實際通過證據、前版歷史證據與尚未驗證事項。
 - 已保存 GitHub Pages 單一路徑、無 hosting.json、無 GPT Site、交付與備份規則。
 - 已保存 AI 換代驗收及「新 GPT 未獲確認不得動工」規則。
 
@@ -455,8 +467,8 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 
 1. 使用本文件第 1 節的完整路徑打開 Repository。
 2. 執行只讀核對：`git status`、`git remote -v`、`git branch --show-current`、`git log -1`、版本檢查。
-3. 完整讀取本文件與當版 `VALIDATION_v2.20.65.md`，抽查 `app.js` 核心規則和 `.github/workflows/ci.yml`。
-4. 查 GitHub Actions、Pages 與線上 `https://baotoast.github.io/Travel-speed/` 是否仍對應 v2.20.65。
+3. 完整讀取本文件與當版 `VALIDATION_v2.20.66.md`，抽查 `app.js` 核心規則和 `.github/workflows/ci.yml`。
+4. 查 GitHub Actions、Pages 與線上 `https://baotoast.github.io/Travel-speed/` 是否仍對應 v2.20.66。
 5. 向使用者回報交接驗收；等待使用者明確回覆「交接確認完成」。
 6. 確認後才處理下一份 Claude 候選包或新需求，依第 14 節決定風險並執行。
 

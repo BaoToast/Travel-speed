@@ -14,6 +14,9 @@
 - `check-version.mjs`、`glyph-guard.mjs` 全綠；本專案沒有 TypeScript、lint 或 production build script，不能把不適用項目記為通過。
 - 手冊：v2.20.66 PDF 共 25 頁，已逐頁渲染並檢視；版號、日期、頁尾正常，未見裁切、重疊、缺字或異常空白頁。
 - 本次沒有改 Excel 匯出程式或 UI 版面；v2.20.65 已完成真實 Excel 開啟與 1536×864／1366×768 逐頁驗證，本輪完整 E2E 另含多寬度版面與 OOXML 檢查，未重複人工 Office 驗證。
+- 正式功能 commit：`111892943b2b83539062e5bf10d224690b25bda0`。
+- GitHub Actions：建置與測試 run `35446287153` 成功；Pages run `35446286843` 成功，兩者皆對應正式功能 commit。
+- GitHub Pages：線上首頁顯示 v2.20.66；`index.html`、`app.js`、v2.20.66 手冊 SHA-256 均逐檔等於 Repository；新版手冊 HTTP 200，舊 v2.20.65 手冊 URL 為 404。
 
 ## 前一版 v2.20.65 的 GPT 獨立風險導向複查（2026-09-19）
 
