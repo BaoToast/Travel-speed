@@ -44,5 +44,5 @@ export function footerPrefix({ version, date }) {
 
 /** 手冊檔名（副檔名自己接）。 */
 export function manualBaseName({ version }) {
-  return `交通服務水準分析系統_新手使用手冊_v${version}`;
+  return `交通服務水準程式手冊_v${version}`;
 }

@@ -32,6 +32,8 @@
     value == null || value === "" ? "" : `<c r="${ref}" s="${style}"><v>${Number(value)}</v></c>`;
   function prepare(rows) {
     const groups = new Map();
+    /** 同一路段×季度×日別卻數值不同的紀錄；有任何一組就整份擋下來（稽核表 M）。 */
+    const clashes = [];
     for (const r of rows) {
       const key = `${r.projectCode || ""}|${r.road}`,
         g = groups.get(key) || {
@@ -55,11 +57,37 @@
         weekday: null,
         holiday: null,
       };
-      if (r.day === "平日") p.weekday = r.travel;
-      if (r.day === "假日") p.holiday = r.travel;
+      /*
+       * ⚠️ 稽核表 M：同一路段 × 同一季度 × 同一日別**只能有一筆**。
+       *
+       * 舊寫法是直接指派，第二筆會無聲蓋掉第一筆——Excel 上少一列，
+       * 但沒有任何地方看得出來少了什麼；而這份 Excel 是要交出去的。
+       * 目前的資料流不會產生重複（一季一份檔、一個日別一份），
+       * 但「不會發生」和「發生了會被擋下來」是兩件事，這裡沒有第二道防線。
+       *
+       * 規則與整支程式一致：**系統不替調查資料做決定**。
+       * 數值相同就無所謂（同一筆重複讀進來），不同才是真的衝突，直接擋下匯出
+       * 並把衝突的那幾筆寫出來——不可以挑一個、也不可以平均。
+       */
+      const slot = r.day === "平日" ? "weekday" : r.day === "假日" ? "holiday" : null;
+      if (slot) {
+        const existing = p[slot];
+        if (existing != null && r.travel != null && Number(existing) !== Number(r.travel))
+          clashes.push(
+            `${r.road}・${r.period}・${r.day}（${existing} 與 ${r.travel}）`,
+          );
+        else p[slot] = r.travel;
+      }
       g.periods.set(r.period, p);
       groups.set(key, g);
     }
+    if (clashes.length)
+      throw new Error(
+        "同一路段、同一季度、同一日別出現數值不同的重複紀錄，系統不會自行挑選或平均，" +
+          "已停止匯出，請先確認要保留哪一筆：" +
+          clashes.slice(0, 5).join("、") +
+          (clashes.length > 5 ? ` 等 ${clashes.length} 組` : ""),
+      );
     return [...groups.values()]
       .map((g) => ({
         ...g,

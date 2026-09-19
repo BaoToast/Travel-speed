@@ -52,17 +52,54 @@
       '<div class="panel-head"><div><h3>與前一季差異檢查</h3><small>僅供寫入前核對，不改動資料</small></div><span class="status-neutral" id="diffStatus">尚未預覽</span></div><div id="diffContent" class="empty">完成辨識預覽後顯示</div><div id="representativePreview"></div>';
     q("roadAlert").after(importPanel);
 
-    const sourcePanel = document.createElement("article");
-    sourcePanel.className = "panel extension-panel";
-    sourcePanel.innerHTML =
-      '<div class="panel-head"><div><h3>來源追溯</h3><small>搜尋尖峰明細並查看原始檔、工作表、標籤位置與批次</small></div><input id="traceSearch" placeholder="搜尋路段、季度或檔名"></div><div class="table-wrap"><table><thead><tr><th>期間／路段</th><th>代表資料</th><th>來源檔案</th><th>工作表</th><th>標籤位置</th><th>批次／驗證碼</th></tr></thead><tbody id="traceRows"></tbody></table></div>';
-    q("summary").append(sourcePanel);
+    /*
+     * ══════════════════════════════════════════════════════════════
+     *  「來源追溯」——2026-09-16 起**不在畫面上**
+     * ══════════════════════════════════════════════════════════════
+     *
+     * 使用者 2026-09-16：
+     *   「交通服務水準的來源追朔功能，使用者用不到這資訊，如果你維護程式會用到的話，
+     *     請你把這畫面放在程式碼給你看就好，使用者不須要查看這類資訊，
+     *     讓程式看起來簡潔些」
+     *
+     * ⚠️ 拿掉的**只有那一塊畫面**。來源欄位本身一律照舊：
+     *   ・`sourceFile` / `sourceSheet` / `sourceRefs` / `importBatch` / `sourceHash`
+     *     照常在匯入時寫入每一筆（renderTrace 只是把它們列出來而已）。
+     *   ・成果交付的 `*_來源追溯.json` **照常輸出**（維護／稽核靠那一份）。
+     *   ・尖峰明細與彙總的搜尋框照常吃「來源儲存格」。
+     *   拿掉欄位＝把追溯能力整個砍掉，那不是使用者要的。
+     *
+     * ⚠️ 要在畫面上看它時（只有維護會用到），在瀏覽器主控台貼：
+     *     document.querySelector("#summary").insertAdjacentHTML("beforeend",
+     *       '<details class="panel extension-panel trace-panel" id="summary-trace">'
+     *       + TRACE_PANEL_HTML + '</details>');
+     *     globalThis.LosQualityRenderTrace && globalThis.LosQualityRenderTrace();
+     *   （TRACE_PANEL_HTML 就在下面這個常數，renderTrace 也還在。）
+     *
+     * ⚠️ 先前那一版是 <details>（預設收合，點小分頁自動展開，使用者 2026-09-14
+     *   交辦）。整塊移出畫面之後，那條規則與它的守門（e2e-chart-page 第一節）
+     *   一併改成「畫面上不可以有這一塊」。
+     */
+    const TRACE_PANEL_HTML =
+      '<summary>來源追溯</summary><div class="panel-head"><div><small>搜尋尖峰明細並查看原始檔、工作表、標籤位置與批次</small></div><input id="traceSearch" placeholder="搜尋路段、季度或檔名"></div><div class="table-wrap"><table><thead><tr><th>期間／路段</th><th>代表資料</th><th>來源檔案</th><th>工作表</th><th>標籤位置</th><th>批次／驗證碼</th></tr></thead><tbody id="traceRows"></tbody></table></div>';
+    /* 只留給上面那段主控台用法；正常執行時不插進畫面。 */
+    globalThis.LosTracePanelHtml = TRACE_PANEL_HTML;
 
     const versionPanel = document.createElement("article");
     versionPanel.className = "panel extension-panel";
     versionPanel.id = "speedVersionPanel";
+    /*
+     * ⚠️ 常駐一句「不受主工具列影響」。
+     *   這一塊設定的是**速限本身**（哪一段季度用哪一個速限），
+     *   它是被主工具列篩選的那批資料的**輸入**，不是輸出——
+     *   所以它不吃季度、路段、日別、方向與尖峰。
+     *   不講的話，使用者在主工具列篩了 115Q2 之後切到這一頁，
+     *   看到的是全部路段方向，只會以為篩選壞掉。
+     *   （2026-09-15 大檢查：這一頁在此之前根本不在 e2e-filter-coverage
+     *     的名單裡，所以這條規則從來沒在這一塊上驗過。）
+     */
     versionPanel.innerHTML =
-      '<div class="panel-head"><div><h3>速限有效期間與查證紀錄</h3><small>不同季度可套用不同速限；未設定版本時維持原本路段速限</small></div></div><div class="version-grid"><label>路段方向<select id="versionLimitKey"></select></label><label>公告速限（km/h）<input id="versionSpeed" type="number" min="1" value="50"></label><label>開始季度<input id="versionStart" placeholder="例如 114Q1"></label><label>結束季度<input id="versionEnd" placeholder="持續有效可留白"></label><label>資料來源<input id="versionSource" placeholder="例如：現場速限牌／機關公告"></label><label>查證日期<input id="versionChecked" type="date"></label><label>查證人員<input id="versionBy" placeholder="姓名"></label><label>備註<input id="versionNote" placeholder="選填"></label></div><button class="primary" id="saveSpeedVersion">新增速限版本並重算</button><div class="table-wrap"><table><thead><tr><th>路段／方向</th><th>速限</th><th>有效期間</th><th>來源</th><th>查證</th><th>操作</th></tr></thead><tbody id="speedVersionRows"></tbody></table></div>';
+      '<p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：它設定的是<b>速限本身</b>（哪幾季套用哪一個速限），是計算的輸入而不是輸出，所以一律列出目前計畫的全部路段方向。</p><div class="panel-head"><div><h3>依季別區間／路段／方向套用不同速限</h3><small>季別是<b>區間</b>：起與迄都含在內，起＝迄就是只有那一季；迄留白就是「從那一季開始一直有效」。未設定時維持「路段速限」表裡該路段的基準速限。<b>與其他參數設定同一套概念</b>——差別只在速限多一個「方向」。</small></div></div><div class="version-grid"><label>路段／方向<select id="versionLimitKey"></select></label><label>公告速限（km/h）<input id="versionSpeed" type="number" min="1" value="50"></label><label>季別（起）<input id="versionStart" placeholder="例如 114Q1"></label><label>季別（迄）<input id="versionEnd" placeholder="持續有效可留白"></label><label>備註<input id="versionNote" placeholder="選填"></label></div><button class="primary" id="saveSpeedVersion">新增速限版本並重算</button><div class="table-wrap"><table><thead><tr><th>路段／方向</th><th>速限</th><th>季別區間</th><th>備註</th><th>操作</th></tr></thead><tbody id="speedVersionRows"></tbody></table></div><div class="orphan-panel orphan-inline" id="speedVersionOrphan" hidden><div class="panel-head"><div><h4>有速限版本指到已經不存在的路段／方向</h4><small>路段改名、合併或刪掉之後，原本針對那一段那個方向設的速限版本會變成<b>孤兒</b>：它永遠命不中任何一筆資料，但設定還留著，看起來像是有在生效。下面把每一條的<b>完整內容</b>列出來供核對——確認不需要了再按清除，清掉的內容<b>救不回來</b>。沒有孤兒時這一塊不會出現。</small></div><button class="outline" id="clearOrphanVersions">清除下列孤兒速限</button></div><div class="table-wrap"><table><thead><tr><th>指到的路段／方向</th><th>速限</th><th>季別區間</th><th>備註</th></tr></thead><tbody id="orphanVersionRows"></tbody></table></div></div>';
     q("speed").append(versionPanel);
 
     const quality = document.querySelector(".quality-panel");
@@ -70,14 +107,14 @@
       const rules = document.createElement("article");
       rules.className = "panel extension-panel";
       rules.innerHTML =
-        '<div class="panel-head"><div><h3>異常提醒門檻</h3><small>只影響提醒，不改變 LOS 計算</small></div><button class="primary" id="saveAnomalyRules">儲存門檻並重檢</button></div><div class="four"><label>旅行速率下降（%）<input id="ruleSpeedDrop" type="number" min="1" max="100"></label><label>總延滯增加（%）<input id="ruleDelayRise" type="number" min="1" max="100"></label><label>LOS 下降級數<input id="ruleLosDrop" type="number" min="1" max="5"></label><label>連續惡化季度<input id="ruleStreak" type="number" min="2" max="12"></label></div>';
+        '<p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：它設定的是<b>提醒門檻本身</b>（不改變 LOS 計算），不是資料。</p><div class="panel-head"><div><h3>異常提醒門檻</h3><small>只影響提醒，不改變 LOS 計算</small></div><button class="primary" id="saveAnomalyRules">儲存門檻並重檢</button></div><div class="four"><label>旅行速率下降（%）<input id="ruleSpeedDrop" type="number" min="1" max="100"></label><label>總延滯增加（%）<input id="ruleDelayRise" type="number" min="1" max="100"></label><label>LOS 下降級數<input id="ruleLosDrop" type="number" min="1" max="5"></label><label>連續惡化季度<input id="ruleStreak" type="number" min="2" max="12"></label></div>';
       quality.before(rules);
     }
     const priority = document.createElement("article");
     priority.className = "panel extension-panel";
     priority.id = "priorityPanel";
     priority.innerHTML =
-      '<div class="panel-head"><div><h3>重點路段總覽</h3><small>依目前計畫自動排列需優先檢視的路段</small></div><button class="outline" id="refreshPriority">重新分析</button></div><div class="table-wrap"><table><thead><tr><th>優先度</th><th>路段／日別</th><th>最近期間</th><th>變化原因</th><th>建議</th></tr></thead><tbody id="priorityRows"></tbody></table></div>';
+      '<p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：它依這個計畫的全部資料自動排出需要優先檢視的路段，用途正是「先看哪一條」——跟著畫面上的篩選走就失去意義了。</p><div class="panel-head"><div><h3>重點路段總覽</h3><small>依目前計畫自動排列需優先檢視的路段</small></div><button class="outline" id="refreshPriority">重新分析</button></div><div class="table-wrap"><table><thead><tr><th>優先度</th><th>路段／日別</th><th>最近期間</th><th>變化原因</th><th>建議</th></tr></thead><tbody id="priorityRows"></tbody></table></div>';
     q("maintenance").append(priority);
 
     const deliveryButton = document.createElement("button");
@@ -90,19 +127,48 @@
     delivery.id = "delivery";
     delivery.className = "view";
     delivery.innerHTML =
-      '<div class="title"><div><span class="eyebrow">DELIVERY CENTER</span><h2>季度成果交付</h2><p>選擇季度與範圍，下載可追溯、可編輯的成果資料包。</p></div></div><div class="two"><article class="panel form"><h3>成果範圍</h3><p class="muted">可以只交付單一季度，也可以選擇一段期間（例如 114Q1～114Q4）一次交付。</p><div class="row"><label>起始季度<select id="deliveryPeriodStart"></select></label><label>結束季度<select id="deliveryPeriodEnd"></select></label></div><div class="note" id="deliveryRangeNote">尚無資料</div><label>路段<select id="deliveryRoad"><option value="">全部路段</option></select></label><label>日別<select id="deliveryDay"><option value="">平日與假日</option><option>平日</option><option>假日</option></select></label><label>Excel 圖表內容<select id="deliveryMetric"><option value="travel">旅行速率（km/h）</option><option value="los">服務水準（A～F）</option></select></label><div class="check-grid"><label><input type="checkbox" id="packDetail" checked>尖峰明細</label><label><input type="checkbox" id="packSummary" checked>尖峰彙總</label><label><input type="checkbox" id="packQuality" checked>品質檢查</label><label><input type="checkbox" id="packNarrative" checked>分析文字草稿</label></div><button class="primary full" id="downloadQuarterPack">下載季度成果包 ZIP</button><button class="outline full" id="downloadFilteredCharts">匯出篩選後可編輯 Excel 圖表</button></article><article class="panel form"><h3>報告文字草稿</h3><p class="muted"><b>這一份是「這次交付的說明文字」</b>：依左邊的成果範圍逐筆代表紀錄各寫一行，會隨 ZIP 成果包一起交出去。要自己挑條件（只寫某一季、某幾條路段、只寫服務水準⋯）請改用左側選單的<b>「結論草稿」</b>。兩邊的數字來源完全相同，都必須由使用者確認後再放入正式報告。</p><textarea id="reportDraft" rows="18"></textarea><div class="note" id="draftRecoverNote" hidden></div><div class="row"><button class="outline" id="generateDraft">重新產生</button><button class="primary" id="saveDraft">儲存修改</button></div></article></div>';
+      '<div class="title"><div><span class="eyebrow">DELIVERY CENTER</span><h2>季度成果交付</h2><p>選擇季度與範圍，下載可追溯、可編輯的成果資料包。</p></div></div><div class="two"><article class="panel form"><h3>成果範圍</h3><p class="muted">可以只交付單一季度，也可以選擇一段期間（例如 114Q1～114Q4）一次交付。</p><div class="row"><label>起始季度<select id="deliveryPeriodStart"></select></label><label>結束季度<select id="deliveryPeriodEnd"></select></label></div><div class="note" id="deliveryRangeNote">尚無資料</div><label>路段<select id="deliveryRoad"><option value="">全部路段</option></select></label><label>日別<select id="deliveryDay"><option value="">平日與假日</option><option>平日</option><option>假日</option></select></label><label>方向<select id="deliveryDirection"><option value="">全部方向</option></select></label><label>尖峰<select id="deliveryPeak"><option value="">代表尖峰（同一組取最差）</option><option value="上午尖峰">上午尖峰</option><option value="下午尖峰">下午尖峰</option></select></label><label>小數位數<select id="deliveryDigits"><option value="0">0 位</option><option value="1" selected>1 位</option><option value="2">2 位</option></select></label><label>Excel 圖表內容<select id="deliveryMetric"><option value="travel">旅行速率（km/h）</option><option value="los">服務水準（A～F）</option></select></label><div class="check-grid"><label><input type="checkbox" id="packDetail" checked>尖峰明細</label><label><input type="checkbox" id="packSummary" checked>尖峰彙總</label><label><input type="checkbox" id="packQuality" checked>品質檢查</label><label><input type="checkbox" id="packNarrative" checked>分析文字草稿</label></div><button class="outline full" id="deliveryApplyMain" data-testid="delivery-apply-main">套用主工具列目前的條件<small>成果交付刻意與主工具列獨立（報告常要出一段和畫面不同的範圍）；要一鍵對齊就按這一顆。</small></button><button class="primary full" id="downloadQuarterPack">下載季度成果包 ZIP</button><button class="outline full" id="downloadFilteredCharts">匯出篩選後可編輯 Excel 圖表</button></article><article class="panel form"><h3>報告文字草稿</h3><p class="muted"><b>這一份是「這次交付的說明文字」</b>：依「成果範圍」設定的季度與路段，逐筆代表紀錄各寫一行，會隨 ZIP 成果包一起交出去。要自己挑條件（只寫某一季、某幾條路段、只寫服務水準…）請改用<b>「結論草稿」</b>。兩者的數字來源完全相同，都必須由使用者確認後再放入正式報告。</p><textarea id="reportDraft" rows="18"></textarea><div class="note" id="draftRecoverNote" hidden></div><div class="row"><button class="outline" id="generateDraft">重新產生</button><button class="primary" id="saveDraft">儲存修改</button></div></article></div>';
     q("backup").before(delivery);
 
-    const undo = document.createElement("article");
-    undo.className = "panel extension-panel";
-    undo.id = "undoPanel";
-    undo.innerHTML =
-      '<div class="panel-head"><div><h3>最近操作與復原</h3><small>保留最近10次會改變分析結果的操作；匯入批次仍請優先由「匯入紀錄」復原</small></div></div><div class="table-wrap"><table><thead><tr><th>時間</th><th>操作</th><th>計畫</th><th>操作</th></tr></thead><tbody id="operationRows"></tbody></table></div>';
-    q("backup").append(undo);
+    /*
+     * ══════════════════════════════════════════════════════════════
+     *  「版本差異與還原」——2026-09-16 起**不在畫面上**
+     * ══════════════════════════════════════════════════════════════
+     *
+     * 使用者 2026-09-16：
+     *   「三份程式這類版本差異與還原，只需要在程式碼裡給你看就好
+     *     (要留幾筆資料也由你自行決定)，畫面上不用再展示出來了，
+     *     使用者不會使用，因為不確定按了結果會如何。」
+     *
+     * ⚠️ 拿掉的**只有那一塊畫面**。還原點本身照舊：
+     *   ・匯入、人工修改、刪除之前**照常自動拍快照**（watchButton 那一段）。
+     *   ・保留 30 筆不變（UNDO_LIMIT）。它只存在 IndexedDB，不佔交付包體積；
+     *     筆數再少會讓「上一季匯錯、下一季才發現」救不回來。
+     *   ・專案包照常帶著它走（app.js 的專案包匯出／匯入）。
+     *   把寫入一起砍掉＝拿掉整個系統唯一的安全網，那不是使用者要的。
+     *
+     * ⚠️ 維護時要看或要還原，在瀏覽器主控台貼：
+     *     globalThis.LosUndoList()            // 列出還原點
+     *     globalThis.LosUndoRestore("<id>")   // 還原到那一刻
+     *   （面板 HTML 也留在 UNDO_PANEL_HTML，要看表格時插回 #backup 即可。）
+     */
+    const UNDO_PANEL_HTML =
+      '<div class="panel-head"><div><h3>版本差異與還原</h3><small>匯入、人工修改與刪除之前都會自動留下還原點，最多保留最近 8 次。刪除還原點不會影響現在畫面上的任何資料。</small></div></div><div class="table-wrap"><table><thead><tr><th>時間</th><th>操作</th><th>計畫</th><th>操作</th></tr></thead><tbody id="operationRows"></tbody></table></div>';
+    globalThis.LosUndoPanelHtml = UNDO_PANEL_HTML;
     const guide = document.createElement("article");
     guide.className = "panel extension-panel";
+    /*
+     * ⚠️ 這一塊是新手說明的第十一章，**純說明文字**，依使用者 2026-09-13
+     *   的決定不列成左側小分頁（「新手使用說明全部小分頁都是說明用的文字，
+     *   依照我們說好的，這類不用做成左側小分頁」）。
+     *
+     * ⚠️ 它是由**這一支**插進 #guide 的，不在 app.js 的 manual 包裹元素裡面，
+     *   所以要自己掛標記——只改 app.js 的話，側欄會剩下這一項孤零零留著
+     *   （實測就是如此：12 項拿掉 11 項，剩這一項）。
+     */
+    guide.setAttribute("data-nav-skip", "explanation");
     guide.innerHTML =
-      "<h3>十一、資料品質與成果交付</h3><ol><li><b>匯入前：</b>在辨識預覽下方檢查與前一季的路段、平假日及4筆資料差異，再核對預計代表紀錄。</li><li><b>來源追溯：</b>到「尖峰彙總」下方搜尋原始檔名、工作表、標籤位置、批次及檔案驗證碼。</li><li><b>速限變更：</b>到「路段速限」新增有效期間、資料來源、查證日期與人員；系統只重算有效季度。</li><li><b>異常分析：</b>到「資料維護」設定提醒門檻並查看重點路段；提醒不會改變服務水準。</li><li><b>成果交付：</b>到「成果交付」選擇季度、路段及日別，下載 ZIP 或可編輯 Excel 圖表。自動文字僅為草稿，正式使用前必須人工核對。</li><li><b>操作復原：</b>到「備份與淨空」查看最近操作；匯入錯誤仍優先從「匯入紀錄」復原。</li></ol>";
+      "<h3>十一、資料品質與成果交付</h3><ol><li><b>匯入前：</b>在辨識預覽下方檢查與前一季的路段、平假日及4筆資料差異，再核對預計代表紀錄。</li><li><b>來源追溯：</b>到「尖峰彙總」下方搜尋原始檔名、工作表、標籤位置、批次及檔案驗證碼。</li><li><b>速限變更：</b>到「路段速限」新增一條「季別區間／路段／方向」的速限；系統只重算區間內的季度。</li><li><b>異常分析：</b>到「資料維護」設定提醒門檻並查看重點路段；提醒不會改變服務水準。</li><li><b>成果交付：</b>到「成果交付」選擇季度、路段及日別，下載 ZIP 或可編輯 Excel 圖表。自動文字僅為草稿，正式使用前必須人工核對。</li><li><b>操作復原：</b>到「備份與淨空」查看最近操作；匯入錯誤仍優先從「匯入紀錄」復原。</li></ol>";
     document.querySelector("#guide .warning").before(guide);
   }
   injectUI();
@@ -295,10 +361,13 @@
           : Number.isFinite(base) && base > 0
             ? base
             : parsedPreviewLimits.get(row);
+        /* ⚠️ 查證來源已移除，新版本不會有 source；舊資料若有就沿用。 */
         row.limitSource = version ? version.source || "" : "";
         row.limitVersionStart = version ? version.start : "";
         row.ratio = row.travel == null || !row.limit ? null : row.travel / row.limit;
-        row.los = losOf(row.ratio);
+        /* ⚠️ 傳季別與路段：門檻可以依「季別 × 路段」覆寫（使用者 2026-09-15）。
+           不傳的話，預覽顯示的等級會與寫入後不同。 */
+        row.los = losOf(row.ratio, undefined, row.period, row.road);
       }
     }
   }
@@ -354,17 +423,38 @@
           !term ||
           normalize([x.period, x.road, x.sourceFile, x.sourceSheet].join(" ")).includes(term),
       );
+    /*
+     * ⚠️ 只顯示前 N 筆**本身不是錯，不講才是錯**。
+     *
+     * 使用者 2026-09-13（在匯入「需注意」上發現同一類毛病）：
+     *   「有 22 筆提醒項目，但底下列出的並沒有這麼多，感覺只是展示前幾筆而已」。
+     *
+     * 這裡的 500 筆上限是為了效能（來源追溯可能上萬列），所以**保留上限**，
+     * 但一定要在表尾明講還有幾筆沒顯示、以及該怎麼縮小範圍——
+     * 否則使用者會以為那幾筆不存在。
+     */
+    const LIMIT = 500;
+    const hidden = Math.max(0, rows.length - LIMIT);
     q("traceRows").innerHTML = rows.length
       ? rows
-          .slice(0, 500)
+          .slice(0, LIMIT)
           .map(
             (x) =>
               `<tr><td>${safe(showQuarter(x.period))}<br>${safe(x.road)}／${safe(x.day)}</td><td>${safe(x.peak)}／${safe(rowDirectionName(x))}</td><td>${safe(x.sourceFile || x.source || "舊資料未記錄")}</td><td>${safe(x.sourceSheet || (x.sourceTraceFailed ? "本次讀取失敗" : "舊資料未記錄"))}</td><td>${safe((x.sourceRefs || []).join("、") || (x.sourceTraceFailed ? "本次讀取失敗" : "舊資料未記錄"))}</td><td>${safe(x.importBatch || "—")}<br><small>${safe(x.sourceHash || "—")}</small></td></tr>`,
           )
-          .join("")
+          .join("") +
+        (hidden
+          ? `<tr class="trace-more"><td colspan="6">另有 <b>${hidden}</b> 筆未顯示（一次最多列 ${LIMIT} 筆）。請用上方的搜尋縮小範圍。</td></tr>`
+          : "")
       : '<tr><td colspan="6" class="empty">沒有符合的來源紀錄</td></tr>';
   }
-  q("traceSearch").oninput = renderTrace;
+  /*
+   * ⚠️ 來源追溯自 2026-09-16 起不插進畫面，這裡一定要擋 null——
+   *   少了這一行，整支 quality-extension 會在載入時就炸掉（畫面全白）。
+   *   維護時手動插回那一塊之後，呼叫 globalThis.LosQualityRenderTrace() 即可。
+   */
+  if (q("traceSearch")) q("traceSearch").oninput = renderTrace;
+  globalThis.LosQualityRenderTrace = renderTrace;
 
   function speedKeys() {
     return [
@@ -394,7 +484,18 @@
             const p = v.k.split("|"),
               dir = p.pop(),
               road = p.pop();
-            return `<tr><td>${safe(road)}／${safe(directionNameFor(road, dir))}</td><td>${v.speed} km/h</td><td>${safe(v.start)}～${safe(v.end || "持續")}</td><td>${safe(v.source || "—")}</td><td>${safe(v.checked || "—")}／${safe(v.by || "—")}</td><td><button class="outline" data-remove-version="${safe(v.k)}" data-version-id="${safe(v.id)}">刪除</button></td></tr>`;
+            /*
+             * ⚠️ 季別區間要寫成使用者看得懂的一句話，而且**季別的寫法要與全站一致**
+             *   （民國／西元、季別／調查月份）——這裡走 showQuarter，不可以印原始鍵值。
+             * ⚠️ 查證來源／日期／人員三欄已於 2026-09-15 移除：
+             *   使用者原話「查證來源／日期／人員這些欄位可以拿掉，使用者不會做這些紀錄」。
+             *   舊資料裡可能還留著那三個欄位，**不顯示但也不刪**——
+             *   刪掉等於幫使用者丟東西，而且救不回來。
+             */
+            const range = v.end
+              ? `${safe(showQuarter(v.start))}～${safe(showQuarter(v.end))}`
+              : `${safe(showQuarter(v.start))} 起持續`;
+            return `<tr><td>${safe(road)}／${safe(directionNameFor(road, dir))}</td><td>${v.speed} km/h</td><td>${range}</td><td>${safe(v.note || "—")}</td><td><button class="outline" data-remove-version="${safe(v.k)}" data-version-id="${safe(v.id)}">刪除</button></td></tr>`;
           })
           .join("")
       : '<tr><td colspan="6" class="empty">尚未設定期間版本，沿用上方路段速限</td></tr>';
@@ -410,6 +511,89 @@
           toast("速限版本已刪除並重算");
         }),
     );
+    renderSpeedVersionOrphans();
+  }
+  /*
+   * ══════════════════════════════════════════════════════════════════
+   *  孤兒速限版本：指到一個已經不存在的路段／方向
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 與判定標準那一頁的「孤兒覆寫」同一套作法與同一套理由：
+   * 路段被改名、合併或整批刪掉之後，針對那一段設的速限版本還留在
+   * state.speedVersions 裡，但 speedFor() 查的鍵值是「現在這筆資料的
+   * 路段＋方向」，所以它**永遠命不中**——那幾季悄悄退回基準速限 50，
+   * 而畫面上什麼都沒說。
+   *
+   * ⚠️ 平常完全不出現；偵測到才整塊冒出來，並且寫出完整內容
+   *   （路段／方向、速限、季別區間、備註），不是只報一個數量。
+   * ⚠️ 只在「這個計畫確實有資料」時才判定，理由與 app.js 那一支相同：
+   *   還沒匯入時鍵值清單本來就是空的，那時全部標成孤兒等於幫使用者丟設定。
+   * ⚠️ 只看**這個計畫**的鍵值（前綴 `code|`）。別的計畫的速限版本
+   *   本來就不該出現在這一頁，更不可以被這顆按鈕清掉。
+   */
+  function orphanVersionEntries() {
+    const rows = activeRows();
+    if (!rows.length) return [];
+    const alive = new Set(speedKeys());
+    const prefix = `${state.activeCode}|`;
+    const out = [];
+    for (const key of Object.keys(state.speedVersions || {})) {
+      if (!key.startsWith(prefix) || alive.has(key)) continue;
+      const list = (state.speedVersions[key] || []).filter(Boolean);
+      if (!list.length) continue;
+      const parts = key.split("|"),
+        dir = parts.pop(),
+        road = parts.pop();
+      for (const version of list)
+        out.push({
+          key,
+          road,
+          /*
+           * ⚠️ 方向名稱要盡量還原成使用者取的名字。路段已經不在了，
+           *   directionNameFor 可能查不到，那就退回內部代號——
+           *   印「方向2」總比印空白好，至少對得起來。
+           */
+          label: `${road}／${directionNameFor(road, dir) || dir}`,
+          speed: version.speed,
+          range: version.end
+            ? `${showQuarter(version.start)}～${showQuarter(version.end)}`
+            : `${showQuarter(version.start)} 起持續`,
+          note: version.note || "—",
+        });
+    }
+    return out;
+  }
+  function renderSpeedVersionOrphans() {
+    const host = q("speedVersionOrphan"),
+      rowsHost = q("orphanVersionRows");
+    if (!host || !rowsHost) return;
+    const list = orphanVersionEntries();
+    host.hidden = list.length === 0;
+    rowsHost.innerHTML = list
+      .map(
+        (item) =>
+          `<tr><td>${safe(item.label)}</td><td>${safe(item.speed)} km/h</td><td>${safe(item.range)}</td><td>${safe(item.note)}</td></tr>`,
+      )
+      .join("");
+    const button = q("clearOrphanVersions");
+    if (button)
+      button.onclick = async () => {
+        const again = orphanVersionEntries();
+        if (!again.length) return toast("目前沒有指到不存在路段的速限版本");
+        if (
+          !confirm(
+            `確定清除這 ${again.length} 條指到不存在路段／方向的速限版本？清掉之後救不回來。`,
+          )
+        )
+          return;
+        recordOperation("清除孤兒速限版本");
+        for (const key of new Set(again.map((item) => item.key)))
+          delete state.speedVersions[key];
+        rebuild();
+        await save();
+        renderAll();
+        toast(`已清除 ${again.length} 條指到不存在路段的速限版本`);
+      };
   }
   q("saveSpeedVersion").onclick = async () => {
     const key = q("versionLimitKey").value,
@@ -440,9 +624,11 @@
       speed,
       start,
       end,
-      source: q("versionSource").value.trim(),
-      checked: q("versionChecked").value,
-      by: q("versionBy").value.trim(),
+      /*
+       * ⚠️ 查證來源／日期／人員三欄已於 2026-09-15 移除（使用者：
+       *   「這些欄位可以拿掉，使用者不會做這些紀錄」）。
+       *   這裡不再寫入；舊資料裡既有的值保留不動，只是畫面上不顯示。
+       */
       note: q("versionNote").value.trim(),
     });
     /*
@@ -450,7 +636,7 @@
      *
      * 速限版本只涵蓋它自己的季度區間；區間外的季度用的還是那個沒被確認過的
      * 預設值 50。舊版在這裡把 limitConfirmed 設成 true，於是「速限未確認」
-     * 的健康檢查提示整條消失，而真正還在用未確認預設值的，正是版本沒涵蓋到
+     * 的資料異常檢查提示整條消失，而真正還在用未確認預設值的，正是版本沒涵蓋到
      * 的那些季度——手冊自己說這是「最容易發生也最嚴重的錯誤」。
      */
     rebuild();
@@ -481,9 +667,53 @@
       speedVersions: Object.fromEntries(
         Object.entries(state.speedVersions).filter(([k]) => k.startsWith(`${code}|`)),
       ),
+      reportDrafts: Object.fromEntries(
+        Object.entries(state.reportDrafts || {}).filter(([k]) =>
+          k.startsWith(`${code}|`),
+        ),
+      ),
       losRule: clone(state.losRules[code] || null),
+      /*
+       * ⚠️ 本版補上的四樣。舊版的快照少了它們，於是
+       * 「復原」之後分段規則、異常門檻、報告草稿與結論範本停在**操作後**
+       * 的值，而其他東西回到操作前——畫面上看起來像復原成功了，
+       * 實際上是一個兩邊拼起來、從來沒有存在過的狀態。
+       *
+       * 判斷依據不是「我覺得該存什麼」，是拿 projectPackage()（單一計畫
+       * 備份帶走的東西）逐項比對：備份帶得走的，快照就要留得住。
+       */
+      bandRule: clone(state.bandRules?.[code] || null),
+      anomalyRule: clone(state.anomalyRules?.[code] || null),
+      conclusionTemplates: clone(state.conclusionTemplates?.[code] || null),
+      /*
+       * 匯入批次紀錄也要一起存。
+       * 匯入前留的還原點若不含 imports，復原之後資料回到匯入前、
+       * 但「匯入紀錄」那一頁仍然列著那一批——使用者會以為匯入還在。
+       */
+      imports: clone(
+        (state.imports || []).filter((x) => x.projectCode === code),
+      ),
     };
   }
+
+  /**
+   * 還原點保留幾筆。
+   *
+   * ⚠️ 2026-09-16 由 30 降到 **8**，與路口轉向（2026-09-15 已降）一致。
+   *
+   * 理由：畫面上那一塊已經移除（使用者 2026-09-16：「使用者不會使用，
+   *   因為不確定按了結果會如何」），所以這份紀錄現在是**純維護用**，
+   *   不是使用者的救援路徑；使用者真正會做的是「刪掉那一季重新匯入」
+   *   與「還原備份檔」。
+   *   而每一筆快照是**整個計畫的資料**，又會跟著專案包一起匯出——
+   *   留 30 筆等於讓每一份備份檔多帶 30 份沒有人會看的副本。
+   *   使用者 2026-09-15：「不要明明只需要前 10 筆，你卻讓程式硬是留 100 筆
+   *   來增加儲存空間的負荷」。
+   *
+   * 選 8 的依據：維護時要回答的是「剛才那幾步做了什麼」，
+   * 8 次操作足以涵蓋一輪匯入＋幾次人工修正。
+   */
+  const RESTORE_POINT_LIMIT = 8;
   function recordOperation(name) {
     ensureState();
     state.operations.unshift({
@@ -494,7 +724,7 @@
       snapshot: operationSnapshot(),
       status: "可復原",
     });
-    state.operations = state.operations.slice(0, 10);
+    state.operations = state.operations.slice(0, RESTORE_POINT_LIMIT);
   }
   async function undoOperation(id) {
     const op = state.operations.find((x) => x.id === id);
@@ -510,6 +740,40 @@
     }
     if (s.losRule) state.losRules[code] = s.losRule;
     else delete state.losRules[code];
+    /*
+     * ⚠️ 「有值就寫、沒值就刪」——不可以只寫不刪。
+     *   只寫的話，「操作前沒有設定、操作中新增了一筆」這種情形復原不掉：
+     *   復原後那一筆還在，而使用者被告知已經復原。
+     *
+     * ⚠️ 舊快照沒有這幾個欄位，會是 undefined。
+     *   undefined 代表「這一版沒有存」，不是「當時沒有設定」——
+     *   當成「沒有設定」去刪，會把使用者現在的設定刪掉。所以用
+     *   `in` 判斷欄位存不存在，而不是看值是不是 falsy。
+     */
+    if ("bandRule" in s) {
+      if (s.bandRule) state.bandRules[code] = s.bandRule;
+      else delete state.bandRules[code];
+    }
+    if ("anomalyRule" in s) {
+      if (s.anomalyRule) state.anomalyRules[code] = s.anomalyRule;
+      else delete state.anomalyRules[code];
+    }
+    if ("conclusionTemplates" in s) {
+      state.conclusionTemplates = state.conclusionTemplates || {};
+      if (s.conclusionTemplates)
+        state.conclusionTemplates[code] = s.conclusionTemplates;
+      else delete state.conclusionTemplates[code];
+    }
+    if ("reportDrafts" in s) {
+      for (const k of Object.keys(state.reportDrafts || {}))
+        if (k.startsWith(`${code}|`)) delete state.reportDrafts[k];
+      Object.assign(state.reportDrafts, s.reportDrafts || {});
+    }
+    if ("imports" in s) {
+      state.imports = (state.imports || [])
+        .filter((x) => x.projectCode !== code)
+        .concat(s.imports || []);
+    }
     op.status = "已復原";
     rebuild();
     await save();
@@ -524,36 +788,115 @@
       ? rows
           .map(
             (x) =>
-              `<tr><td>${safe(x.time)}</td><td>${safe(x.name)}</td><td>${safe(x.projectCode)}</td><td>${x.status === "可復原" ? `<button class="outline" data-undo-operation="${safe(x.id)}">復原</button>` : safe(x.status)}</td></tr>`,
+              `<tr><td>${safe(x.time)}</td><td>${safe(x.name)}</td><td>${safe(x.projectCode)}</td><td>${x.status === "可復原" ? `<button class="outline" data-undo-operation="${safe(x.id)}">還原此版本</button>` : safe(x.status)} <button class="outline" data-drop-operation="${safe(x.id)}">刪除這個還原點</button></td></tr>`,
           )
           .join("")
       : '<tr><td colspan="4" class="empty">尚無可復原操作</td></tr>';
     document
       .querySelectorAll("[data-undo-operation]")
       .forEach((b) => (b.onclick = () => undoOperation(b.dataset.undoOperation)));
+    /*
+     * 刪除單一還原點。面板上明寫「刪除還原點不會影響現在畫面上的任何資料」，
+     * 那句話必須是真的——所以這裡**只動 state.operations**，
+     * 一個字都不碰 details／limits／roadMeta 等實際資料。
+     */
+    document.querySelectorAll("[data-drop-operation]").forEach(
+      (b) =>
+        (b.onclick = async () => {
+          const op = state.operations.find((x) => x.id === b.dataset.dropOperation);
+          if (!op) return;
+          if (!confirm(`確定刪除這個還原點？\n\n「${op.name}」（${op.time}）\n\n刪除之後就無法退回那一刻，但現在畫面上的資料完全不受影響。`))
+            return;
+          await dropOperation(b.dataset.dropOperation);
+          toast("已刪除這個還原點；現有資料沒有變動");
+        }),
+    );
   }
+  /*
+   * 刪除單一還原點。
+   *
+   * ⚠️ **只動 state.operations**，一個字都不碰 details／limits／roadMeta
+   *   等實際資料——「刪除還原點不會影響現在畫面上的任何資料」這句話必須是真的。
+   * ⚠️ 抽成具名函式是為了讓守門（e2e-restore-point）走**與畫面同一條路**。
+   *   面板拿掉之後若讓守門自己改 state，等於守門在驗它自己寫的程式。
+   */
+  async function dropOperation(id) {
+    if (!state.operations.some((x) => x.id === id)) return false;
+    state.operations = state.operations.filter((x) => x.id !== id);
+    await save();
+    return true;
+  }
+  /*
+   * ⚠️ 面板自 2026-09-16 起不在畫面上（見 injectUI 的說明）。
+   *   還原能力仍然完整，只是改由維護在主控台呼叫：
+   *     globalThis.LosUndoList()            // 列出還原點
+   *     globalThis.LosUndoRestore("<id>")   // 還原到那一刻
+   *   ⚠️ 不可以把 undoOperation 一起刪掉——刪掉就真的救不回來了。
+   */
+  globalThis.LosUndoList = function () {
+    return (state.operations || []).map(function (x) {
+      return {
+        id: x.id,
+        time: x.time,
+        name: x.name,
+        projectCode: x.projectCode,
+        status: x.status,
+      };
+    });
+  };
+  globalThis.LosUndoRestore = undoOperation;
+  globalThis.LosUndoDrop = dropOperation;
+  /*
+   * 監看一顆按鈕：按下去之前先拍一張快照，等操作真的改變了資料才記下來。
+   *
+   * ⚠️ 一、**用委派**（監聽 document），不是直接綁在按鈕上。
+   *   有幾顆按鈕是動態重繪的——例如「備份後確認執行」（confirmRoadChange）
+   *   每次預覽都會被 innerHTML 整個換掉。直接綁在元素上的話，換掉之後
+   *   監聽就消失了，而**畫面上完全看不出來**：按鈕照樣能按、操作照樣完成，
+   *   只是從此不再留還原點。這正是使用者說的「要過很久才知道」的那種壞法。
+   *
+   * ⚠️ 二、**要等到真的改變為止，不能只等 400 毫秒**。
+   *   匯入一次幾十份檔案要跑好幾秒；固定等 400ms 再比對，那時候資料還沒
+   *   寫進去，比對結果是「沒有改變」→ 不留還原點，而使用者以為留了。
+   *   改成逐次拉長的輪詢（0.25／0.5／1／2／4／8 秒），一偵測到改變就記下來
+   *   並停止；整段時間內都沒有改變才真的不記（那代表這次操作什麼都沒做，
+   *   本來就不該留一筆「可復原」的紀錄）。
+   *
+   * ⚠️ 三、快照是在**點擊的捕獲階段**拍的，早於按鈕自己的 onclick，
+   *   所以拍到的一定是「動手前」的狀態。
+   */
+  const OBSERVE_DELAYS = [250, 500, 1000, 2000, 4000, 8000];
   function observeOperation(id) {
-    const button = q(id);
-    if (!button) return;
-    button.addEventListener(
+    document.addEventListener(
       "click",
-      () => {
+      (event) => {
+        const button =
+          event.target instanceof Element ? event.target.closest(`#${id}`) : null;
+        if (!button || button.disabled) return;
         const before = operationSnapshot(),
-          fingerprint = JSON.stringify(before);
-        setTimeout(async () => {
-          if (JSON.stringify(operationSnapshot()) === fingerprint) return;
+          fingerprint = JSON.stringify(before),
+          name = button.textContent.trim() || id;
+        let step = 0;
+        const check = () => {
+          if (JSON.stringify(operationSnapshot()) === fingerprint) {
+            step += 1;
+            if (step < OBSERVE_DELAYS.length)
+              setTimeout(check, OBSERVE_DELAYS[step]);
+            return;
+          }
           ensureState();
           state.operations.unshift({
             id: `OP${Date.now()}${Math.random()}`,
-            name: button.textContent.trim(),
+            name,
             time: new Date().toLocaleString("zh-TW"),
             projectCode: before.activeCode,
             snapshot: before,
             status: "可復原",
           });
-          state.operations = state.operations.slice(0, 10);
-          await save();
-        }, 400);
+          state.operations = state.operations.slice(0, RESTORE_POINT_LIMIT);
+          void save();
+        };
+        setTimeout(check, OBSERVE_DELAYS[0]);
       },
       true,
     );
@@ -571,12 +914,20 @@
         if (typeof info.rerender === "function") info.rerender();
         return toast(info.message);
       }
-      if (
-        !confirm(`${info.title}\n\n${info.detail}\n\n系統將先下載目前 Project 備份。確定繼續嗎？`)
-      )
-        return;
-      downloadProjectPackage(false);
-      recordOperation(info.title);
+      /*
+       * ⚠️ `skipBackup`：這一次**不會改動任何數值**（例如速限維持原值、
+       *   只是把它標成「已人工確認」）。那種操作沒有東西需要還原，
+       *   先下載一份一模一樣的備份、再留一個還原點，只會讓使用者
+       *   以為剛才改了什麼。
+       */
+      const confirmText = info.skipBackup
+        ? `${info.title}\n\n${info.detail}\n\n這一次不會改動任何數值，所以不另外下載備份。確定繼續嗎？`
+        : `${info.title}\n\n${info.detail}\n\n系統將先下載目前 Project 備份。確定繼續嗎？`;
+      if (!confirm(confirmText)) return;
+      if (!info.skipBackup) {
+        downloadProjectPackage(false);
+        recordOperation(info.title);
+      }
       await original.call(button);
     });
   }
@@ -608,8 +959,41 @@
         message: `速限必須大於 0，這次完全沒有變更（請修正 ${invalid.length} 個欄位）`,
         rerender: renderLimits,
       };
+    /*
+     * ══════════════════════════════════════════════════════════════
+     *  X-42：「沒有改動數值」與「沒有人工確認過」是兩件事
+     * ══════════════════════════════════════════════════════════════
+     *
+     * 使用者 2026-09-16：
+     *   「該計畫全部的路段速限，如果和預設值一致，我直接按套用，
+     *     它會說我數值沒調整，不給我做套用並重算。這三條路段公告速限就是50，
+     *     怎會阻止我套用50這個數值，只是因為和預設數值一樣，
+     *     就變成我沒有做過人工確認?」
+     *
+     * 他是對的。公告速限本來就可能剛好等於預設值 50，**那也是確認**。
+     * 舊版把兩件事綁在一起，後果不只是按鈕按不動——品質檢查的
+     *「速限未確認」那一項因此**永遠消不掉**（實測 6 筆，怎麼按都是 6）。
+     *
+     * ⚠️ 原本那道守衛要擋的東西仍然保留：**什麼都沒改、而且每一筆都已經
+     *   確認過**的時候，才是真正的空操作，這時照樣擋下來。
+     */
+    const unconfirmed = inputs.filter(
+      (i) => !state.limitConfirmed[i.dataset.limit],
+    );
+    if (!changed.length && !unconfirmed.length)
+      return {
+        ok: false,
+        message: "速限沒有任何變更，而且每一筆都已經人工確認過了",
+      };
     if (!changed.length)
-      return { ok: false, message: "速限沒有任何變更" };
+      return {
+        ok: true,
+        title: "確認路段速限（數值不變）",
+        detail:
+          `數值沒有調整，這一次是把 ${unconfirmed.length} 個路段方向標成「已人工確認」` +
+          `（公告速限本來就可能剛好等於預設值 50）。LOS 會一併重算。`,
+        skipBackup: true,
+      };
     return {
       ok: true,
       title: "套用路段速限並重算",
@@ -626,7 +1010,40 @@
         }
       : { ok: false, message: "門檻必須是 A＞B＞C＞D＞E，且介於 0～2" };
   });
-  ["resetLosRules", "deleteQuarter", "cleanSuffix"].forEach(observeOperation);
+  /*
+   * ══════════════════════════════════════════════════════════════════
+   *  哪些操作要自動留還原點
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 使用者 2026-09-12 指定三支一致：「每次匯入／人工修改／刪除前自動留
+   * 還原點，最多保留最近 30 次」（筆數 2026-09-16 改為 8，見
+   * RESTORE_POINT_LIMIT 的說明），並補一句
+   * 「這類我無法驗證、要過很久才知道的功能，三項程式都要特別謹慎檢查」。
+   *
+   * ⚠️ 舊版只掛了三顆（重設門檻／刪季度／清理路名）＋兩顆高影響按鈕，
+   *   **匯入那一條完全沒有**——而匯入是最危險的一步：
+   *   `update` 模式會直接覆蓋同季度的既有資料，匯錯檔、匯錯季度、
+   *   匯到別的計畫都在這一步發生，而且覆蓋掉就回不來。
+   *
+   * ⚠️ commit 這一顆要用 observeOperation（先拍快照、400ms 後比對有沒有
+   *   真的改變）而不是 protectHighImpactButton：匯入本來就有自己的確認
+   *   與進度流程，再插一個 confirm 會變成按兩次確認。
+   */
+  [
+    /* 匯入（最重要的一條） */
+    "commit",
+    /* 人工修改 */
+    "resetLosRules",
+    "applyBandRule",
+    "resetBandRule",
+    "saveDirections",
+    "addAlias",
+    "confirmRoadChange",
+    "saveSpeedVersion",
+    /* 刪除 */
+    "deleteQuarter",
+    "cleanSuffix",
+  ].forEach(observeOperation);
 
   function anomalyRule() {
     return {
@@ -767,12 +1184,60 @@
     if (!r.start || !r.end) return true;
     return periodKey(period) >= periodKey(r.start) && periodKey(period) <= periodKey(r.end);
   }
-  function deliveryRows() {
-    const road = q("deliveryRoad").value,
-      day = q("deliveryDay").value;
-    return activeSummaries().filter(
-      (x) => inDeliveryRange(x.period) && (!road || x.road === road) && (!day || x.day === day),
+  /** 報告文字草稿的小數位數（0～2）。壞值一律回 1 位，與結論草稿同一個預設。 */
+  function deliveryDigits() {
+    const raw = Number(q("deliveryDigits")?.value);
+    return Number.isInteger(raw) && raw >= 0 && raw <= 2 ? raw : 1;
+  }
+  /**
+   * 交付範圍的代表紀錄。
+   *
+   * @param scope "range"（預設）只取交付季度區間；"all" 取全部季度——
+   *              前期比較要用後者，否則區間第一季永遠寫「無前期資料可比較」。
+   *
+   * ⚠️ 篩了方向或尖峰時**絕對不可以**拿已經挑好的代表紀錄（state.summaries）
+   *   再去篩：那一份是從**全部四筆**挑出來的，篩掉之後只會剩下
+   *   「剛好代表值就是方向1」的那幾列，其餘路段整列消失——
+   *   使用者會以為那些路段沒有資料。
+   *   正確作法是**先篩再挑最差**，與尖峰彙總、各路段 LOS 圖同一個口徑，
+   *   而「挑最差」一律轉呼叫 app.js 的 worstOfGroup（全站唯一一份）。
+   */
+  function deliveryRepresentatives(scope) {
+    const road = q("deliveryRoad")?.value || "",
+      day = q("deliveryDay")?.value || "",
+      direction = q("deliveryDirection")?.value || "",
+      peak = q("deliveryPeak")?.value || "";
+    const inRange = (period) => scope === "all" || inDeliveryRange(period);
+    if (!direction && !peak)
+      return activeSummaries().filter(
+        (x) => inRange(x.period) && (!road || x.road === road) && (!day || x.day === day),
+      );
+    const picked = activeRows().filter(
+      (x) =>
+        inRange(x.period) &&
+        (!road || x.road === road) &&
+        (!day || x.day === day) &&
+        (!direction || x.direction === direction) &&
+        (!peak || x.peak === peak),
     );
+    const groups = new Map();
+    for (const row of picked) {
+      const key = [row.projectCode, row.year, row.quarter, row.road, row.day].join("|");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    }
+    return [...groups.values()]
+      .map((list) => (typeof worstOfGroup === "function" ? worstOfGroup(list) : list[0]))
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          periodKey(a.period) - periodKey(b.period) ||
+          String(a.road).localeCompare(String(b.road), "zh-TW") ||
+          String(a.day).localeCompare(String(b.day), "zh-TW"),
+      );
+  }
+  function deliveryRows() {
+    return deliveryRepresentatives("range");
   }
   function refreshDelivery() {
     if (!q("deliveryPeriodStart")) return;
@@ -804,10 +1269,46 @@
     q("deliveryRoad").innerHTML =
       '<option value="">全部路段</option>' +
       roads.map((x) => `<option ${x === oldR ? "selected" : ""}>${safe(x)}</option>`).join("");
+    /*
+     * ── 方向下拉：標籤要寫**使用者取的方向名稱**，不是內部鍵值 ──────
+     *
+     * ⚠️ 第一版直接寫死 `<option value="方向1">方向1</option>`，
+     *   結果成果交付這一頁出現了裸的「方向1」——那正是 e2e-direction-name
+     *   在守的事（報告與交付畫面上一律寫使用者取的名字）。守門當場抓到。
+     * ⚠️ value 仍然是**鍵值**：篩選要用鍵值，改名才不會讓條件失效。
+     *   只有看到的字跟著名稱走。
+     * ⚠️ 各路段名稱不同時要講出來，不可以隨便挑一個當代表——
+     *   使用者會以為自己篩的是那一條路段的方向。
+     */
+    const oldDirection = q("deliveryDirection")?.value || "";
+    const directions = [...new Set(activeRows().map((x) => x.direction))]
+      .filter(Boolean)
+      .sort();
+    if (q("deliveryDirection"))
+      q("deliveryDirection").innerHTML =
+        '<option value="">全部方向</option>' +
+        directions
+          .map((dir) => {
+            const names = [
+              ...new Set(
+                activeRows()
+                  .filter((x) => x.direction === dir)
+                  .map((x) => rowDirectionName(x)),
+              ),
+            ].filter((name) => name && name !== dir);
+            const label =
+              names.length === 1
+                ? names[0]
+                : names.length > 1
+                  ? `${names.slice(0, 2).join("／")}${names.length > 2 ? "…" : ""}（各路段名稱不同）`
+                  : dir;
+            return `<option value="${safe(dir)}" ${dir === oldDirection ? "selected" : ""}>${safe(label)}</option>`;
+          })
+          .join("");
     const range = deliveryRange();
     if (q("deliveryRangeNote"))
       q("deliveryRangeNote").textContent = range.periods.length
-        ? `本次成果範圍：${range.displayLabel}，共 ${range.periods.length} 個季度（${range.periods.map(showQuarter).join("、")}）`
+        ? `本次成果範圍：${range.displayLabel}，共 ${range.periods.length} 個季度（${range.periods.map((x) => showQuarter(x)).join("、")}）`
         : "目前計畫尚無季度資料";
     loadDraft();
   }
@@ -815,14 +1316,58 @@
     if (!rows.length) return "目前篩選範圍沒有資料。";
     const p = activeProject(),
       range = deliveryRange(),
+      digits = deliveryDigits(),
+      road = q("deliveryRoad")?.value || "",
+      day = q("deliveryDay")?.value || "",
+      direction = q("deliveryDirection")?.value || "",
+      peak = q("deliveryPeak")?.value || "",
+      /*
+       * ⚠️ 前期比較要用**同一組條件**算出來的前一季。
+       *   舊版拿的是沒有篩過的 activeSummaries()：使用者把方向篩成方向1 之後，
+       *   這一季寫的是方向1 的值、卻拿「全部四筆挑最差」的上一季來比，
+       *   算出來的增減幅度**兩邊的口徑不一樣**——那是會寫進正式報告的數字。
+       */
+      basis = deliveryRepresentatives("all"),
       lines = [
         `${p?.code || ""} ${p?.name || ""} ${range.displayLabel} 交通服務水準分析草稿`,
         range.periods.length > 1
-          ? `本次範圍涵蓋 ${range.periods.length} 個季度（${range.periods.map(showQuarter).join("、")}），共分析 ${new Set(rows.map((x) => x.road)).size} 個路段、${rows.length} 筆路段日別代表資料。`
+          ? `本次範圍涵蓋 ${range.periods.length} 個季度（${range.periods.map((x) => showQuarter(x)).join("、")}），共分析 ${new Set(rows.map((x) => x.road)).size} 個路段、${rows.length} 筆路段日別代表資料。`
           : `本期共分析 ${new Set(rows.map((x) => x.road)).size} 個路段、${rows.length} 筆路段日別代表資料。`,
       ];
+    /*
+     * ⚠️ 條件一定要寫進草稿本身。
+     *   這一段文字會被複製進正式報告，而報告上不會附著畫面——
+     *   看到的人無從得知這些數字是「哪一個方向、哪一個尖峰」算出來的。
+     */
+    lines.push(
+      "統計條件：" +
+        [
+          road ? `路段 ${road}` : "全部路段",
+          day || "平日與假日",
+          direction || "全部方向",
+          peak || "代表尖峰（同一組取最差）",
+          `數值小數 ${digits} 位`,
+        ].join("、") +
+        "。",
+    );
+    if (direction || peak)
+      lines.push(
+        "口徑：先依上列條件篩出符合的紀錄，再從同一組（季度・路段・日別）裡挑最差的一筆為代表，" +
+          "與「尖峰彙總」「各路段 LOS 圖」相同；前期比較也走同一組條件。",
+      );
+    /*
+     * 「不適用」逐項寫出來（使用者 2026-09-15 指定的寫法）。
+     * ⚠️ 只在使用者**確實設了**那個條件時才寫——沒設的條件寫一堆只是噪音。
+     */
+    if (peak || day)
+      lines.push(
+        "本數值不適用" +
+          [peak ? "「尖峰」" : "", day ? "「日別」" : ""].filter(Boolean).join("與") +
+          "條件的部分：公告速限是「這條路段這個方向」的設定值，不分尖峰也不分平日假日，" +
+          "因此下列各行引用的速限與速限比不受這兩項影響。",
+      );
     for (const x of rows) {
-      const prev = activeSummaries()
+      const prev = basis
         .filter(
           (y) => y.road === x.road && y.day === x.day && periodKey(y.period) < periodKey(x.period),
         )
@@ -839,10 +1384,14 @@
             return `${label}無法比較（資料含非數值）`;
           if (!before)
             return after > 0
-              ? `${label}由 0 增為 ${fmt(after, 1)}`
+              ? `${label}由 0 增為 ${fmt(after, digits)}`
               : `${label}維持 0`;
           const change = ((after - before) / before) * 100;
-          return `${label}${change >= 0 ? "增加" : "下降"} ${Math.abs(change).toFixed(1)}%`;
+          /*
+           * ⚠️ 百分比也要吃「小數位數」。三支系統都踩過同一個雷：
+           *   位數改成 2 位之後，只有前面的數值變了、百分比仍然寫死 1 位。
+           */
+          return `${label}${change >= 0 ? "增加" : "下降"} ${Math.abs(change).toFixed(digits)}%`;
         };
         change =
           `較 ${showQuarter(prev.period)} ` +
@@ -851,14 +1400,24 @@
           pctText(prev.totalDelay, x.totalDelay, "總延滯");
       }
       lines.push(
-        `${showQuarter(x.period)} ${x.road}（${x.day}）服務水準為 ${x.los}，代表紀錄為${x.peak}${rowDirectionName(x)}，旅行速率 ${fmt(x.travel, 1)} km/h、總延滯 ${fmt(x.totalDelay, 1)} 秒；${change}。`,
+        `${showQuarter(x.period)} ${x.road}（${x.day}）服務水準為 ${x.los}，代表紀錄為${x.peak}${rowDirectionName(x)}，旅行速率 ${fmt(x.travel, digits)} km/h、總延滯 ${fmt(x.totalDelay, digits)} 秒；${change}。`,
       );
     }
     lines.push("本段文字由系統依彙總資料自動產生，正式引用前應核對原始檔、速限設定及現地情況。");
     return lines.join("\n");
   }
   function draftKey() {
-    return `${state.activeCode}|${deliveryRange().label}`;
+    /*
+     * ⚠️ 方向與尖峰只有在**確實設了**的時候才進鍵值。
+     *   無條件加進去的話，鍵值格式就變了，使用者**先前存過的草稿全部找不到**
+     *  （畫面上看起來像是草稿不見了）。兩者都是預設值時維持舊格式，
+     *   舊草稿照樣讀得回來；設了條件才另外存一份，這樣
+     *   「方向1 的草稿」與「方向2 的草稿」不會互相蓋掉。
+     */
+    const direction = q("deliveryDirection")?.value || "";
+    const peak = q("deliveryPeak")?.value || "";
+    const base = `${state.activeCode}|${deliveryRange().label}`;
+    return direction || peak ? `${base}|${direction}|${peak}` : base;
   }
   let draftDirty = false;
   let lastDraftKey = null;
@@ -918,6 +1477,90 @@
    */
   q("deliveryRoad").onchange = () => loadDraft();
   q("deliveryDay").onchange = () => loadDraft();
+  /*
+   * ⚠️ 新增的三個條件也要重載草稿。
+   *   少接一個的話，使用者改了方向、畫面上的草稿卻停在舊條件算出來的數字——
+   *   而那份文字會被複製進正式報告。
+   *   小數位數改了也一樣要重算（位數是呈現，但呈現錯了照樣是錯的數字）。
+   */
+  if (q("deliveryDirection")) q("deliveryDirection").onchange = () => loadDraft(true);
+  if (q("deliveryPeak")) q("deliveryPeak").onchange = () => loadDraft(true);
+  if (q("deliveryDigits")) q("deliveryDigits").onchange = () => loadDraft(true);
+  /*
+   * ⚠️ 使用者 2026-09-14 裁示：成果交付與結論草稿**維持獨立**，
+   *   不自動跟著主工具列跑，另加這一顆一鍵對齊。
+   *   理由很實際：報告常常要輸出一段和畫面上不同的範圍
+   *  （畫面在看最新一季、報告要出全年）。
+   *
+   * ⚠️ 按下去要**說出套用了什麼**。默默改掉使用者設好的一整組條件，
+   *   他會以為是自己剛才點錯了。
+   */
+  const applyMain = q("deliveryApplyMain");
+  if (applyMain)
+    applyMain.onclick = () => {
+      const MTx = globalThis.LosMainToolbar;
+      const f = MTx.state.main;
+      const setIfPossible = (id, value) => {
+        const node = q(id);
+        if (!node) return "";
+        const hit = [...node.options].find((o) => o.value === value);
+        if (!hit) return "";
+        node.value = value;
+        return value;
+      };
+      setIfPossible("deliveryPeriodStart", f.periodFrom);
+      setIfPossible("deliveryPeriodEnd", f.periodTo);
+      const road = (f.roads || []).length === 1 ? f.roads[0] : "";
+      setIfPossible("deliveryRoad", road);
+      const day =
+        f.day === "weekday" ? "平日" : f.day === "holiday" ? "假日" : "";
+      setIfPossible("deliveryDay", day);
+      /*
+       * 方向與尖峰（2026-09-15 新增）。
+       * ⚠️ 「並列」是**呈現方式不是篩選**，在文字草稿裡就是兩邊都寫，
+       *   所以對應到「全部」；「代表尖峰」對應到空字串——那正是這一格的預設
+       *  （同一組取最差）。三者都要在 toast 裡說出來，不可以默默處理。
+       */
+      const direction =
+        f.direction === "方向1" || f.direction === "方向2" ? f.direction : "";
+      setIfPossible("deliveryDirection", direction);
+      const peak =
+        f.peak === "上午尖峰" || f.peak === "下午尖峰" ? f.peak : "";
+      setIfPossible("deliveryPeak", peak);
+      deliveryRangeTouched = true;
+      deliveryRangeOwner = state.activeCode;
+      refreshDelivery();
+      loadDraft();
+      const parts = [
+        "季度 " +
+          globalThis.periodExportLabel(f.periodFrom) +
+          "～" +
+          globalThis.periodExportLabel(f.periodTo),
+        road ? "路段 " + road : "全部路段",
+        day ? "日別 " + day : "平日與假日",
+        direction ? "方向 " + direction : "全部方向",
+        peak ? "尖峰 " + peak : "代表尖峰（同一組取最差）",
+      ];
+      const skipped =
+        ((f.roads || []).length > 1
+          ? /*
+             * ⚠️ 2026-09-16 訂正：這一句原本寫「路段**維持原設定**」，
+             *   但上面 setIfPossible("deliveryRoad", "") 其實把它**改成了
+             *   「全部路段」**——使用者原本挑的那一條被無聲換掉，
+             *   而同一則訊息的前半段已經寫著「全部路段」，自己打自己。
+             */
+            "（主工具列選了 " +
+            (f.roads || []).length +
+            " 條路段，成果交付一次只出一條或全部，因此這裡改成「全部路段」——原本挑的那一條已被取代，需要的話請重新選）"
+          : "") +
+        (f.peak === "side-by-side" || f.direction === "side-by-side" || f.day === "side-by-side"
+          ? "（「並列」在文字草稿就是兩邊都寫，因此對應到「全部」）"
+          : "") +
+        (f.peak === "representative"
+          ? "（「代表尖峰」就是這一格的預設「同一組取最差」，已對齊）"
+          : "");
+      toast("已套用主工具列：" + parts.join("、") + "。" + skipped);
+    };
   q("reportDraft").addEventListener("input", () => {
     draftDirty = true;
   });
@@ -992,11 +1635,19 @@
     const range = deliveryRange();
     if (!range.periods.length) return toast("目前沒有可匯出的季度");
     const summaries = deliveryRows(),
+      /*
+       * ⚠️ 明細也要吃方向與尖峰。
+       *   草稿寫著「方向1」、附在同一個 ZIP 裡的明細卻是全部四筆，
+       *   拿到成果包的人會以為其中一邊算錯了。
+       *   篩選條件不一致與算錯一樣嚴重——兩份東西要說同一件事。
+       */
       detail = activeRows().filter(
         (x) =>
           inDeliveryRange(x.period) &&
           (!q("deliveryRoad").value || x.road === q("deliveryRoad").value) &&
-          (!q("deliveryDay").value || x.day === q("deliveryDay").value),
+          (!q("deliveryDay").value || x.day === q("deliveryDay").value) &&
+          (!q("deliveryDirection")?.value || x.direction === q("deliveryDirection").value) &&
+          (!q("deliveryPeak")?.value || x.peak === q("deliveryPeak").value),
       );
     if (!summaries.length && !detail.length)
       return toast("這個範圍與篩選條件沒有任何資料，請調整後再試");
@@ -1049,7 +1700,15 @@
       metric = q("deliveryMetric").value;
     if (!rows.length) return toast("目前篩選範圍沒有資料");
     try {
-      const label = deliveryRange().label;
+      /*
+       * ⚠️ 檔名要用 displayLabel，不是 label。
+       *   label 是**儲存用**的季別字串（一律民國年），displayLabel 才跟著
+       *   畫面上的「年份顯示」走。用 label 的話，同一個面板的兩個下載
+       *   （成果包 ZIP 與這一個）會在檔名上寫出兩種年份系統。
+       *   這一支自己的註解早就寫過這條規則（「displayLabel 才是給人看的」），
+       *   只有這一行漏了。（2026-09-16 實測抓到）
+       */
+      const label = deliveryRange().displayLabel || deliveryRange().label;
       if (metric === "los") await exportLosWorkbook(rows, `${p.code}_${label}_服務水準圖表.xlsx`);
       else await exportTravelWorkbook(rows, `${p.code}_${label}_旅行速率趨勢.xlsx`);
       toast("篩選後可編輯 Excel 圖表已下載");
@@ -1112,6 +1771,22 @@
               day,
               item: `${road}／${day}`,
               detail: `相較 ${showQuarter(prev.period)}：${reasons.join("；")}，請確認原始資料或現地變化。`,
+              /*
+               * ⚠️ resolution **一定要帶**。
+               *   這一支覆寫掉了 app.js 的「異常變化」判定（改用可自訂門檻），
+               *   而 app.js 那一版是有 resolution 的——漏帶的結果是
+               *   畫面上每一筆異常變化都顯示「尚未對應／請回報給開發者」，
+               *   等於系統自己說它沒有處理指引，而指引其實早就寫好了。
+               *   （使用者 2026-09-17 附圖回報）
+               * ⚠️ 文字與 app.js 那一版**刻意一致**：同一種異常在兩個地方
+               *   給出兩套指引，使用者只會不知道該聽哪一個。
+               */
+              resolution: {
+                kind: "人工確認",
+                text: "這是提醒，不是判定資料有錯。請到「尖峰彙總」比對這兩季的數字：確實有現地變化（施工、號誌改時制、路型改變）就在報告中說明，確認後可按下方的「已確認」，下次檢查就不再提醒；若判斷是資料有誤，才回原始檔更正並重新匯入該季。門檻可在「異常提醒門檻」調整。",
+                view: "summary",
+                viewLabel: "尖峰彙總",
+              },
             });
         }
       }
@@ -1202,6 +1877,89 @@
     else list.push(value);
   }
 
+  /*
+   * ⚠️ 使用者 2026-09-14 裁示：結論草稿**維持獨立**，不自動跟著主工具列跑，
+   *   另加這一顆一鍵對齊。
+   *
+   * ⚠️ 三件事一定要做對，否則這一顆比沒有還糟：
+   *   (1) 「並列」與「全部」在這裡都要換成**空陣列**（＝全部都寫），
+   *     不可以塞一個 "side-by-side" 進去——那個值不是任何一筆資料的方向，
+   *     條件看起來設好了、卻會篩出 0 筆。
+   *   (2) 「代表尖峰」不是一種尖峰，是一種挑選方式；結論草稿沒有這個概念，
+   *     所以尖峰維持「全部都寫」，並在訊息裡點名這一項沒有套進去。
+   *   (3) 要**說出套用了什麼**——默默改掉整組條件，使用者會以為是自己點錯。
+   */
+  /*
+   * 草稿要用的兩支「畫面端的算法」。
+   *
+   * ⚠️ 一律轉呼叫 app.js 的那一份，不可以在這裡重寫。
+   *   worstOfGroup 是「挑最差」全站唯一一份（彙總、LOS 圖、草稿共用）；
+   *   bandHitFor 是三段分界唯一一份（含依季別區間／路段的覆寫）。
+   * ⚠️ 取不到時回傳 undefined／空物件而不是自己給一組預設值：
+   *   自己給預設值等於悄悄換一把尺，草稿會寫出和畫面不同的佔比。
+   */
+  const conclusionWorstOf = (list) =>
+    typeof worstOfGroup === "function" ? worstOfGroup(list) : list && list[0];
+  const conclusionBandsOf = (row) =>
+    typeof bandHitFor === "function" ? bandHitFor(row.period, row.road).rules : null;
+
+  function applyMainToConclusion() {
+    const MTx = globalThis.LosMainToolbar;
+    const MFx = globalThis.LosMainFilters;
+    const f = MTx.state.main;
+    const ranged = MFx.isFiltered(f, "periodFrom");
+    conclusionCondition.scope = ranged
+      ? { kind: "range", from: f.periodFrom, to: f.periodTo }
+      : { kind: "quarter", quarter: f.periodTo || f.periodFrom };
+    conclusionCondition.roads = (f.roads || []).slice();
+    conclusionCondition.days =
+      f.day === "weekday" ? ["平日"] : f.day === "holiday" ? ["假日"] : [];
+    conclusionCondition.directions =
+      f.direction === "方向1" || f.direction === "方向2" ? [f.direction] : [];
+    conclusionCondition.peaks =
+      f.peak === "上午尖峰" || f.peak === "下午尖峰" ? [f.peak] : [];
+    /*
+     * ⚠️ 「代表尖峰（系統取最差）」**不是一種尖峰**，是一種挑選方式——
+     *   所以它對應的是結論草稿的「資料層級」，不是「尖峰」那一組核取方塊。
+     *   舊版在這裡整個跳過，並在 toast 裡說「結論草稿沒有這個概念」，
+     *   那句話從 2026-09-15 起不再成立：草稿有 rowLevel 了。
+     */
+    conclusionCondition.rowLevel =
+      f.peak === "representative" ? "representative" : "detail";
+    renderConclusion();
+    const parts = [
+      ranged
+        ? "季度 " + showQuarter(f.periodFrom) + "～" + showQuarter(f.periodTo)
+        : "季度 " + showQuarter(f.periodTo || f.periodFrom),
+      conclusionCondition.roads.length
+        ? "路段 " + conclusionCondition.roads.length + " 條"
+        : "全部路段",
+      conclusionCondition.days.length
+        ? "日別 " + conclusionCondition.days.join("、")
+        : "全部日別",
+      conclusionCondition.directions.length
+        ? "方向 " + conclusionCondition.directions.join("、")
+        : "全部方向",
+    ];
+    parts.push(
+      conclusionCondition.rowLevel === "representative"
+        ? "資料層級：代表紀錄（先篩再挑最差）"
+        : "資料層級：逐筆明細",
+    );
+    /*
+     * 「並列」在**文字**草稿裡就是兩邊都寫——它是呈現方式不是篩選。
+     * 這一句一定要說出來，否則使用者會以為並列沒有被套進去。
+     */
+    const skipped =
+      f.peak === "side-by-side"
+        ? "（「上午＋下午並列」在文字草稿就是兩種都寫，因此尖峰維持「全部都寫」）"
+        : f.direction === "side-by-side"
+          ? "（「雙向並列」在文字草稿就是兩個方向都寫，因此方向維持「全部都寫」）"
+          : f.day === "side-by-side"
+            ? "（「平日＋假日並列」在文字草稿就是兩種都寫，因此日別維持「全部都寫」）"
+            : "";
+    toast("已套用主工具列：" + parts.join("、") + "。" + skipped);
+  }
   function renderConclusion() {
     if (!q("conclusionMain")) return;
     /* 換計畫時條件與草稿都要重設，否則會把上一個計畫的路段帶過來，
@@ -1307,14 +2065,37 @@
       .forEach((input) => {
         input.checked = input.value === conclusionCondition.grouping;
       });
+    /*
+     * 資料層級（逐筆明細／代表紀錄）。
+     * ⚠️ 每次重畫都要重綁 onchange：checkboxGroup 那幾組是整個重建 innerHTML，
+     *   這一組是寫死在 HTML 裡的，所以改成每次重設 checked 並重綁——
+     *   只在初始化綁一次的話，套用範本或換計畫之後那兩顆會停在舊值。
+     */
+    if (q("conclusionRowLevel"))
+      q("conclusionRowLevel")
+        .querySelectorAll("input")
+        .forEach((input) => {
+          input.checked = input.value === (conclusionCondition.rowLevel || "detail");
+          input.onchange = () => {
+            conclusionCondition.rowLevel = input.value;
+            renderConclusion();
+          };
+        });
     q("conclusionDigits").value = String(conclusionCondition.digits);
 
-    q("conclusionCount").textContent =
-      "符合條件 " + selectSpeedConclusionRows(rows, conclusionCondition).length + " 筆";
-    q("conclusionCount").classList.toggle(
-      "zero",
-      selectSpeedConclusionRows(rows, conclusionCondition).length === 0,
+    /*
+     * ⚠️ 這個筆數必須和草稿裡實際寫出來的筆數**是同一個數**，
+     *   所以挑最差那一支要一起傳進去。少傳的話，切到「代表紀錄」時
+     *   這裡仍然顯示逐筆明細的筆數，而草稿寫的是另一個——
+     *   使用者會以為其中一邊漏資料。
+     */
+    const picked = selectSpeedConclusionRows(
+      rows,
+      conclusionCondition,
+      conclusionWorstOf,
     );
+    q("conclusionCount").textContent = "符合條件 " + picked.length + " 筆";
+    q("conclusionCount").classList.toggle("zero", picked.length === 0);
 
     const templates = conclusionTemplates();
     q("conclusionTemplateList").innerHTML = templates
@@ -1366,6 +2147,15 @@
         systemVersion: document.querySelector(".brand small")?.textContent || "",
         /* 草稿上的季度跟著畫面的年份顯示切換走；篩選與排序仍走儲存值。 */
         showPeriod: showQuarter,
+        /*
+         * ⚠️ 「挑最差」與「三段分界」兩支都由這裡傳進去，草稿**不自己算**。
+         *   草稿自己另算一次的話，只要哪天畫面那邊改了規則，
+         *   草稿與畫面就會分岔——而那種錯在報告送出去之前幾乎不會被發現。
+         *   worstOf ＝ rebuild() 用的那一支；bandsOf ＝ 三段分法圖用的那一支
+         *  （會吃「依季別區間／路段」的分界覆寫）。
+         */
+        worstOf: conclusionWorstOf,
+        bandsOf: conclusionBandsOf,
         generatedAt:
           now.getFullYear() +
           "-" +
@@ -1464,6 +2254,8 @@
    * 所以每一條動線最後都停在草稿框旁邊。兩顆同名按鈕反而讓人以為有差別，
    * 還可能讓新手在還沒勾任何條件時就按下去，拿到一份用預設條件產生的草稿。
    */
+  if (q("conclusionApplyMain"))
+    q("conclusionApplyMain").onclick = applyMainToConclusion;
   if (q("conclusionRegenerate")) q("conclusionRegenerate").onclick = generateConclusion;
   if (q("conclusionDraft"))
     q("conclusionDraft").oninput = () => {

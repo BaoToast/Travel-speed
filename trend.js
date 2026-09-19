@@ -306,7 +306,7 @@
    *
    * ── 為什麼百分比的差可以寫，但一定要接在頭尾兩個值後面 ──────
    *
-   * 「增加 28.6%」單獨出現時有兩種讀法（42.9−14.3＝28.6，
+   * 「增加 28.6%」單獨出現時有兩種讀法（42.9-14.3＝28.6，
    * 或 14.3×1.286＝18.4），是報告審查會被抓的寫法。
    *
    * 但使用者指出：如果前面已經先講了「從 14.3% 到 42.9%」，
@@ -383,6 +383,59 @@
         : "無資料") +
       "）。" +
       definition;
+
+    /*
+     * ══════════════════════════════════════════════════════════════
+     *  一張圖多條線時：**逐條講**，不講平均
+     * ══════════════════════════════════════════════════════════════
+     *
+     * 使用者 2026-09-16：「每一行展示一筆季別+日別的結果……
+     *   而不是要你平均起來」。
+     *
+     * ⚠️ 多線時 series.points 的 value 已經被呼叫端清成 null（那個平均
+     *   本來就不該存在），所以**不可以**走下面單線那條路——
+     *   那會印出「目前沒有可以繪製的資料」，而圖上明明畫著好幾條線。
+     *   這種「畫面有、文字說沒有」正是我們一路在擋的那種錯。
+     */
+    if (series.lines && series.lines.length) {
+      var perLine = series.lines.map(function (line) {
+        var own = (line.points || []).filter(function (point) {
+          return point.value != null;
+        });
+        if (!own.length) return "・" + line.label + "：這個範圍內沒有資料。";
+        if (own.length === 1)
+          return (
+            "・" + line.label + "：只有 " + showPeriod(own[0].period) +
+            " 一季有資料（" + formatValue(own[0].value, series) +
+            "），還看不出趨勢。"
+          );
+        var lineFirst = own[0];
+        var lineLast = own[own.length - 1];
+        var lineDiff = Number(lineLast.value) - Number(lineFirst.value);
+        var lineFlat =
+          Math.abs(lineDiff) < Math.pow(10, -series.digits) / 2;
+        return (
+          "・" + line.label + "：由 " + showPeriod(lineFirst.period) + " 的 " +
+          formatValue(lineFirst.value, series) + " 變為 " +
+          showPeriod(lineLast.period) + " 的 " +
+          formatValue(lineLast.value, series) + "，" +
+          (lineFlat
+            ? "大致持平"
+            : (lineDiff > 0 ? "上升 " : "下降 ") +
+              formatValue(Math.abs(lineDiff), series)) +
+          "。"
+        );
+      });
+      out.observed =
+        "這張圖一條線代表一個路段，共 " + series.lines.length + " 條。" +
+        "各路段的長度與速限都不同，所以不取平均，逐條列出：\n" +
+        perLine.join("\n");
+      out.caveats.push(
+        "各路段的長度與速限不同，這張圖只比同一條路段自己的歷季變化，" +
+          "不同路段之間只能比大小，不可以相加，也不取平均。",
+      );
+      return out;
+    }
 
     /* ── 二、看到了什麼 ＋ 三、代表什麼 ── */
     if (points.length < 2) {
@@ -464,6 +517,21 @@
        */
       if (series.metric === "congestedShare" && last.gradedSize) {
         var countLabel = (series.sampleLabel || "條") === "條" ? "條" : "筆";
+        /*
+         * ⚠️ 兩段都要把「壅塞」講完，不可以只有前面那一段有。
+         *
+         *   使用者 2026-09-14（附圖）：
+         *     「『115Q2 是 1 條裡有 0 條』正確應該是『115Q2 是 1 條裡有 0 條壅塞』。
+         *       它前文『114Q4 是 1 條裡有 1 條壅塞』有點出，後聞反而沒有」
+         *
+         *   舊寫法前半接「壅塞，」、後半只接「。」——讀起來變成
+         *   「1 條裡有 0 條」，0 條**什麼**沒有講。中文省略主詞在前後對仗時
+         *   還勉強讀得懂，但這一句的兩半中間隔了一整串季度與數字，
+         *   讀到後面早就接不回去了。
+         *
+         *   兩段之間也從「，」改成「；」：這是兩個並列的完整陳述，
+         *   用逗號會讓人以為後半是前半的延續。
+         */
         out.observed +=
           "以實際樣本來看，" +
           showPeriod(first.period) +
@@ -471,13 +539,13 @@
           first.gradedSize +
           " " + (series.sampleLabel || "條") + "裡有 " +
           first.congestedCount +
-          " " + countLabel + "壅塞，" +
+          " " + countLabel + "壅塞；" +
           showPeriod(last.period) +
           " 是 " +
           last.gradedSize +
           " " + (series.sampleLabel || "條") + "裡有 " +
           last.congestedCount +
-          " " + countLabel + "。";
+          " " + countLabel + "壅塞。";
       }
       if (series.metric === "worstLos" && last.worstLos)
         out.observed +=
@@ -572,164 +640,16 @@
     return out;
   }
 
-  /**
-   * 跨計畫比較：一個計畫一條線。
+  /*
+   * ⚠️ 2026-09-17 移除 buildCrossProjectTrend()／describeCrossProjectTrend()。
    *
-   * ⚠️ 跨計畫**只能比佔比與平均，不能比總數**。
-   *    各計畫的路段數不一樣（甲 20 條、乙 5 條），比條數一定會誤導：
-   *    甲壅塞 8 條、乙 3 條看起來甲比較糟，但 8/20＝40%、3/5＝60%，
-   *    其實是乙比較糟。所以這裡回傳的每一條線都用同一個指標，
-   *    而且一定把 N（路段數）帶著，畫面要標出來。
+   * 「跨計畫比較」那一條線在畫面上早就拿掉了（使用者的評估是
+   * 「跨計畫比較似乎沒什麼意義」），這兩支函式從此只剩自己的單元測試在呼叫——
+   * 也就是說它們**唯一的作用是讓測試數字變好看**。
+   * 留著的代價不是佔空間：改到 buildTrendSeries 時要連帶想它，
+   * 而它的行為沒有任何畫面在驗證，改壞了也不會有人發現。
+   * 《加總與並列稽核_三支程式_20260916》第六節列的兩處死程式之一。
    */
-  function buildCrossProjectTrend(groups, options) {
-    var opts = options || {};
-    return (groups || []).map(function (group) {
-      var series = buildTrendSeries(group.rows, {
-        metric: opts.metric,
-        congestedStart: opts.congestedStart || group.congestedStart,
-        populationLabel: opts.populationLabel,
-        sampleLabel: opts.sampleLabel,
-        comparePeriod: opts.comparePeriod,
-      });
-      series.projectCode = group.code;
-      series.projectName = group.name;
-      /* 平日與假日拆線後，下鑽必須知道這一條線是哪個日別。 */
-      series.day = group.day || "";
-      /* 這個計畫最少的一季有幾條路段——樣本太少要在畫面上標記 */
-      series.smallestSample = series.points.reduce(function (min, point) {
-        if (!(point.valueSize > 0)) return min;
-        return min == null || point.valueSize < min ? point.valueSize : min;
-      }, null);
-      return series;
-    });
-  }
-
-  /**
-   * 跨計畫圖的說明文字。
-   *
-   * 與單一計畫版的差別：這裡要講的是「誰在變差、誰在改善」，
-   * 而不是某一條線的細節。而且一定要把「路段數不同」講出來——
-   * 那是跨計畫比較最容易被質疑的地方。
-   */
-  function describeCrossProjectTrend(list, meta) {
-    var info = meta || {};
-    var showPeriod =
-      typeof info.showPeriod === "function"
-        ? info.showPeriod
-        : function (value) {
-            return String(value);
-          };
-    var usable = (list || []).filter(function (series) {
-      return series.points.some(function (point) {
-        return point.value != null;
-      });
-    });
-    var metric = metricByKey(usable.length ? usable[0].metric : "") || TREND_METRICS[0];
-    var out = { title: "", meaning: "", observed: "", caveats: [] };
-    var label = usable.length ? usable[0].label : "";
-    out.title = "跨計畫比較：" + label;
-
-    if (!usable.length) {
-      out.meaning = "目前沒有可以比較的計畫資料。";
-      return out;
-    }
-
-    var periods = [
-      ...new Set(
-        usable.flatMap(function (series) {
-          return series.points.map(function (point) {
-            return point.period;
-          });
-        }),
-      ),
-    ];
-    out.meaning =
-      "這張圖把 " +
-      usable.length +
-      " 個計畫的" +
-      label +
-      "畫在同一張圖上，一個計畫一條線，橫軸是季度（共 " +
-      periods.length +
-      " 季）。" +
-      metric.meaning +
-      "跨計畫比較一律用比例或平均，不用總數——各計畫的路段數不一樣，比總數會誤導。";
-
-    /* 誰變差最多、誰改善最多 */
-    var changes = usable
-      .map(function (series) {
-        var valued = series.points.filter(function (point) {
-          return point.value != null;
-        });
-        if (valued.length < 2) return null;
-        var first = valued[0];
-        var last = valued[valued.length - 1];
-        return {
-          series: series,
-          first: first,
-          last: last,
-          diff: Number(last.value) - Number(first.value),
-        };
-      })
-      .filter(Boolean);
-
-    if (!changes.length) {
-      out.observed = "每個計畫都只有一季資料，還看不出趨勢。";
-    } else {
-      var worseIsUp = !metric.lowerIsWorse;
-      changes.forEach(function (change) {
-        change.deterioration = worseIsUp ? change.diff : -change.diff;
-      });
-      var worsening = changes.filter(function (change) { return change.deterioration > 0; })
-        .sort(function (a, b) { return b.deterioration - a.deterioration; });
-      var improving = changes.filter(function (change) { return change.deterioration < 0; })
-        .sort(function (a, b) { return a.deterioration - b.deterioration; });
-      function changeText(prefix, change) {
-        return prefix + "「" + change.series.projectName + "」：從 " +
-          showPeriod(change.first.period) + " 的 " +
-          formatValue(change.first.value, change.series) + " 到 " +
-          showPeriod(change.last.period) + " 的 " +
-          formatValue(change.last.value, change.series) + "。";
-      }
-      out.observed = worsening.length
-        ? changeText("惡化幅度最大的是", worsening[0])
-        : "可比較的計畫都沒有惡化。";
-      if (improving.length)
-        out.observed += changeText("改善幅度最大的是", improving[0]);
-    }
-
-    /* 路段數不同——跨計畫比較一定要講的那一句 */
-    var sizes = usable
-      .map(function (series) {
-        return series.projectName + " " + (series.smallestSample || 0) + " " +
-          (series.sampleLabel || "條");
-      })
-      .join("、");
-    out.caveats.push(
-      "各計畫的路段數不一樣（" +
-        sizes +
-        "），所以這張圖比的是比例不是總數；樣本少的計畫，線的跳動會比較大。",
-    );
-    /*
-     * 門檻用「5 條以下」（含 5）。5 條的佔比只可能是
-     * 0/20/40/60/80/100% 六個值，已經粗到不適合單看，所以一起提醒。
-     */
-    var tiny = usable.filter(function (series) {
-      return series.smallestSample != null && series.smallestSample <= 5;
-    });
-    if (tiny.length)
-      out.caveats.push(
-        "其中 " +
-          tiny
-            .map(function (series) {
-              return series.projectName + "（" + series.smallestSample + " " +
-                (series.sampleLabel || "條") + "）";
-            })
-            .join("、") +
-          " 的路段數在 5 條以下，比例會跳得很大，不宜單看這張圖下結論。",
-      );
-
-    return out;
-  }
 
   /** 把說明整理成可以直接貼進投影片或報告的一段文字。 */
   function trendScript(description) {
@@ -783,6 +703,20 @@
   function buildBandSeries(rows, options) {
     var opts = options || {};
     var bands = opts.bands || { smoothEnd: "B", congestedStart: "E" };
+    /*
+     * ⚠️ 2026-09-15 起三段分界可以**依季別區間 × 路段覆寫**，
+     *   所以同一張圖裡不同的列可能用不同的尺。
+     *   呼叫端傳 `bandsOf(row)` 進來時，**逐列**問一次；沒傳就全部用同一組
+     *  （＝改版前的行為，完全無感）。
+     *
+     * ⚠️ 不可以只在圖例上換一組尺而內部還用舊的：那會讓圖例與柱子說不同的話。
+     */
+    var bandsOf =
+      typeof opts.bandsOf === "function"
+        ? opts.bandsOf
+        : function () {
+            return bands;
+          };
     var periods = [];
     var byPeriod = {};
     (rows || []).forEach(function (row) {
@@ -810,7 +744,7 @@
       var counts = { smooth: 0, fair: 0, congested: 0 };
       var unknown = 0;
       own.forEach(function (row) {
-        var band = bandOfGrade(row.los, bands);
+        var band = bandOfGrade(row.los, bandsOf(row));
         if (band) counts[band] += 1;
         else unknown += 1;
       });
@@ -874,20 +808,44 @@
     periods.sort(comparePeriod || function (a, b) { return String(a).localeCompare(String(b)); });
     return {
       periods: periods,
+      /*
+       * ⚠️ 一張圖多條線時，Excel 也要**一條線一個數列**。
+       *
+       *   多線的 item.points 已經被清成 null（那個跨路段平均本來就不該
+       *   存在），直接照 item.points 匯出會得到一整欄空白——
+       *   畫面上有四條線、檔案裡卻一格數字都沒有。
+       *   使用者拿到的是 Excel，不是畫面，所以這裡一定要跟著拆。
+       *
+       * ⚠️ 欄名要帶上路段名稱，否則四個數列全叫同一個指標名，
+       *   在 Excel 裡分不出哪一欄是哪一條路。
+       */
       series: (list || [])
         .filter(function (item) { return !item.ordinal; })
-        .map(function (item) {
-          return {
-            label: item.label,
-            unit: item.unit,
-            values: periods.map(function (period) {
-              var point = (item.points || []).find(function (candidate) {
+        .reduce(function (out, item) {
+          var valuesFor = function (source) {
+            return periods.map(function (period) {
+              var point = (source || []).find(function (candidate) {
                 return candidate.period === period;
               });
               return point ? point.value : null;
-            }),
+            });
           };
-        }),
+          if (item.lines && item.lines.length)
+            item.lines.forEach(function (line) {
+              out.push({
+                label: item.label + "／" + line.label,
+                unit: item.unit,
+                values: valuesFor(line.points),
+              });
+            });
+          else
+            out.push({
+              label: item.label,
+              unit: item.unit,
+              values: valuesFor(item.points),
+            });
+          return out;
+        }, []),
     };
   }
 
@@ -901,8 +859,6 @@
     describeTrendChart: describeTrendChart,
     trendScript: trendScript,
     trendFormatValue: formatValue,
-    buildCrossProjectTrend: buildCrossProjectTrend,
-    describeCrossProjectTrend: describeCrossProjectTrend,
     alignTrendSeriesForExcel: alignTrendSeriesForExcel,
   };
 });

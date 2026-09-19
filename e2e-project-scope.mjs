@@ -63,7 +63,7 @@ try {
   };
 
   for (const [code, name] of [
-    ["13545", "示範捷運線"],
+    ["99999", "示範捷運線"],
     ["11017", "示範標案"],
   ]) {
     await go("setup");
@@ -75,7 +75,7 @@ try {
 
   await page.evaluate(() => {
     const sw = document.getElementById("projectSwitch");
-    sw.value = "13545";
+    sw.value = "99999";
     sw.onchange();
   });
   await page.waitForTimeout(800);
@@ -108,10 +108,10 @@ try {
   }));
   ok(
     "頁首 A、表單 B 時作用中仍是 A",
-    shown.header === "13545" &&
+    shown.header === "99999" &&
       shown.picker === "11017" &&
       shown.formCode === "11017" &&
-      shown.active === "13545",
+      shown.active === "99999",
     JSON.stringify(shown),
   );
 
@@ -119,7 +119,7 @@ try {
   const hintText = ((await hint.textContent()) || "").replace(/\s+/g, "");
   ok(
     "提示指名作用中計畫",
-    /目前作用中的是「13545示範捷運線」/.test(hintText),
+    /目前作用中的是「99999示範捷運線」/.test(hintText),
     hintText.slice(0, 90),
   );
   ok(
@@ -156,7 +156,7 @@ try {
   });
   ok(
     "恰好 4 筆資料寫進作用中的 A，B 維持 0 筆",
-    written.byProject["13545"] === 4 && !(written.byProject["11017"] || 0),
+    written.byProject["99999"] === 4 && !(written.byProject["11017"] || 0),
     JSON.stringify(written),
   );
 

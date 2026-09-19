@@ -99,12 +99,23 @@ test("表頭與檔名衝突時，寫入前必須產生二次確認訊息", () =>
   assert.match(prompt, /確定仍要寫入/);
 });
 
-test("Manager 匯入不可靜默略過格式正確但不是 Project 專案包的 JSON", () => {
-  assert.match(
-    source,
-    /packs\.some\(\(pack\) => pack\.kind !== "TLM_PROJECT_PACKAGE" \|\| !pack\.project\?\.code\)/,
-  );
-  assert.match(source, /throw new Error\("不是有效的 Project 專案包"\)/);
+/*
+ * ⚠️ 這一條原本守的是 Manager 匯入：「格式正確但不是 Project 專案包的 JSON
+ *   不可以被靜默略過」。Manager 於 2026-09-13 依使用者決定整組移除，
+ *   但**同一類錯誤搬到了還原備份那條路**（那是現在唯一會吃專案包的入口），
+ *   所以守門也跟著搬，不是刪掉。
+ *
+ *   ⚠️ 不可以只把這一條刪掉：那樣「餵一個殼進去就把資料清空」這件事
+ *   會退回到沒有人守的狀態——2026-09-12 才剛實測過它真的會發生
+ *  （`{"kind":"TLM_PORTFOLIO_PACKAGE"}` 讓全部計畫歸零，畫面卻報
+ *    「備份已載入：0 個計畫」）。
+ *
+ *   行為層級的驗證在 e2e-speed.mjs 最後那一段（四種壞掉的備份 ＋ 一個正常的）。
+ */
+test("還原備份不可以接受沒有可用計畫的專案包", () => {
+  assert.match(source, /function isUsableProject\(p\)/);
+  assert.match(source, /throw new Error\("專案包裡的計畫編號是空的或含有「\|」"\)/);
+  assert.match(source, /throw new Error\("全部計畫包裡沒有可用的計畫"\)/);
 });
 
 test("路段名稱：正常格式仍照舊切掉案號與平假日字尾", () => {
@@ -113,7 +124,7 @@ test("路段名稱：正常格式仍照舊切掉案號與平假日字尾", () =>
     "測試路段(甲路～乙路)",
   );
   assert.equal(
-    roadFromFile("13545TS9-11-中正一路-假日.xls"),
+    roadFromFile("99999TS9-11-中正一路-假日.xls"),
     "中正一路",
   );
 });
@@ -174,7 +185,7 @@ test("名稱看起來沒切乾淨時要攔下來問，即使計畫裡還沒有�
   /* 這幾種都是舊版會靜靜長出幽靈路段的實際案例 */
   assert.ok(suspiciousRoadName(""), "空白名稱要攔");
   assert.ok(
-    suspiciousRoadName("13545-TS1-01-中正路"),
+    suspiciousRoadName("99999-TS1-01-中正路"),
     "案號沒切掉要攔（中間多一個符號就切不掉）",
   );
   assert.ok(suspiciousRoadName("複本-99999TS1-01-測試路段"), "複本前綴要攔");

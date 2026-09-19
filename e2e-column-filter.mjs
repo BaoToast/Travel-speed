@@ -25,6 +25,7 @@ import { dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { launchOptions } from "./chrome-path.mjs";
+import { ensureToolbarOpen } from "./_toolbar.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TYPES = {
@@ -54,6 +55,8 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 page.on("dialog", (d) => d.accept());
 await page.goto(base, { waitUntil: "networkidle" });
+/* ⚠️ X-78：主工具列預設收合，這一支要動它的欄位，先用那顆鈕展開。 */
+await ensureToolbarOpen(page);
 
 /* ── 造一批可預測的匿名資料：3 路段 × 2 季 × 2 方向 × 2 尖峰 = 24 筆 ── */
 await page.evaluate(() => go("setup"));
@@ -70,6 +73,16 @@ await page.evaluate(async (roads) => {
         for (const peak of ["上午", "下午"]) {
           state.details.push({
             projectCode: state.activeCode,
+            /*
+             * ⚠️ year／quarter 不可以省。
+             *   彙總的分組鍵是（計畫・年・季・路段・日別），真正匯入進來的
+             *   每一筆都帶著這兩欄（parsePeakSheet 寫的是 +year／+q）。
+             *   假資料只給 period 的話，兩季會被併成同一組（鍵裡是
+             *   undefined|undefined），彙總從 6 列縮成 3 列——
+             *   而且縮的那一半看起來只是「這一季沒有資料」，很難發現。
+             */
+            year: Number(period.slice(0, 3)),
+            quarter: Number(period.slice(-1)),
             period,
             road,
             direction,
@@ -264,79 +277,353 @@ ok(
 await page.click("#summaryFilterState .col-filter-clear");
 await page.waitForTimeout(250);
 
-/* ── Manager 比較：季度／日別／LOS 改成表頭漏斗之後仍然要能篩 ───── */
-await page.evaluate(async () => {
-  /* 用目前這個計畫自己造一份專案包塞進 Manager，不動任何真實資料 */
-  state.manager = [
-    {
-      project: { code: "99001", name: "欄位篩選測試計畫" },
-      summaries: state.details.map((x) => ({ ...x })),
-      importedAt: "2026-09-04 10:00",
-    },
-  ];
-  await save();
-  renderAll();
-  go("manager");
-  /*
-   * v2.20.47 起明細表預設收合；表頭漏斗在裡面，要先展開才量得到。
-   */
-  const details = document.querySelector("details.manager-data");
-  if (details) details.open = true;
-});
-await page.waitForTimeout(600);
-ok(
-  "Manager 的舊下拉已經拿掉（季度／日別／LOS）",
-  (await page.evaluate(
+/*
+ * ⚠️ 這裡原本有一整段「Manager 比較的表頭漏斗」測試。
+ *   Manager 於 2026-09-13 依使用者決定整組移除，那一頁不存在了。
+ *
+ *   ⚠️ 它驗的規則（舊下拉要拿掉、表頭掛得上漏斗、篩選後筆數對、
+ *   搜尋與欄位條件會疊加、清除後復原）**上面對尖峰明細與尖峰彙總
+ *   已經逐項驗過同一套**——那兩張表用的是同一支 ColumnFilter。
+ *   所以是刪掉重複的那一份，不是放棄覆蓋。
+ */
+
+/*
+ * ── 路段速限表也要有（使用者 2026-09-15）─────────────────────
+ *
+ * 使用者原話：「路段速限的表，請建立篩選功能……（每欄位都能篩，
+ *   路段／方向／速限），所以篩選很重要」。
+ *
+ * ⚠️ 這一段要驗的是**真的篩掉列**，不是「掛得上按鈕」。
+ *   只驗按鈕數量的話，一個什麼都不做的漏斗也會全綠。
+ * ⚠️ 還要驗**篩掉幾列有講出來**：只把列拿掉、什麼都不寫，
+ *   使用者會以為那些路段的速限不見了。
+ */
+await page.evaluate(() => go("speed"));
+await page.waitForTimeout(500);
+const speedRowCount = () =>
+  page.evaluate(
     () =>
-      !document.getElementById("managerPeriodFilter") &&
-      !document.getElementById("managerDayFilter") &&
-      !document.getElementById("managerLosFilter"),
-  )) === true,
-);
-ok(
-  "Manager 表頭掛上 6 個篩選鈕",
-  (await page.evaluate(() => document.querySelectorAll("#managerHead .col-filter-btn").length)) === 6,
-);
-const managerShown = () =>
-  page.evaluate(() => document.querySelectorAll("#managerRows tr").length);
-const managerBefore = await managerShown();
-await page.click("#managerHead th:nth-child(2) .col-filter-btn");
-await page.waitForTimeout(300);
-await page.evaluate(() => {
-  const hit = [...document.querySelectorAll(".col-filter-panel .col-filter-list label")].find(
-    (r) => r.textContent.trim() === "115Q2",
+      [...document.querySelectorAll("#speedRows tr")].filter(
+        (tr) => !tr.querySelector(".empty"),
+      ).length,
   );
-  if (hit) hit.querySelector("input").click();
-});
-await page.waitForTimeout(400);
-await page.keyboard.press("Escape");
-await page.waitForTimeout(300);
-const managerAfter = await managerShown();
+const speedAll = await speedRowCount();
 ok(
-  "Manager 依期間篩 115Q2 之後筆數減半",
-  managerAfter === managerBefore / 2,
-  `${managerBefore} → ${managerAfter}`,
+  "路段速限表的四個欄位標題都掛上了篩選鈕（路段／方向／速限／資料來源）",
+  (await page.evaluate(
+    () => document.querySelectorAll("#speedHead .col-filter-btn").length,
+  )) === 4,
+);
+ok("前置：速限表本來有列可以篩（0 列的話下面全部恆真）", speedAll > 1, `${speedAll} 列`);
+const speedPick = async (columnIndex, label) => {
+  await page.click(`#speedHead th:nth-child(${columnIndex + 1}) .col-filter-btn`);
+  await page.waitForTimeout(250);
+  const picked = await page.evaluate((text) => {
+    const rows = [
+      ...document.querySelectorAll(".col-filter-panel .col-filter-list label"),
+    ];
+    const hit = text
+      ? rows.find((r) => r.textContent.trim() === text)
+      : rows[0];
+    if (!hit) return null;
+    hit.querySelector("input").click();
+    return hit.textContent.trim();
+  }, label);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  return picked;
+};
+const pickedRoad = await speedPick(0, "");
+const afterRoad = await speedRowCount();
+ok(
+  "⚠️ 依「路段」篩之後列數真的變少（不是掛了按鈕卻不篩）",
+  pickedRoad !== null && afterRoad > 0 && afterRoad < speedAll,
+  `選「${pickedRoad}」：${speedAll} → ${afterRoad} 列`,
 );
 ok(
-  "Manager 只剩 115Q2",
-  await page.evaluate(() =>
-    [...document.querySelectorAll("#managerRows tr")].every(
-      (tr) => tr.children[1]?.textContent === "115Q2",
-    ),
+  "⚠️ 篩掉幾列要說出來（不然看起來像資料不見了）",
+  await page.evaluate(() => {
+    const el = document.getElementById("speedFilterNotes");
+    return Boolean(el) && !el.hidden && /隱藏/.test(el.textContent || "");
+  }),
+  (await page.evaluate(
+    () => document.getElementById("speedFilterNotes")?.textContent || "",
+  )).slice(0, 60),
+);
+const pickedSpeed = await speedPick(2, "");
+ok(
+  "⚠️ 再依「公告速限」疊加之後仍然篩得到（跨欄是 AND）",
+  (await speedRowCount()) <= afterRoad,
+  `再選「${pickedSpeed}」：${afterRoad} → ${await speedRowCount()} 列`,
+);
+await page.click("#speedFilterState .col-filter-clear");
+await page.waitForTimeout(300);
+ok(
+  "清除全部篩選後回到全部列，提示也收起來",
+  (await speedRowCount()) === speedAll &&
+    (await page.evaluate(
+      () => document.getElementById("speedFilterNotes")?.hidden !== false,
+    )),
+  `${await speedRowCount()} 列`,
+);
+
+/*
+ * ── C-4／J-3／**L-1**：主工具列縮小範圍時，漏斗仍然列得出全部的值 ──────
+ *
+ * 使用者 2026-09-15（問題）：「當我主工具列選擇 115Q1-115Q2 區間的資料時……
+ *   匯總表本身的篩選條件範圍也變成只有 115Q1～115Q2，我無法篩選表格上有的
+ *   其他資料（例如 114Q1～114Q4），但因為沒有任何提示……**會誤以為自己
+ *   表格裡 114Q1～114Q4 資料遺失了**。請補充提示說明。」
+ *
+ * 使用者 2026-09-15（裁示，L-1）：「主工具列做了篩選的話，表格也跟著做篩選……
+ *   但這種篩選是表單自己全部資料下跟著主工具列做的篩選，**使用者點開路段
+ *   篩選鈕時，仍舊看得到全部路段的資料**，如果勾了一個與主工具列目前篩選
+ *   條件不同的路段，**這個表單就脫離，只影響這個表單**，並出現回歸主工具列
+ *   的按鈕，主工具列也跳出全部回歸按鈕。」
+ *
+ * ⚠️ 這一段在 L-1 之後**整個反過來了**。舊版驗的是
+ *   「主工具列縮小之後，表頭漏斗的選項跟著變少」——那正是使用者要求拿掉的行為。
+ *   現在要驗的是：
+ *     ① 表格的**列**真的跟著主工具列變少（跟隨主工具列這件事不可以丟掉）
+ *     ② 漏斗的**選項數量完全不變**，範圍外的被標成灰字（data-outside）
+ *     ③ 勾一個範圍外的值 → **只有這一張表**脫離，出現回歸鈕，主工具列也跳全部回歸
+ *     ④ 反面：勾範圍**內**的值不可以脫離（否則③會恆真）
+ *     ⑤ 按回歸之後真的回到跟隨主工具列的狀態
+ */
+
+/*
+ * 主工具列的路段是**下拉多選**（使用者 2026-09-15 指定改成與全日交通量同格式），
+ * 不是 <select>，所以要操作面板裡的核取方塊。
+ * ⚠️ 與 e2e-filter-coverage / e2e-main-toolbar 是同一份寫法，三處要一致。
+ */
+async function pickRoads(page, names) {
+  await page.evaluate((wanted) => {
+    const button = document.querySelector('[data-testid="mt-roads"]');
+    const panel = document.getElementById("mtRoadsPanel");
+    if (!button || !panel) throw new Error("找不到路段下拉");
+    if (panel.hidden) button.click();
+    if (!wanted.length) {
+      panel.querySelector("[data-roads-all]").click();
+      return;
+    }
+    for (const box of panel.querySelectorAll("input[data-road]")) {
+      const want = wanted.includes(box.dataset.road);
+      if (box.checked !== want) box.click();
+    }
+  }, names);
+  await page.waitForTimeout(400);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+}
+
+console.log("\n══ C-4／J-3 主工具列縮小範圍時的提示 ══");
+await page.evaluate(() => go("detail"));
+await page.waitForTimeout(600);
+/*
+ * ⚠️ 前置：把主工具列與表頭篩選都清乾淨再量。
+ *   前面幾段測試留下的條件會讓「縮小前」本來就只剩一季，
+ *   於是「縮小後變少」永遠不成立——那是測試自己造成的假紅。
+ */
+await page.evaluate(() => {
+  document.querySelector("#detailFilterState .col-filter-clear")?.click();
+});
+const mtPeriods = await page.evaluate(() =>
+  [...document.querySelectorAll('[data-testid="mt-period-from"] option')].map(
+    (o) => o.value,
   ),
 );
-await page.fill("#managerSearch", "115Q1");
-await page.waitForTimeout(350);
 ok(
-  "Manager 搜尋無交集時仍保留期間條件",
-  await page.evaluate(() => /已篩選 1 個欄位/.test(document.getElementById("managerFilterState")?.textContent || "")),
+  "前置：季度有兩季以上，才拉得開區間",
+  mtPeriods.length >= 2,
+  mtPeriods.join("／"),
 );
-await page.fill("#managerSearch", "");
-await page.waitForTimeout(350);
-ok("Manager 清除搜尋後恢復原期間結果", (await managerShown()) === managerAfter);
-await page.click("#resetManagerFilters");
+await page.selectOption('[data-testid="mt-period-from"]', mtPeriods[0]);
+await page.selectOption(
+  '[data-testid="mt-period-to"]',
+  mtPeriods[mtPeriods.length - 1],
+);
+await page.waitForTimeout(900);
+/*
+ * ⚠️ 用**路段**縮小，不用季度。這一支的測資只有兩季，
+ *   而使用者要的情境（「點開**路段**篩選鈕時仍舊看得到全部路段」）本來就是路段。
+ */
+
+/** 漏斗裡每一個選項的文字，以及它是不是被標成「不在主工具列條件內」。 */
+const optionRows = async (columnIndex, headSelector = "#detailHead") => {
+  await page.click(`${headSelector} th:nth-child(${columnIndex + 1}) .col-filter-btn`);
+  await page.waitForTimeout(250);
+  const out = await page.evaluate(() =>
+    [...document.querySelectorAll(".col-filter-panel .col-filter-list label")].map((r) => ({
+      label: (r.querySelector("span")?.textContent || "").trim(),
+      outside: r.dataset.outside === "1",
+    })),
+  );
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  return out;
+};
+/** 勾漏斗裡某一個標籤（面板保持開著，因為勾完可能要看它自己怎麼變）。 */
+const tickOption = async (columnIndex, label, headSelector = "#detailHead") => {
+  await page.click(`${headSelector} th:nth-child(${columnIndex + 1}) .col-filter-btn`);
+  await page.waitForTimeout(250);
+  await page.evaluate((wanted) => {
+    const row = [
+      ...document.querySelectorAll(".col-filter-panel .col-filter-list label"),
+    ].find((r) => (r.querySelector("span")?.textContent || "").trim() === wanted);
+    if (!row) throw new Error(`漏斗裡找不到「${wanted}」`);
+    row.querySelector("input[type=checkbox]").click();
+  }, label);
+  await page.waitForTimeout(900);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+};
+const detachState = () =>
+  page.evaluate(() => ({
+    detail: Boolean(
+      document.querySelector('#detailFilterNotes [data-detached-chart="detail-table"]'),
+    ),
+    detailReset: Boolean(
+      document.querySelector('#detailFilterNotes [data-testid="chart-detach-reset"]'),
+    ),
+    summary: Boolean(
+      document.querySelector('#summaryFilterNotes [data-detached-chart="summary-table"]'),
+    ),
+    resetAll: Boolean(document.querySelector('[data-testid="mt-reset-all"]')),
+  }));
+
+const roadsBefore = await optionRows(1);
+ok(
+  "前置：條件放寬時，表頭漏斗列得出兩條以上路段（1 條的話下面幾條恆真）",
+  roadsBefore.length >= 2 && roadsBefore.every((r) => !r.outside),
+  roadsBefore.map((r) => r.label).join("／"),
+);
+const detailRowsBefore = await shown();
+await pickRoads(page, [roadsBefore[0].label]);
+await page.waitForTimeout(900);
+ok(
+  "① 尖峰明細**真的跟著主工具列走**（列數變少）",
+  (await shown()) < detailRowsBefore,
+  `主工具列縮小前 ${detailRowsBefore} 筆 → 縮小後 ${await shown()} 筆`,
+);
+const roadsAfter = await optionRows(1);
+ok(
+  "② ⚠️ L-1：漏斗的路段選項**一個都沒有少**（仍舊看得到全部路段）",
+  roadsAfter.length === roadsBefore.length,
+  `縮小前 ${roadsBefore.length} 條 → 縮小後 ${roadsAfter.length} 條（${roadsAfter.map((r) => r.label).join("／")}）`,
+);
+ok(
+  "② ⚠️ 範圍外的那幾條被標成「不在主工具列條件內」，而選到的那一條沒有",
+  roadsAfter.filter((r) => r.outside).length === roadsAfter.length - 1 &&
+    roadsAfter.find((r) => r.label === roadsBefore[0].label)?.outside === false,
+  roadsAfter.map((r) => `${r.label}${r.outside ? "（外）" : "（內）"}`).join("／"),
+);
+const detailNote = await page.evaluate(
+  () => document.getElementById("detailFilterNotes")?.textContent || "",
+);
+ok(
+  "② 說明文字改成「漏斗仍然列得出全部的值、勾了會脫離」（不可以還寫著舊的「選項只會列出這個範圍內的值」）",
+  /仍然列得出全部的值/.test(detailNote) &&
+    /不是資料缺漏/.test(detailNote) &&
+    !/只會列出這個範圍內的值/.test(detailNote),
+  detailNote.replace(/\s+/g, " ").slice(0, 110),
+);
+await page.evaluate(() => go("summary"));
+await page.waitForTimeout(700);
+const summaryNote = await page.evaluate(
+  () => document.getElementById("summaryFilterNotes")?.textContent || "",
+);
+ok(
+  "② 尖峰彙總也有同一句（使用者就是在這一張表上發現的）",
+  /仍然列得出全部的值/.test(summaryNote) &&
+    /不是資料缺漏/.test(summaryNote) &&
+    !/只會列出這個範圍內的值/.test(summaryNote),
+  summaryNote.replace(/\s+/g, " ").slice(0, 110),
+);
+
+/*
+ * ④ 反面先做：勾**範圍內**的值不可以脫離。
+ *   少了這一條，一個「只要動漏斗就脫離」的實作也會讓③全綠。
+ */
+await page.evaluate(() => go("detail"));
+await page.waitForTimeout(600);
+await tickOption(1, roadsBefore[0].label);
+const afterInScope = await detachState();
+ok(
+  "④ 反面：勾**範圍內**的路段不可以脫離",
+  !afterInScope.detail && !afterInScope.resetAll,
+  `脫離=${afterInScope.detail}／主工具列全部回歸鈕=${afterInScope.resetAll}`,
+);
+await tickOption(1, roadsBefore[0].label); /* 勾回來 */
+
+/* ③ 勾範圍外的值 → 只有這一張表脫離 */
+const outsideRoad = roadsAfter.find((r) => r.outside);
+ok("前置：真的有一條路段在主工具列範圍外", Boolean(outsideRoad), outsideRoad?.label || "（沒有）");
+/*
+ * ⚠️ 前置不成立時要**乾淨地紅**，不可以讓它拋例外中斷。
+ *   中斷的話後面幾條根本不會印出來，看 log 的人會以為那幾條通過了。
+ */
+if (outsideRoad) await tickOption(1, outsideRoad.label);
+const afterOutside = outsideRoad
+  ? await detachState()
+  : { detail: false, detailReset: false, summary: false, resetAll: false };
+ok(
+  "③ ⚠️ 勾了範圍外的路段 → 這一張表脫離，並出現「回到主工具列條件」",
+  afterOutside.detail && afterOutside.detailReset,
+  `脫離說明=${afterOutside.detail}／回歸鈕=${afterOutside.detailReset}`,
+);
+ok(
+  "③ 主工具列同時跳出「全部回歸」",
+  afterOutside.resetAll,
+  String(afterOutside.resetAll),
+);
+ok(
+  "③ ⚠️ **只影響這一張表**：尖峰彙總沒有跟著脫離",
+  !afterOutside.summary,
+  `尖峰彙總脫離=${afterOutside.summary}`,
+);
+const outsideVisible = outsideRoad
+  ? await page.evaluate((wanted) => {
+      const cells = [...document.querySelectorAll("#detailRows tr td:nth-child(2)")].map((td) =>
+        td.textContent.trim(),
+      );
+      return { total: cells.length, hit: cells.filter((t) => t === wanted).length };
+    }, outsideRoad.label)
+  : { total: 0, hit: 0 };
+ok(
+  "③ ⚠️ 脫離之後那條範圍外的路段**真的看得到資料**（不是只換了說明文字）",
+  outsideVisible.hit > 0,
+  `${outsideVisible.hit} / ${outsideVisible.total} 列是「${outsideRoad.label}」`,
+);
+
+/* ⑤ 按回歸 → 回到跟隨主工具列 */
+if (afterOutside.detailReset) {
+  await page.click('#detailFilterNotes [data-testid="chart-detach-reset"]');
+  await page.waitForTimeout(900);
+}
+const afterReset = await detachState();
+ok(
+  "⑤ 按「回到主工具列條件」之後脫離狀態收掉，主工具列的全部回歸鈕也收掉",
+  /* ⚠️ 要先**真的脫離過**才算數，否則「從來沒脫離」也會讓這一條全綠。 */
+  afterOutside.detail && !afterReset.detail && !afterReset.resetAll,
+  `脫離前=${afterOutside.detail}／按完之後脫離=${afterReset.detail}／全部回歸鈕=${afterReset.resetAll}`,
+);
+
+await page.evaluate(() => {
+  document.querySelector("#detailFilterState .col-filter-clear")?.click();
+});
 await page.waitForTimeout(400);
-ok("Manager 清除篩選後回到原本筆數", (await managerShown()) === managerBefore);
+await pickRoads(page, []);
+await page.waitForTimeout(700);
+await page.evaluate(() => go("summary"));
+await page.waitForTimeout(600);
+const backNote = await page.evaluate(
+  () => document.getElementById("summaryFilterNotes")?.textContent || "",
+);
+ok(
+  "⚠️ 主工具列放寬之後這一句要收掉（沒篩掉東西卻講一句是噪音）",
+  !/不是資料缺漏/.test(backNote),
+  backNote.replace(/\s+/g, " ").slice(0, 60) || "（沒有提示，正確）",
+);
 
 ok("沒有 JS 例外", errors.length === 0, errors.slice(0, 2).join(" | "));
 

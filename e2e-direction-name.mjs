@@ -10,7 +10,6 @@
  *  ・命名後，每一個畫面都看得到新名稱
  *  ・命名後，該路段任何地方都不應該再出現裸的「方向1／方向2」
  *  ・鍵值沒有被換掉（篩選條件、速限鍵、資料 id 都還是照舊）
- *  ・別人的專案包匯進 Manager 之後，也看得到那個人取的名稱
  *
  * 使用交付包自行建立的匿名調查版型，不含任何正式計畫或使用者資料。
  */
@@ -278,313 +277,92 @@ ok("尖峰明細 CSV 有帶出方向顯示名稱", csvText.includes(NAME_1) && c
   `${csvText.length} 字`);
 ok("CSV 仍然保留原始方向鍵值欄位", /方向1/.test(csvText) && /方向2/.test(csvText));
 
-/* ── Manager：把專案包丟進去，要看得到對方取的名稱 ── */
-const packageJson = await page.evaluate(() => {
-  let captured = null;
-  const original = URL.createObjectURL;
-  URL.createObjectURL = function (blob) {
-    captured = blob;
-    return original.call(URL, blob);
-  };
-  document.getElementById("downloadBackup").click();
-  URL.createObjectURL = original;
-  return captured ? captured.text() : "";
-});
-ok("下載得到 Project 專案包", packageJson.length > 100, `${packageJson.length} 字`);
-const parsed = JSON.parse(packageJson);
-ok(
-  "專案包裡帶著方向名稱",
-  JSON.stringify(parsed.roadMeta || {}).includes(NAME_1),
-);
-
-/* 清空本機資料再匯入 Manager，模擬「別人給的包」——
-   否則會誤用本機 state.roadMeta 而看不出 Manager 有沒有真的接上包裡的名稱。 */
-await page.evaluate(() => {
-  window.__dirTestPackage = null;
-});
-await page.evaluate((json) => {
-  window.__dirTestPackage = json;
-}, packageJson);
-await page.evaluate(() => document.querySelector('nav [data-view="manager"]').click());
 /*
- * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
- * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
- * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
- */
-await page.evaluate(() => {
-  const details = document.querySelector("details.manager-data");
-  if (details) details.open = true;
-});
-
-await page.waitForTimeout(500);
-await page.setInputFiles("#managerFiles", {
-  name: "project.json",
-  mimeType: "application/json",
-  buffer: Buffer.from(packageJson, "utf8"),
-});
-await page.waitForTimeout(1200);
-/* 把本機的方向名稱清掉，Manager 就只剩下包裡那一份可以用。 */
-await page.evaluate((name) => {
-  for (const key of Object.keys(window.state?.roadMeta || {})) {
-    const meta = window.state.roadMeta[key];
-    if (meta && (meta.directionA === name || meta.directionB === name)) {
-      delete meta.directionA;
-      delete meta.directionB;
-    }
-  }
-}, NAME_1);
-await page.evaluate(() => document.querySelector('nav [data-view="manager"]').click());
-/*
- * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
- * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
- * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
- */
-await page.evaluate(() => {
-  const details = document.querySelector("details.manager-data");
-  if (details) details.open = true;
-});
-
-await page.waitForTimeout(800);
-const managerText = await page.innerText("#managerRows");
-ok("Manager 比較顯示專案包裡的方向名稱", managerText.includes(NAME_1) || managerText.includes(NAME_2),
-  managerText.replace(/\s+/g, " ").slice(0, 120));
-ok("Manager 比較沒有殘留裸的方向鍵值", !BARE_KEY.test(managerText),
-  (managerText.match(BARE_KEY)?.[0] || "").trim());
-
-/*
- * 搜尋框是這一族缺陷的最後一個出口：畫面上印著正式名稱，
- * 把它打進搜尋框卻得到「目前篩選條件沒有資料」——因為那個名稱是從
- * 專案包的 roadMeta 即時解出來的，不在被比對的欄位裡。
- */
-{
-  const beforeRows = (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim();
-  await page.fill("#managerSearch", NAME_1);
-  await page.waitForTimeout(400);
-  const hit = (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim();
-  ok(
-    "Manager 搜尋框搜得到畫面上顯示的方向名稱",
-    hit.includes(NAME_1) && !/目前篩選條件沒有資料/.test(hit),
-    `搜「${NAME_1}」→ ${hit.slice(0, 80) || "（空）"}`,
-  );
-  /* 原本搜得到的欄位不可以因此變成搜不到（這是「多加一項」不是「換一套」）。 */
-  await page.fill("#managerSearch", "報告測試路段");
-  await page.waitForTimeout(400);
-  const byRoad = (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim();
-  ok("原本用路段名稱搜得到的仍然搜得到", byRoad.includes("報告測試路段"),
-    byRoad.slice(0, 60));
-  /* 內部物件不可以再讓「object」搜到全部資料。 */
-  await page.fill("#managerSearch", "object");
-  await page.waitForTimeout(400);
-  const byObject = (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim();
-  ok("搜「object」不會列出全部資料（內部物件已排除）",
-    /目前篩選條件沒有資料/.test(byObject),
-    byObject.slice(0, 60));
-  await page.fill("#managerSearch", "");
-  await page.waitForTimeout(300);
-  ok("清空搜尋後資料回來", (await page.innerText("#managerRows")).replace(/\s+/g, " ").trim() === beforeRows);
-}
-
-/* Manager 的 CSV 也是給人閱讀的交付物，不能畫面是正式名稱、匯出卻退回鍵值。 */
-const managerCsvText = await page.evaluate(async () => {
-  let captured = "";
-  const original = URL.createObjectURL;
-  URL.createObjectURL = function (blob) {
-    captured = blob;
-    return original.call(URL, blob);
-  };
-  document.getElementById("exportManager").click();
-  await new Promise((r) => setTimeout(r, 400));
-  URL.createObjectURL = original;
-  return captured ? await captured.text() : "";
-});
-ok(
-  "Manager 匯出 CSV 有方向顯示名稱",
-  managerCsvText.includes(NAME_1) || managerCsvText.includes(NAME_2),
-  `${managerCsvText.length} 字`,
-);
-ok(
-  "Manager CSV 保留原始鍵值，但不匯出內部 packageRoadMeta 物件",
-  /directionLabel/.test(managerCsvText) && /direction/.test(managerCsvText)
-    && /\u65b9向1/.test(managerCsvText) && !/packageRoadMeta/.test(managerCsvText),
-);
-
-/*
- * ── 使用者回報：Manager 比較裡「方向1／方向2 混雜著改好的名稱」──
+ * ══════════════════════════════════════════════════════════════════
+ *  Manager 比較已於 2026-09-13 依使用者決定整組移除
+ * ══════════════════════════════════════════════════════════════════
  *
- * 成因是 roadMeta 的項目「存在」不等於「取過名字」：設定路段有效期間時會寫進
- * { directionA: "方向1", directionB: "方向2", startPeriod, endPeriod }，那是佔位值。
- * 舊寫法只要包裡有項目就用包裡的，於是佔位值擋掉了本機真正取好的名稱，
- * 同一個計畫裡有些路段顯示名稱、有些顯示鍵值。
+ * 使用者原話：「交通服務水準的 Manager 後來我們決定拿掉，因為裡面有的
+ * 趨勢圖，各計畫已經都有了，Manager 只是畫在同一張圖而已，沒有實質意義。」
+ *
+ * ⚠️ 這裡原本有一大段 Manager 專屬的檢查（匯入專案包、CSV、過期提示…）。
+ *   刪掉之前先把**規則本身**逐條看過：哪些只是 Manager 的機制、
+ *   哪些其實是「方向名稱怎麼解析」的通則。通則全部保留，改驗還在的畫面。
+ *
+ *   ・佔位值不可以擋住取好的名稱  → 保留（改驗 rowDirectionName）
+ *   ・報告的「方向往」文字要當備援 → 保留（同上）
+ *   ・沒寫方向往時老實印方向1／2   → 保留（同上）
+ *   ・專案包的 roadMeta 優先、過期提示、Manager CSV → 隨機制一起移除
  */
-const mgrMix = await page.evaluate(() => {
+const nameFallback = await page.evaluate(() => {
   const CODE = "MIXCODE";
-  const roadNamed = "示範路A(起~迄)";
   const roadPlaceholder = "示範路B(起~迄)";
   const roadNoMeta = "示範路C(起~迄)";
-  const roads = [roadNamed, roadPlaceholder, roadNoMeta];
-  const mk = (road, dir) => ({ projectCode: CODE, projectName: "混雜測試", period: "111Q3",
-    road, day: "平日", peak: "上午尖峰", direction: dir, travel: 31.1, totalDelay: 318, los: "B" });
-  const summaries = [];
-  roads.forEach((r) => { summaries.push(mk(r, "方向1")); summaries.push(mk(r, "方向2")); });
-  state.manager = [{ kind: "TLM_PROJECT_PACKAGE", project: { code: CODE, name: "混雜測試" },
-    summaries, details: [], importedAt: "2026-08-27",
-    roadMeta: {
-      /* 匯出當時已經取好名字 */
-      [`${CODE}|${roadNamed}`]: { directionA: "南-北(北上)", directionB: "北-南(南下)", startPeriod: "", endPeriod: "" },
-      /* 匯出當時只設定過有效期間，名字還是佔位值 */
-      [`${CODE}|${roadPlaceholder}`]: { directionA: "方向1", directionB: "方向2", startPeriod: "111Q3", endPeriod: "112Q1" },
-      /* roadNoMeta 完全沒有項目 */
-    } }];
-  /* 本機這個計畫三個路段都已經改好名字 */
-  roads.forEach((r) => {
-    state.roadMeta[`${CODE}|${r}`] = { directionA: "南-北(北上)", directionB: "北-南(南下)", startPeriod: "", endPeriod: "" };
-  });
-  return managerAllRows()
-    .filter((r) => r.projectCode === CODE)
-    .map((r) => `${r.road}|${r.direction}|${managerDirectionName(r)}`);
-});
-ok(
-  "Manager 比較不會被「有項目但沒名字」的佔位值擋住本機取好的名稱",
-  mgrMix.length === 6 && mgrMix.every((x) => !/\|方向[12]$/.test(x)),
-  mgrMix.filter((x) => /\|方向[12]$/.test(x)).join("、") || mgrMix[0],
-);
-ok(
-  "專案包裡有取過名字時，優先採用包裡的（那是資料提供者自己的命名）",
-  mgrMix[0].endsWith("南-北(北上)"),
-  mgrMix[0],
-);
-
-/*
- * ── 獨立重現的方向文字備援不一致（v2.20.9）──
- *
- * 這是查證過程中另外重現的真實缺陷，不是使用者當時看到舊名稱的成因：
- * 兩邊都**沒有人取過名字**，但報告上寫了「方向往：本工西路--->岡山路」。
- * 尖峰明細會退回那行文字，Manager 比較與尖峰彙總卻直接印裸的「方向1」。
- * 於是同一張表裡，報告有寫方向往的路段看起來「有改到」，沒寫的看起來「沒改到」
- * ——實際上兩者都沒被命名過，差別只在報告上有沒有那行字。
- */
-const mgrText = await page.evaluate(() => {
-  const CODE = "TEXTCODE";
   const withText = "有方向往的路段(起~迄)";
   const noText = "沒有方向往的路段(起~迄)";
-  const mk = (road, dir, text) => ({ projectCode: CODE, projectName: "文字備援測試",
-    period: "111Q3", road, day: "平日", peak: "下午尖峰", direction: dir,
-    travel: 23.1, totalDelay: 300, los: "D", directionText: text });
-  const summaries = [
+  const mk = (road, dir, text = "") => ({
+    projectCode: CODE,
+    projectName: "名稱備援測試",
+    period: "111Q3",
+    road,
+    day: "平日",
+    peak: "上午尖峰",
+    direction: dir,
+    travel: 31.1,
+    totalDelay: 318,
+    los: "B",
+    directionText: text,
+  });
+  /*
+   * ⚠️ roadMeta 有「項目」不等於「取過名字」：設定路段有效期間時會寫進
+   *   { directionA: "方向1", directionB: "方向2", startPeriod, endPeriod }，
+   *   那是佔位值。舊寫法只要有項目就採用，於是佔位值把真正取好的名稱擋掉，
+   *   同一個計畫裡有些路段顯示名稱、有些顯示鍵值。
+   */
+  state.roadMeta[`${CODE}|${roadPlaceholder}`] = {
+    directionA: "方向1",
+    directionB: "方向2",
+    startPeriod: "111Q3",
+    endPeriod: "",
+  };
+  delete state.roadMeta[`${CODE}|${roadNoMeta}`];
+  delete state.roadMeta[`${CODE}|${withText}`];
+  delete state.roadMeta[`${CODE}|${noText}`];
+  const rows = [
+    mk(roadPlaceholder, "方向1"),
+    mk(roadPlaceholder, "方向2"),
+    mk(roadNoMeta, "方向1"),
+    mk(roadNoMeta, "方向2"),
     mk(withText, "方向1", "本工西路--->岡山路"),
     mk(withText, "方向2", "岡山路--->本工西路"),
-    mk(noText, "方向1", ""),
-    mk(noText, "方向2", ""),
+    mk(noText, "方向1"),
+    mk(noText, "方向2"),
   ];
-  state.manager = [{ kind: "TLM_PROJECT_PACKAGE", project: { code: CODE, name: "文字備援測試" },
-    summaries, details: summaries.map((x) => ({ ...x })), importedAt: "2026-08-28", roadMeta: {} }];
-  /* 本機也沒有任何命名——這就是使用者的實際情況 */
-  return managerAllRows()
-    .filter((r) => r.projectCode === CODE)
-    .map((r) => `${r.road}|${r.direction}|${managerDirectionName(r)}`);
+  return rows.map((r) => `${r.road}|${r.direction}|${rowDirectionName(r)}`);
 });
 ok(
-  "Manager 比較會退回報告上的「方向往」文字，不會只印裸的方向1／方向2",
-  mgrText.filter((x) => x.startsWith("有方向往")).every((x) => !/\|方向[12]$/.test(x)),
-  mgrText.filter((x) => x.startsWith("有方向往")).join("、"),
+  "⚠️ 佔位值（有項目但沒取名）不可以被當成名稱印出來",
+  nameFallback
+    .filter((x) => x.startsWith("示範路B"))
+    .every((x) => /\|方向[12]$/.test(x)),
+  nameFallback.filter((x) => x.startsWith("示範路B")).join("、"),
 );
 ok(
-  "Manager 與尖峰明細對同一筆紀錄顯示同一個名稱（不可以一邊有備援、一邊沒有）",
-  await page.evaluate(() => {
-    const rows = managerAllRows().filter((r) => r.projectCode === "TEXTCODE");
-    return rows.every((r) => managerDirectionName(r) === rowDirectionName(r));
-  }),
+  "報告上有「方向往」時要退回那行文字，不會只印裸的方向1／方向2",
+  nameFallback
+    .filter((x) => x.startsWith("有方向往"))
+    .every((x) => !/\|方向[12]$/.test(x)),
+  nameFallback.filter((x) => x.startsWith("有方向往")).join("、"),
 );
 ok(
-  "報告真的沒寫方向往時，仍然老實顯示方向1／方向2（不可以憑空生一個名字）",
-  mgrText.filter((x) => x.startsWith("沒有方向往")).every((x) => /\|方向[12]$/.test(x)),
-  mgrText.filter((x) => x.startsWith("沒有方向往")).join("、"),
+  "⚠️ 報告真的沒寫方向往時，老實顯示方向1／方向2（不可以憑空生一個名字）",
+  nameFallback
+    .filter((x) => x.startsWith("沒有方向往") || x.startsWith("示範路C"))
+    .every((x) => /\|方向[12]$/.test(x)),
+  nameFallback
+    .filter((x) => x.startsWith("沒有方向往") || x.startsWith("示範路C"))
+    .join("、"),
 );
-
-/*
- * ── Manager 內容過期提示（v2.20.9）──
- *
- * 起因：使用者在 Project 改好方向名稱，切到 Manager 卻還是舊的，
- * 因為 Manager 顯示的是當初匯入的那份專案包，不會自動同步。
- * 畫面上原本沒有任何線索，使用者與我為此各查了三輪。
- * 現在本機內容與包內不一致時會明講；一致時**不可以**跳出來吵人。
- */
-const stale = await page.evaluate(() => {
-  const CODE = "STALECODE";
-  const road = "示範路S(起~迄)";
-  const mk = (dir) => ({ projectCode: CODE, projectName: "過期測試", period: "111Q3",
-    road, day: "平日", peak: "上午尖峰", direction: dir, travel: 30, totalDelay: 300, los: "C" });
-  state.projects = [...state.projects.filter((p) => p.code !== CODE), { code: CODE, name: "過期測試" }];
-  state.summaries = [...state.summaries.filter((x) => x.projectCode !== CODE), mk("方向1"), mk("方向2")];
-  state.roadMeta[`${CODE}|${road}`] = { directionA: "南下", directionB: "北上", startPeriod: "", endPeriod: "" };
-  const pkgNow = JSON.parse(JSON.stringify({
-    summaries: state.summaries.filter((x) => x.projectCode === CODE),
-    roadMeta: { [`${CODE}|${road}`]: state.roadMeta[`${CODE}|${road}`] },
-  }));
-  // 情境一：包和本機一致 → 不該提示
-  state.manager = [{ kind: "TLM_PROJECT_PACKAGE", project: { code: CODE, name: "過期測試" },
-    details: [], importedAt: "2026-08-28", ...pkgNow }];
-  const same = managerStaleProjects().map((p) => p.code);
-  // 情境二：報告上的方向文字改了 → 應該提示
-  state.summaries.find((x) => x.projectCode === CODE && x.direction === "方向1").directionText = "甲端--->乙端";
-  const afterDirectionText = managerStaleProjects().map((p) => p.code);
-  state.summaries.find((x) => x.projectCode === CODE && x.direction === "方向1").directionText = "";
-  // 情境三：本機之後改了方向名稱 → 應該提示
-  state.roadMeta[`${CODE}|${road}`] = { directionA: "北上", directionB: "南下", startPeriod: "", endPeriod: "" };
-  const afterRename = managerStaleProjects().map((p) => p.code);
-  renderManager();
-  const shown = !document.getElementById("managerStaleHint").classList.contains("hidden");
-  const text = document.getElementById("managerStaleHint").innerText;
-  // 情境四：本機沒有這個計畫（真的是同事交來的包）→ 不該提示
-  state.projects = state.projects.filter((p) => p.code !== CODE);
-  const notMine = managerStaleProjects().map((p) => p.code);
-  return { same, afterDirectionText, afterRename, shown, text, notMine };
-});
-ok("內容一致時不會跳出提示（不可以沒事吵人）", stale.same.length === 0, stale.same.join("、"));
-ok("報告方向文字變更後會提示 Manager 專案包已過期",
-  stale.afterDirectionText.includes("STALECODE"), stale.afterDirectionText.join("、"));
-ok("本機改過方向名稱之後會提示該計畫已過期", stale.afterRename.includes("STALECODE"), stale.afterRename.join("、"));
-ok("提示會實際顯示在畫面上", stale.shown);
-ok("提示簡短，但講得出計畫、狀況與該怎麼做",
-  /本機內容較新/.test(stale.text) && /重新匯出/.test(stale.text)
-  && /STALECODE/.test(stale.text) && stale.text.replace(/\s+/g, " ").length <= 90,
-  `${stale.text.replace(/\s+/g, " ")}（${stale.text.replace(/\s+/g, " ").length} 字）`);
-
-/*
- * 計畫名稱來自各自匯入的專案包——長度與數量都不受控。
- * 實測：8 個計畫一起過期原本會變成 166 字，一個委託案全名就可能 40 字。
- * 使用者要的是「畫面上重點摘要就好，免得版面很醜」，所以這裡釘住上限。
- */
-const staleCap = await page.evaluate(() => {
-  const seed = (list) => {
-    state.projects = list.map(([code, name]) => ({ code, name }));
-    state.summaries = []; state.roadMeta = {}; state.manager = [];
-    list.forEach(([code, name]) => {
-      const row = { projectCode: code, projectName: name, period: "111Q3", road: `${code}路`,
-        day: "平日", peak: "上午尖峰", direction: "方向1", travel: 30, totalDelay: 300, los: "C" };
-      state.summaries.push(row);
-      state.roadMeta[`${code}|${code}路`] = { directionA: "新", directionB: "新", startPeriod: "", endPeriod: "" };
-      state.manager.push({ kind: "TLM_PROJECT_PACKAGE", project: { code, name },
-        summaries: [{ ...row }], details: [], importedAt: "2026-08-28",
-        roadMeta: { [`${code}|${code}路`]: { directionA: "舊", directionB: "舊", startPeriod: "", endPeriod: "" } } });
-    });
-    renderManager();
-    return document.getElementById("managerStaleHint").innerText.replace(/\s+/g, " ");
-  };
-  return {
-    長名稱: seed([["C1234", "交通部鐵道局中部工程分局嘉義市區鐵路高架化計畫第三工區周界環境監測委託服務案"]]),
-    八個: seed(Array.from({ length: 8 }, (_, i) => [`D${1000 + i}`, `示範計畫第${i + 1}標`])),
-  };
-});
-ok("單一計畫名稱過長會截斷，不會撐爆版面",
-  staleCap.長名稱.length <= 90 && staleCap.長名稱.includes("…"),
-  `${staleCap.長名稱.slice(0, 46)}…（${staleCap.長名稱.length} 字）`);
-ok("多個計畫一起過期時只列一個，其餘用「等 N 個計畫」帶過",
-  staleCap.八個.length <= 90 && /等 8 個計畫/.test(staleCap.八個),
-  `${staleCap.八個.slice(0, 46)}…（${staleCap.八個.length} 字）`);
-ok("提示裡的計畫名稱來自匯入的專案包，程式沒有寫死任何一個",
-  staleCap.長名稱.includes("C1234") && staleCap.八個.includes("D1000"));
-ok("本機沒有的計畫（真的是同事交來的包）不會被誤判為過期", stale.notMine.length === 0, stale.notMine.join("、"));
 
 ok("沒有 JS 例外", errors.length === 0, errors.slice(0, 2).join(" | "));
 

@@ -110,7 +110,7 @@ for (const [y, q] of [
   [114, 0],
 ]) await importQuarter(y, q);
 
-await page.evaluate(() => document.querySelector('[data-view="charts"]').click());
+await page.evaluate(() => document.querySelector('[data-view="trendChart"]').click());
 await page.waitForTimeout(1200);
 
 /*
@@ -147,13 +147,28 @@ ok(
 /* 取得畫面上那份 series 的值，稍後要與 Excel 裡的儲存格逐一比對。 */
 const onScreen = await page.evaluate(() => {
   const list = trendSeriesList();
-  return list.map((series) => ({
-    label: series.label,
-    unit: series.unit,
-    ordinal: Boolean(series.ordinal),
-    values: series.points.map((point) => point.value),
-    periods: series.points.map((point) => point.period),
-  }));
+  /*
+   * ⚠️ 一張圖可能有**多條線**（一路段一條）。
+   *   那時 series.points 的值已經被清成 null（原本那個跨路段平均本來就
+   *   不該存在），要比對的值在 series.lines 裡。
+   *   照舊只讀 series.points 的話，expected 會是空陣列，
+   *   「Excel 與畫面逐一相同」變成拿空的去比——那是恆真，不是通過。
+   */
+  return list.map((series) => {
+    const source =
+      series.lines && series.lines.length
+        ? series.lines[0].points
+        : series.points;
+    return {
+      label: series.label,
+      unit: series.unit,
+      ordinal: Boolean(series.ordinal),
+      lineCount: series.lines ? series.lines.length : 1,
+      lineLabels: (series.lines || []).map((line) => line.label),
+      values: source.map((point) => point.value),
+      periods: source.map((point) => point.period),
+    };
+  });
 });
 ok(
   "前置：畫面上至少要有一個數值型指標",
@@ -243,6 +258,22 @@ const cellValues = [...dataSheet.matchAll(/<c r="B(\d+)"[^>]*><v>([^<]+)<\/v><\/
   (m) => Number(m[2]),
 );
 const expected = (numeric?.values || []).filter((v) => v != null);
+/*
+ * ⚠️ 多線時 Excel 要**一條線一個數列**（欄名帶路段名稱）。
+ *   不拆的話畫面上有四條線、檔案裡只有一欄空白——
+ *   而使用者拿走的是檔案，不是畫面。
+ */
+if (numeric && numeric.lineCount > 1) {
+  const headers = [...dataSheet.matchAll(/<c r="[B-Z]1"[^>]*t="inlineStr"[^>]*>.*?<t>([^<]*)<\/t>/g)]
+    .map((m) => m[1]);
+  ok(
+    "⚠️ 多線圖的 Excel 要一條線一個數列，欄名帶路段名稱",
+    numeric.lineLabels.every((road) =>
+      headers.some((head) => head.includes(road)),
+    ),
+    `欄名：${headers.join("｜")}｜路段：${numeric.lineLabels.join("、")}`,
+  );
+}
 ok(
   "Excel 裡的數值要與畫面上那張圖逐一相同",
   cellValues.length === expected.length &&

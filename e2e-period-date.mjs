@@ -304,7 +304,14 @@ ok(
 );
 ok("明細表確實有資料可比（不是拿空表當通過）", before.length >= 4, `${before.length} 列`);
 
-/* ── E：多計畫與 Manager 的月份來源不可互相污染 ── */
+/*
+ * ── E：多計畫的月份來源不可互相污染 ──────────────────────────────
+ *
+ * ⚠️ 原本這一段同時驗 Manager 的專案包。Manager 於 2026-09-13 依使用者決定
+ *   整組移除，所以只留「切換計畫」這一半——而那一半才是真正的風險：
+ *   月份是從**目前計畫**的明細算出來的，計畫一切換就要跟著換，
+ *   算錯的話畫面上不會有任何異常，只是月份悄悄是別人的。
+ */
 await page.evaluate(async () => {
   const db = await new Promise((resolve, reject) => {
     const request = indexedDB.open("TrafficLOSWebV2", 1);
@@ -338,22 +345,6 @@ await page.evaluate(async () => {
   current.details = [...p1Details, ...p2Details];
   current.summaries = [...p1Summaries, ...p2Summaries];
   current.periodDisplay = "month";
-  current.manager = [
-    {
-      kind: "TLM_PROJECT_PACKAGE",
-      project: current.projects[0],
-      details: structuredClone(p1Details),
-      summaries: structuredClone(p1Summaries),
-      roadMeta: {},
-    },
-    {
-      kind: "TLM_PROJECT_PACKAGE",
-      project: current.projects[1],
-      details: structuredClone(p2Details),
-      summaries: structuredClone(p2Summaries),
-      roadMeta: {},
-    },
-  ];
   await new Promise((resolve, reject) => {
     const request = db.transaction("app", "readwrite").objectStore("app").put(current, "state");
     request.onsuccess = () => resolve();
@@ -379,91 +370,43 @@ ok(
 );
 await page.fill("#detailSearch", "");
 
-await page.evaluate(() => document.querySelector('[data-view="manager"]')?.click());
 /*
- * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
- * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
- * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
+ * ⚠️ 反面驗證：切到第二個計畫，月份要變成**它自己的**二月。
+ *   少了這一條，「永遠顯示第一個計畫的月份」也會讓上面那一條全綠。
  */
 await page.evaluate(() => {
-  const details = document.querySelector("details.manager-data");
-  if (details) details.open = true;
+  const select = document.getElementById("projectSwitch");
+  if (!select) return;
+  select.value = "E2E-PD-2";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
 });
-
-await page.selectOption("#managerProjectFilter", "E2E-PD");
-await page.waitForTimeout(500);
-const managerPeriodText = async () =>
-  page.evaluate(() => [...document.querySelectorAll("#managerRows tr td:nth-child(2)")].map((x) => x.textContent.trim()));
-const managerChartText = async () =>
-  page.evaluate(() => [...document.querySelectorAll("#managerChartGrid .bar-group small")].map((x) => x.textContent.trim()));
-const managerP1 = await managerPeriodText();
-ok(
-  "Manager 第一個專案的月份取自該匯入包",
-  managerP1.length > 0 && managerP1.every((v) => v === "115年1、3、8月"),
-  [...new Set(managerP1)].join("、"),
-);
-ok(
-  "Manager 第一個專案的圖表月份也取自該匯入包",
-  (await managerChartText()).every((v) => v === "115年1、3、8月"),
-  [...new Set(await managerChartText())].join("、"),
-);
-await page.selectOption("#managerProjectFilter", "E2E-PD-2");
-await page.waitForTimeout(500);
-const managerP2 = await managerPeriodText();
-ok(
-  "Manager 第二個專案只顯示自己的二月，不借用目前 Project 的月份",
-  managerP2.length > 0 && managerP2.every((v) => v === "115年2月"),
-  [...new Set(managerP2)].join("、"),
-);
-ok(
-  "Manager 第二個專案的圖表只顯示自己的二月",
-  (await managerChartText()).every((v) => v === "115年2月"),
-  [...new Set(await managerChartText())].join("、"),
-);
-
-/* 只改本機調查日期時，Manager 也要提示專案包已過期。 */
-await page.evaluate(async () => {
-  const db = await new Promise((resolve, reject) => {
-    const request = indexedDB.open("TrafficLOSWebV2", 1);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-  const current = await new Promise((resolve, reject) => {
-    const request = db.transaction("app").objectStore("app").get("state");
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-  current.details = current.details.map((x) =>
-    x.projectCode === "E2E-PD" ? { ...x, surveyDate: "2026-03-31" } : x,
-  );
-  await new Promise((resolve, reject) => {
-    const request = db.transaction("app", "readwrite").objectStore("app").put(current, "state");
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-});
-await page.reload();
 await page.waitForTimeout(900);
-await page.evaluate(() => document.querySelector('[data-view="manager"]')?.click());
-/*
- * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
- * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
- * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
- */
-await page.evaluate(() => {
-  const details = document.querySelector("details.manager-data");
-  if (details) details.open = true;
-});
-
+const secondProjectPeriods = await periodColumn();
 ok(
-  "只有調查日期變更時也會提示 Manager 專案包已過期",
-  await page.evaluate(() => {
-    const box = document.getElementById("managerStaleHint");
-    return box && !box.classList.contains("hidden") && box.textContent.includes("E2E-PD");
-  }),
+  "切到第二個計畫時，月份換成它自己的二月（不是沿用前一個計畫的）",
+  secondProjectPeriods.length > 0 &&
+    secondProjectPeriods.every((v) => v === "115年2月"),
+  [...new Set(secondProjectPeriods)].join("、") || "（沒有列）",
 );
+await page.evaluate(() => {
+  const select = document.getElementById("projectSwitch");
+  if (!select) return;
+  select.value = "E2E-PD";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+});
+await page.waitForTimeout(900);
 
-/* 本機 Project 沒有日期、但 Manager 匯入包有日期時，切換鈕仍應可用。 */
+/*
+ * ⚠️ 這裡原本有兩段 Manager 專屬的檢查（專案包過期提示、
+ *   「只有 Manager 的包有日期時切換鈕仍可用」）。
+ *   Manager 於 2026-09-13 依使用者決定整組移除，兩段都不成立了。
+ *
+ * ⚠️ 第二段的規則反過來**變成了新的正確行為**，所以要在這裡驗新的：
+ *   期別切換鈕現在只看「目前這個計畫有沒有調查日期」。
+ *   全部日期清掉之後它必須**停用**，而且要說得出原因——
+ *   舊版會因為 Manager 的包有日期而讓它可按，按下去每一格還是季別，
+ *   畫面上沒有任何解釋，那正是使用者最不能接受的那種安靜失效。
+ */
 await page.evaluate(async () => {
   const db = await new Promise((resolve, reject) => {
     const request = indexedDB.open("TrafficLOSWebV2", 1);
@@ -483,10 +426,22 @@ await page.evaluate(async () => {
   });
 });
 await page.reload();
-await page.waitForTimeout(700);
+await page.waitForTimeout(900);
+const toggleState = await page.evaluate(() => {
+  const button = document.getElementById("periodDisplayToggle");
+  return button
+    ? { disabled: button.disabled, title: button.title }
+    : null;
+});
 ok(
-  "只有 Manager 專案包有日期時，調查月份切換仍可使用",
-  await page.evaluate(() => document.getElementById("periodDisplayToggle")?.disabled === false),
+  "⚠️ 目前計畫沒有任何調查日期時，期別切換鈕要停用",
+  toggleState?.disabled === true,
+  toggleState ? `disabled=${toggleState.disabled}` : "找不到按鈕",
+);
+ok(
+  "⚠️ 而且要說得出原因（不是按了沒反應）",
+  /沒有調查日期/.test(toggleState?.title || ""),
+  toggleState?.title || "（沒有說明）",
 );
 
 ok("沒有 JS 例外", errors.length === 0, errors.slice(0, 2).join(" | "));

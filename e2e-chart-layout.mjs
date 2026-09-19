@@ -337,8 +337,13 @@ const result = await page.evaluate(async () => {
       gradedSize: 12 - k * 3,
     })),
   }));
-  cases.push({ name: "跨計畫圖（4 計畫、長名稱、末季幾乎同值）", markup: crossProjectChartSvg(cross) });
-  cases.push({ name: "跨計畫圖（2 計畫）", markup: crossProjectChartSvg(cross.slice(0, 2)) });
+  /*
+   * ⚠️ 這裡原本還有兩個「跨計畫折線圖」的版面案例。
+   *   那張圖只有 Manager 比較在用，Manager 於 2026-09-13 依使用者決定
+   *   整組移除（crossProjectChartSvg 一併刪除），所以案例也一起拿掉。
+   *   ⚠️ 它們驗的「線尾標籤會不會疊在一起」在單一計畫的趨勢圖上仍然有驗
+   *  （上面那幾個 trendChartSvg 的案例），覆蓋率沒有變成零。
+   */
 
   /*
    * 三段圖（順暢／尚可／壅塞）。這張圖的字最多：圖例三段、每一段上的
@@ -375,35 +380,6 @@ const result = await page.evaluate(async () => {
       name: `三段圖小倍數圖（${n} 季）`,
       markup: bandChartSvg(bandSeries(n, false), true),
     });
-  /*
-   * Manager 的跨計畫三段圖是**另一段程式**畫的，要單獨驗。
-   * 計畫名稱很長、而且柱下有兩行字（季度與 N），是它獨有的擠法。
-   */
-  const managerBandItems = [
-    "示範捷運延伸線示範標第二期工程",
-    "示範市區道路服務水準調查",
-    "示範3",
-    "示範四號計畫案",
-  ].map((name, k) => {
-    const series = bandSeries(6, k === 0);
-    const valued = series.points.filter((point) => point.shares);
-    return { name, code: "P" + k, series, last: valued[valued.length - 1] };
-  });
-  cases.push({
-    name: "Manager 三段圖（4 計畫、長名稱）",
-    markup: managerBandChartSvg(managerBandItems, {
-      smoothEnd: "B",
-      congestedStart: "E",
-    }),
-  });
-  cases.push({
-    name: "Manager 三段圖（2 計畫）",
-    markup: managerBandChartSvg(managerBandItems.slice(0, 2), {
-      smoothEnd: "B",
-      congestedStart: "E",
-    }),
-  });
-
   /* 缺季（淺色空槽）也要驗版面，空槽那一格最容易讓標籤算錯位置。 */
   cases.push({
     name: "三段圖大圖（中間缺季）",
@@ -421,32 +397,20 @@ const result = await page.evaluate(async () => {
       false,
     ),
   });
-  /*
-   * Manager 的跨計畫圖是**另一段程式**在畫格線，所以序數等級要在這裡
-   * 再驗一次——只驗單一計畫圖的話，Manager 那張圖照樣會漏掉 C。
-   */
-  cases.push({
-    name: "跨計畫圖（序數等級）",
-    markup: crossProjectChartSvg(
-      cross.slice(0, 2).map((item) => ({
-        ...item,
-        label: "最差服務水準等級",
-        unit: "級",
-        digits: 0,
-        ordinal: true,
-        points: item.points.map((p, i) => ({ ...p, value: i % 2 ? 3 : 4 })),
-      })),
-    ),
-  });
-
   const report = [];
   for (const item of cases)
     report.push({ name: item.name, ...layout(item.markup) });
 
-  /* PNG 像素：一張大圖與一張跨計畫圖就足以擋住「樣式沒帶進去」。 */
+  /*
+   * PNG 像素：一張大圖與一張三段圖就足以擋住「樣式沒帶進去」。
+   * ⚠️ 原本第二張取的是跨計畫圖（cases[length-2]），那張圖隨 Manager 移除了；
+   *   改成明確用名字找，不要再用相對索引——索引會隨案例增減而悄悄指到別張。
+   */
+  const bandCase = cases.find((c) => c.name.startsWith("三段圖大圖"));
+  if (!bandCase) throw new Error("找不到三段圖大圖的案例");
   const pixels = {
     single: await rasterize(cases[3].markup),
-    cross: await rasterize(cases[cases.length - 2].markup),
+    cross: await rasterize(bandCase.markup),
   };
 
   /*
@@ -461,7 +425,7 @@ const result = await page.evaluate(async () => {
    */
   /*
    * 兩條匯出路徑的原始碼：一條是趨勢圖下載鈕的處理函式（掛在 DOM 屬性上，
-   * 用 String() 就讀得出來），另一條是 Manager 共用的 downloadSvgAsPng。
+   * 用 String() 就讀得出來），另一條是共用的 downloadSvgAsPng。
    */
   const source =
     String(document.getElementById("trendDownloadPng")?.onclick || "") +
@@ -588,7 +552,7 @@ const unitCases = [
   ["單一計畫大圖 3 季（km/h）", "km/h"],
   ["單一計畫小倍數圖 8 季（秒）", "秒"],
   ["單一計畫大圖（佔比 %）", "%"],
-  ["跨計畫圖（4 計畫、長名稱、末季幾乎同值）", "km/h"],
+  /* 跨計畫圖那一列隨 Manager 一起移除（2026-09-13）；規則由上面三張圖繼續守。 */
 ];
 for (const [name, unit] of unitCases) {
   const item = result.report.find((r) => r.name === name);
@@ -661,17 +625,23 @@ ok(
 }
 
 {
-  const crossOrdinal = result.report.find((r) => r.name === "跨計畫圖（序數等級）");
-  const ticks = (crossOrdinal?.yTicks || []).join("");
+  /*
+   * ⚠️ 這兩條原本驗的是「Manager 跨計畫圖」。Manager 於 2026-09-13 移除，
+   *   但**規則本身沒有變**：只要縱軸畫的是服務水準等級，就要印滿六級、
+   *   軸名要寫「（A～F）」。改成驗單一計畫的序數等級圖，
+   *   是換對象、不是降標準。
+   */
+  const ordinal = result.report.find((r) => r.name === "單一計畫大圖（序數等級）");
+  const ticks = (ordinal?.yTicks || []).join("");
   ok(
     "等級軸的名稱要寫「（A～F）」，不可以寫成「（等級）」那種重複的講法",
-    (crossOrdinal?.axisTitles || [])[0] === "最差服務水準等級（A～F）",
-    (crossOrdinal?.axisTitles || [])[0] || "（沒有縱軸名稱）",
+    /（A～F）$/.test((ordinal?.axisTitles || [])[0] || ""),
+    (ordinal?.axisTitles || [])[0] || "（沒有縱軸名稱）",
   );
   ok(
-    "Manager 跨計畫圖的服務水準縱軸也要印滿六級",
+    "服務水準的縱軸要印滿六級",
     ticks === "FEDCBA",
-    `實際印出：${(crossOrdinal?.yTicks || []).join("、") || "（沒有刻度）"}`,
+    `實際印出：${(ordinal?.yTicks || []).join("、") || "（沒有刻度）"}`,
   );
 }
 

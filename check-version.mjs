@@ -36,6 +36,16 @@ const scripts = [
   "trend-excel.js",
   "column-filter.js",
   "period-date.js",
+  /*
+   * ⚠️ 2026-09-15 補上的三支。它們在主工具列改版時新增，當時忘了加進這份清單，
+   *   於是「沒有殘留其他版號」那一條**從來沒掃過它們**——
+   *   實測：main-toolbar.js 裡寫著「已於 v2.20.62 移除」而 app.js 版本是 v2.20.61，
+   *   app.js 的同一句被抓到、main-toolbar.js 的沒有。
+   *   新增模組時請一併加進來，這份清單就是這幾條規則的涵蓋範圍。
+   */
+  "main-filters.js",
+  "main-toolbar.js",
+  "los-rule-scope.js",
 ];
 const html = read("index.html");
 
@@ -75,7 +85,7 @@ ok(
 );
 
 // 5) 手冊檔名版本一致，且檔案真的存在
-const manualRefs = [...source.matchAll(/新手使用手冊_v(\d+\.\d+(?:\.\d+)?)\.(pdf|docx)/g)];
+const manualRefs = [...source.matchAll(/交通服務水準程式手冊_v(\d+\.\d+(?:\.\d+)?)\.(pdf|docx)/g)];
 const manualVersions = [...new Set(manualRefs.map((m) => m[1]))];
 ok(
   "程式裡引用的手冊版本一致且等於版本字樣",
@@ -85,7 +95,7 @@ ok(
 const manualDir = join(here, "manuals");
 const manuals = existsSync(manualDir) ? readdirSync(manualDir) : [];
 for (const [, version, ext] of manualRefs) {
-  const name = `交通服務水準分析系統_新手使用手冊_v${version}.${ext}`;
+  const name = `交通服務水準程式手冊_v${version}.${ext}`;
   ok(`手冊檔案存在：${name}`, manuals.includes(name));
 }
 // 6) manuals 目錄不能留著別的版本（舊手冊會讓使用者下載到過期內容）
@@ -102,7 +112,12 @@ ok("manuals 目錄沒有殘留舊版手冊", strays.length === 0, strays.join("�
  * 結構上不可能不一致。這裡把剩下的那一段接起來：戳記要等於 app.js 的版號，
  * 並確認那兩支產生程式裡真的沒有寫死的版號或日期可以漏改。
  */
-const manualSrc = ["manual-src/build-pdf.mjs", "manual-src/build-docx.mjs"];
+/*
+ * ⚠️ 2026-09-12 起只出 PDF（使用者：「新手手冊只需要做 PDF 檔就好……
+ *   三個程式都同步」）。build-docx.mjs 與 .docx 都已刪除，
+ *   這裡跟著只剩一支；反面守門在 manual-copies-identical.test.mjs。
+ */
+const manualSrc = ["manual-src/build-pdf.mjs"];
 const stampSource = read("manual-src/manual.html");
 const stamp = stampSource.match(
   /系統版本：\s*v([\d.]+)\s*[\s　]*更新日期：\s*(\d{4}-\d{2}-\d{2})/,
@@ -118,7 +133,7 @@ for (const name of manualSrc) {
   const hardcoded = [
     ...body.matchAll(/v\d+\.\d+(?:\.\d+)?\s*｜/g),
     ...body.matchAll(/\d{4}-\d{2}-\d{2}/g),
-    ...body.matchAll(/新手使用手冊_v\d+\.\d+(?:\.\d+)?/g),
+    ...body.matchAll(/交通服務水準程式手冊_v\d+\.\d+(?:\.\d+)?/g),
   ].map((m) => m[0]);
   ok(
     `${name} 沒有寫死版號或日期（必須取自封面戳記）`,

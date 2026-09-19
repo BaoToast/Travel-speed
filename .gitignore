@@ -3,4 +3,5 @@ test-fixtures/
 playwright-report/
 test-results/
 qa-*/
+.probe-shots/
 *.log

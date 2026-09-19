@@ -7,7 +7,6 @@
  * 三個放置區都驗：
  *   ・尖峰批次匯入（.xls/.xlsx/.xlsm，可多份）
  *   ・備份還原（.json，只收一份）
- *   ・Manager 匯入 Project 專案包（.json，可多份）
  *
  * 另外驗兩件容易被忽略、但錯了使用者一定會遇到的事：
  *   ・拖非指定副檔名的檔案要擋下來並說明，不可以安靜地少匯入
@@ -312,53 +311,16 @@ ok(
   `目前計畫清單：${restored.join("、") || "（空）"}`,
 );
 
-/* ── 五、Manager 匯入 ── */
-await page.evaluate(() => document.querySelector('[data-view="manager"]')?.click());
 /*
- * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求：平常用不到就收著）。
- * 收合狀態下裡面的搜尋框與表格不算「可見」，Playwright 會等到逾時。
- * 所以切到 Manager 之後一律先展開，再操作裡面的東西。
+ * ⚠️ 這裡原本是「五、Manager 匯入」：把一份 Project 專案包拖進 Manager 頁。
+ *   Manager 於 2026-09-13 依使用者決定整組移除，那個拖放區不存在了。
+ *
+ *   ⚠️ 它驗的兩件事沒有變成沒人守：
+ *     ① 拖曳經過時區塊要亮起來 → 上面「二、匯入區」與「四、還原備份」都有驗
+ *     ② 專案包真的被收下      → 上面「四、還原備份」驗的就是同一份專案包，
+ *                              而且比 Manager 那條更接近使用者實際的用法
+ *   所以是刪掉重複，不是放棄覆蓋。
  */
-await page.evaluate(() => {
-  const details = document.querySelector("details.manager-data");
-  if (details) details.open = true;
-});
-
-await page.waitForTimeout(400);
-const managerZoneExists = await page.evaluate(
-  () => !!document.getElementById("managerFiles"),
-);
-if (managerZoneExists) {
-  const managerPack = await page.evaluate(() => {
-    const pack = {
-      kind: "TLM_PROJECT_PACKAGE",
-      project: { code: "MGRDROP", name: "拖曳 Manager 測試計畫" },
-      details: [],
-      summaries: [],
-      roadMeta: {},
-    };
-    return btoa(unescape(encodeURIComponent(JSON.stringify(pack))));
-  });
-  const managerDrop = await dropOn("label.primary.upload", [
-    { name: "拖曳Manager測試.json", base64: managerPack, type: "application/json" },
-  ]);
-  ok(
-    "Manager 匯入區在拖曳經過時會亮起來",
-    managerDrop.activeWhileOver === true,
-    `dragover 時 drag-active=${managerDrop.activeWhileOver}`,
-  );
-  await page.waitForTimeout(900);
-  const managerRows = await page.evaluate(
-    () => document.getElementById("managerProjects")?.textContent.trim() || "0",
-  );
-  ok(
-    "拖進來的 Project 專案包真的被 Manager 收下",
-    Number(managerRows) >= 1,
-    `已載入計畫 ${managerRows} 個`,
-  );
-} else {
-  ok("Manager 匯入區找得到", false, "頁面上沒有 #managerFiles");
-}
 
 /* ── 六、全域防呆只能攔檔案，不可以連一般文字拖曳都擋掉 ── */
 /*

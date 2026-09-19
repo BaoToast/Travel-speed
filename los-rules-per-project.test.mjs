@@ -92,9 +92,15 @@ test("自訂門檻只覆蓋有給的等級，其餘沿用預設", () => {
  */
 test("重算時每一列用的是自己計畫的門檻，不是目前開著的計畫", () => {
   const rebuild = extractFunction("rebuild", source);
+  /*
+   * ⚠️ 2026-09-15 起 losOf() 多了第三、四個參數（這一筆的季別與路段，
+   *   用來挑「季別 × 路段」的門檻覆寫），所以這裡比對到 projectCode
+   *   之後允許再接參數。**要守的規則一字未變**：每一列都要傳自己的
+   *   projectCode，不可以落到 state.activeCode。
+   */
   assert.match(
     rebuild,
-    /losOf\(d\.ratio,\s*d\.projectCode\)/,
+    /losOf\(d\.ratio,\s*d\.projectCode[,)]/,
     "rebuild() 必須傳入每一列自己的 projectCode",
   );
   assert.doesNotMatch(
@@ -104,17 +110,28 @@ test("重算時每一列用的是自己計畫的門檻，不是目前開著的�
   );
 });
 
-test("跨計畫比較（Manager）顯示時也用各自計畫的門檻", () => {
+test("任何一列都用它自己那個計畫的門檻，不會套到別人的", () => {
   /*
-   * Manager 會同時列出多個計畫的資料，是最容易套錯門檻的畫面。
-   * 這裡確認凡是處理「可能來自不同計畫」的列，都有把 projectCode 傳進去。
+   * ⚠️ 這一條原本叫「跨計畫比較（Manager）顯示時也用各自計畫的門檻」。
+   *   Manager 於 2026-09-13 移除，但**這條檢查本身仍然需要**：
+   *   losOf() 的計畫代碼一旦省略就落到 state.activeCode，
+   *   而切換計畫、還原備份、匯入紀錄回溯等情境都可能讓「目前計畫」
+   *   不等於「這一列所屬的計畫」——那就是 B 計畫的門檻套到 A 計畫的資料上。
+   *   所以只改名字與說明，檢查一字不動。
    */
   const calls = [...source.matchAll(/(?<!function )losOf\(([^)]*)\)/g)]
     .map((m) => m[0])
     /* 排除函式定義本身（losOf(r, code = state.activeCode)） */
     .filter((call) => !call.includes("state.activeCode"));
+  /*
+   * ⚠️ 同上：計畫代碼後面現在可能再接季別與路段，所以結尾允許 `,` 或 `)`。
+   *   只放寬「後面還有沒有參數」，**沒有放寬「要不要傳計畫代碼」**。
+   */
   const withoutCode = calls.filter(
-    (call) => !/,\s*(d\.projectCode|r\.projectCode|code|p\.code)\)/.test(call),
+    (call) =>
+      !/,\s*(d\.projectCode|r\.projectCode|moved\.projectCode|code|p\.code|state\.activeCode)[,)]/.test(
+        call,
+      ),
   );
   /*
    * 允許省略計畫代碼的只有「一定發生在目前計畫」的三處：
@@ -151,23 +168,26 @@ test("備份與還原會帶著每個計畫自己的門檻", () => {
   assert.match(source, /losRules:\s*state\.losRules/);
 });
 
-/* ── 三段分界也要「每個計畫各自獨立」，而且與 Manager 隔離 ── */
+/* ── 三段分界也要「每個計畫各自獨立」 ── */
 
 /**
- * 用一份假的 state 把 bandsFor / managerBands 拉出來跑。
- * 測的是 app.js 裡實際跑的那兩個函式，不是另外抄一份。
+ * 用一份假的 state 把 bandsFor 拉出來跑。
+ * 測的是 app.js 裡實際跑的那一支，不是另外抄一份。
+ *
+ * ⚠️ 2026-09-13 起不再抽 managerBands——Manager 比較已依使用者決定整組移除。
+ *   「與 Manager 隔離」那兩條也跟著拿掉，改由 dependency-manifest 的
+ *   「Manager 不可以再出現」守門接手；覆蓋率沒有變少，只是換了守的對象。
  */
-function bandSandbox(bandRules, managerBandRule, activeCode) {
+function bandSandbox(bandRules, activeCode) {
   return new Function(
     "state",
     [
       'const LOS_GRADES = ["A", "B", "C", "D", "E", "F"];',
       'const DEFAULT_BAND_RULE = { smoothEnd: "B", congestedStart: "E" };',
       extractFunction("bandsFor", source),
-      extractFunction("managerBands", source),
-      "return { bandsFor, managerBands };",
+      "return { bandsFor };",
     ].join("\n"),
-  )({ bandRules, managerBandRule, activeCode });
+  )({ bandRules, activeCode });
 }
 
 test("A 計畫的三段分界不可以影響 B 計畫", () => {
@@ -183,53 +203,13 @@ test("A 計畫的三段分界不可以影響 B 計畫", () => {
     A: { smoothEnd: "A", congestedStart: "C" },
     B: { smoothEnd: "D", congestedStart: "F" },
   };
-  const a = bandSandbox(state, undefined, "A");
-  const b = bandSandbox(state, undefined, "B");
+  const a = bandSandbox(state, "A");
+  const b = bandSandbox(state, "B");
   assert.deepEqual(a.bandsFor("A"), { smoothEnd: "A", congestedStart: "C" });
   assert.deepEqual(b.bandsFor("B"), { smoothEnd: "D", congestedStart: "F" });
   /* 沒設過的計畫拿預設，不是拿別人的。 */
   assert.deepEqual(a.bandsFor("C"), { smoothEnd: "B", congestedStart: "E" });
   assert.notDeepEqual(a.bandsFor("A"), a.bandsFor("B"));
-});
-
-test("Manager 的三段分界與任何一個計畫的分界完全隔離", () => {
-  /*
-   * ⚠️ 假通過陷阱：只驗「managerBands() 回得出東西」擋不住共用同一份的寫法。
-   * 要驗**兩邊各設一組不同的，讀回來也不同**，而且改一邊不影響另一邊。
-   */
-  const bandRules = { A: { smoothEnd: "A", congestedStart: "C" } };
-  const box = bandSandbox(bandRules, { smoothEnd: "D", congestedStart: "F" }, "A");
-  assert.deepEqual(box.bandsFor("A"), { smoothEnd: "A", congestedStart: "C" });
-  assert.deepEqual(box.managerBands(), { smoothEnd: "D", congestedStart: "F" });
-  assert.notDeepEqual(box.bandsFor("A"), box.managerBands());
-  /* Manager 沒設過時回系統預設，**不是**回目前計畫的分界。 */
-  const unset = bandSandbox(bandRules, undefined, "A");
-  assert.deepEqual(unset.managerBands(), { smoothEnd: "B", congestedStart: "E" });
-  assert.notDeepEqual(unset.managerBands(), unset.bandsFor("A"));
-});
-
-test("套用 Manager 分界的程式不可以碰 state.bandRules", () => {
-  /*
-   * 原始碼層級的守門。上面兩項驗的是「讀」的隔離，這一項驗「寫」——
-   * 只要有人在 managerBandApply 裡順手寫一行 state.bandRules[...]，
-   * 讀的那兩項還是會綠。
-   */
-  const start = source.indexOf('$("managerBandApply").onclick');
-  const end = source.indexOf('$("managerBandReset").onclick');
-  assert.ok(start > 0 && end > start, "找不到 Manager 套用分界的程式");
-  /*
-   * 註解裡寫「絕對不碰 state.bandRules」是好事，不該被判成違規——
-   * 所以先把註解剝掉再檢查，看的是**真的會執行的程式**。
-   */
-  const body = source
-    .slice(start, end)
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/[^\n]*/g, "");
-  assert.match(body, /state\.managerBandRule\s*=/, "要寫進自己的地方");
-  assert.ok(
-    !/state\.bandRules/.test(body),
-    "Manager 套用分界時不可以寫到 state.bandRules",
-  );
 });
 
 test("刪除計畫時會一併清掉它的三段分界", () => {

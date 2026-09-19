@@ -95,6 +95,13 @@ test("會讀 dist/ 的測試，測試指令必須先建置", async () => {
 test("lock 檔和 package.json 宣告的依賴一致", async () => {
   const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
   const lock = JSON.parse(await readFile(new URL("package-lock.json", root), "utf8"));
+  assert.equal(lock.name, pkg.name, "package-lock.json 的套件名稱與 package.json 不一致");
+  assert.equal(lock.version, pkg.version, "package-lock.json 的根版號與 package.json 不一致");
+  assert.equal(
+    lock.packages?.[""]?.version,
+    pkg.version,
+    "package-lock.json 的 packages 根版號與 package.json 不一致",
+  );
   const declared = [
     ...Object.keys(pkg.dependencies ?? {}),
     ...Object.keys(pkg.devDependencies ?? {}),
@@ -105,7 +112,11 @@ test("lock 檔和 package.json 宣告的依賴一致", async () => {
 
 test("完整驗證會先建立匿名測資，而且不依賴交付包外部資料夾", async () => {
   const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
-  assert.match(pkg.scripts.e2e, /npm run fixtures/, "npm run e2e 必須先建立匿名測資");
+  assert.match(
+    pkg.scripts.e2e,
+    /^(?:npm run fixtures|node generate-test-fixtures\.mjs)\s*&&/,
+    "e2e 指令必須先建立匿名測資",
+  );
   await access(new URL("generate-test-fixtures.mjs", root));
   for (const file of [
     "e2e-speed.mjs",
@@ -169,7 +180,7 @@ test("瀏覽器與測試端使用同一版 SheetJS 0.20.3", async () => {
  * 這是原始碼層級的守門檢查，補端對端測不到的角落（例如健康檢查的問題說明，
  * 要湊出資料異常才會出現）。判斷方式是：只要一段字串是要寫給人看的
  * ——HTML 的 <td>、健康檢查的 item、CSV 欄位——裡面就不可以出現裸的
- * `.direction`，必須先過 directionName／rowDirectionName／managerDirectionName。
+ * `.direction`，必須先過 directionName／rowDirectionName。
  *
  * 鍵值本身的用途（組 id、組速限 key、分組、篩選）不在此限，那些不是給人看的。
  */
@@ -217,16 +228,72 @@ test("directionName 是唯一的方向顯示名稱來源，且鍵值不會被改
   assert.match(source, /function directionNameFrom\(meta, direction\)/);
   assert.match(source, /function directionName\(road, direction/);
   assert.match(source, /function rowDirectionName\(row\)/);
-  assert.match(source, /function managerDirectionName\(row\)/);
+  /*
+   * ⚠️ managerDirectionName 於 2026-09-13 隨 Manager 一起移除。
+   *   這裡**不是**把那一條刪掉了事——下面另有一支「Manager 不可以再回來」
+   *   的反向守門，否則覆蓋率會默默少一塊而沒有人發現。
+   */
   /* 命名只寫進 roadMeta，永遠不可以去改明細的 direction 欄位。 */
   assert.doesNotMatch(source, /\.direction\s*=\s*(?!\w*Key)[^=]/);
 });
 
-test("Manager 匯入會把專案包裡的方向名稱一起接進來", async () => {
-  const source = await readFile(new URL("app.js", root), "utf8");
-  assert.match(source, /packageRoadMeta:\s*p\.roadMeta/);
-  /* 組合包（一次多個計畫）原本整份丟掉 roadMeta。 */
-  assert.match(source, /roadMeta:\s*Object\.fromEntries\(/);
+/*
+ * ── Manager 比較整組移除，而且不可以悄悄回來 ──────────────────────
+ *
+ * 使用者 2026-09-13：「交通服務水準的 Manager 後來我們決定拿掉，因為裡面
+ * 有的趨勢圖，各計畫已經都有了，Manager 只是畫在同一張圖而已，沒有實質
+ * 意義了。」
+ *
+ * ⚠️ 只刪程式不留守門的話，下一次照舊樣板補回一顆按鈕、一個 state.manager，
+ *   就會出現一個沒有人維護、也沒有任何測試蓋到的分頁。
+ *   這一條守的是「刪乾淨」，不是「看不見」。
+ */
+test("Manager 比較不可以再出現（已於 2026-09-13 依使用者決定整組移除）", async () => {
+  const offenders = [];
+  for (const file of ["app.js", "index.html", "styles.css", "quality-extension.js"]) {
+    const source = await readFile(new URL(file, root), "utf8");
+    source.split("\n").forEach((line, index) => {
+      /*
+       * 註解裡寫「原本有 Manager、為什麼拿掉」是**允許的**——那是教訓本身。
+       * 擋的是真的會跑起來的東西：識別字、CSS 類別、分頁鍵值。
+       */
+      const code = line.replace(/^\s*(\*|\/\/|\/\*).*$/, "");
+      if (
+        /\bmanager[A-Z]/.test(code) ||
+        /state\.manager\b/.test(code) ||
+        /\.manager-/.test(code) ||
+        /data-view="manager"/.test(code) ||
+        /#manager\b/.test(code)
+      )
+        offenders.push(`${file}:${index + 1}：${line.trim().slice(0, 110)}`);
+    });
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "Manager 又長回來了：\n" + offenders.join("\n"),
+  );
+});
+
+test("這一條真的抓得到（反面檢查，不然它可能永遠是綠的）", () => {
+  const broken = [
+    'const managerButton = document.createElement("button");',
+    "state.manager = [];",
+    ".manager-trend{margin-bottom:18px}",
+    '<button data-view="manager">Manager 比較</button>',
+  ];
+  for (const line of broken)
+    assert.ok(
+      /\bmanager[A-Z]/.test(line) ||
+        /state\.manager\b/.test(line) ||
+        /\.manager-/.test(line) ||
+        /data-view="manager"/.test(line),
+      `這一行應該要被抓到：${line}`,
+    );
+  /* 註解不可以被誤判，否則寫沿革就會踩紅。 */
+  const comment = " *   Manager 於 2026-09-13 移除後沒有這個鍵了。";
+  const code = comment.replace(/^\s*(\*|\/\/|\/\*).*$/, "");
+  assert.equal(code, "");
 });
 
 test("有 .gitattributes 且關閉換行轉換", async () => {

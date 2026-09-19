@@ -61,6 +61,12 @@ await page.evaluate(async () => {
         for (const peak of ["上午", "下午"]) {
           state.details.push({
             projectCode: state.activeCode,
+            /*
+             * ⚠️ 真正匯入的每一筆都帶 year／quarter（彙總的分組鍵用得到）。
+             *   假資料只給 period 的話，跨季的兩組會被併成一組。
+             */
+            year: Number(period.slice(0, 3)),
+            quarter: Number(period.slice(-1)),
             period,
             road,
             direction: dir,
@@ -81,13 +87,14 @@ const results = [];
 async function probe(view, label, button, result, prep) {
   await page.evaluate((v) => go(v), view);
   /*
-   * v2.20.47 起 Manager 的資料明細表預設收合（使用者要求）。
-   * 收著的時候裡面的按鈕不算可見，probe 會誤判成「按鈕不存在」而略過——
-   * 那是假通過。切到 Manager 一律先展開。
+   * ⚠️ 收合中的 <details> 裡面的按鈕不算可見，probe 會誤判成「按鈕不存在」
+   *   而直接略過——那是假通過。所以進頁之後一律先把這一頁的收合區塊打開。
+   *  （原本只針對 Manager 的資料明細表；Manager 於 2026-09-13 移除，
+   *    改成不分頁面一律展開，規則反而更一致。）
    */
   await page.evaluate(() => {
-    const details = document.querySelector("details.manager-data");
-    if (details) details.open = true;
+    for (const details of document.querySelectorAll(".view:not(.hidden) details"))
+      details.open = true;
   });
   await page.waitForTimeout(400);
   if (prep) await prep();
@@ -142,7 +149,6 @@ await probe("standards", "套用 LOS 門檻", "#applyLosRules", "#losRuleExplana
 await probe("standards", "套用三段分法", "#applyBandRule", "#bandRuleExplanation");
 await probe("conclusion", "產生草稿", "#conclusionRegenerate", "#conclusionDraft");
 await probe("speed", "套用並重算 LOS", "#applySpeed", "#speedRows");
-await probe("manager", "重設篩選", "#resetManagerFilters", "#managerRows");
 
 /*
  * ── 另一半同樣重要：結果已經看得到時，畫面**不准**跳 ──

@@ -87,6 +87,24 @@ async function measure() {
         if (box.right > view + 1 && getComputedStyle(el).overflowX !== "auto")
           wide.push(el.tagName + "." + (el.className || "") + "@" + Math.round(box.right));
       }
+    /*
+     * ── 按鈕文字被裁掉 ────────────────────────────────────────
+     *
+     * 使用者 2026-09-16（附圖）：「新增/更新這一…按鍵，文字超出按鈕大小」。
+     *
+     * ⚠️ 既有的「橫向溢出」抓不到這一種：按鈕本身乖乖待在版面裡，
+     *   溢出的是**按鈕裡面的字**。判準是 scrollWidth > clientWidth。
+     * ⚠️ 沒畫出來的按鈕（收起來的分頁裡）一律跳過，否則整支恆紅。
+     */
+    const clippedButtons = [];
+    for (const el of active.querySelectorAll("button")) {
+      if (!el.getClientRects().length) continue;
+      const text = (el.textContent || "").trim();
+      if (!text) continue;
+      const over = el.scrollWidth - el.clientWidth;
+      if (over > 1)
+        clippedButtons.push(`「${text.slice(0, 16)}」多 ${Math.round(over)}px`);
+    }
     const flushHeads = [];
     const misaligned = [];
     for (const card of active.querySelectorAll(".panel")) {
@@ -107,6 +125,21 @@ async function measure() {
       for (const el of card.querySelectorAll("table th:first-child, table td:first-child")) {
         if (el.closest(".panel") !== card) continue;
         if (!(el.textContent || "").trim()) continue;
+        /*
+         * ⚠️ 沒有畫出來的東西不可以拿來量對齊。
+         *
+         *   hidden 的區塊（例如「有覆寫指到已經不存在的路段」那一塊，
+         *   平常完全不出現）其 getBoundingClientRect() 全是 0，
+         *   於是 textLeft 是 0、headLeft 是實際的左緣，一減就變成
+         *   「少了 299px」——**一個看不到的東西被判定成沒對齊**。
+         *   2026-09-15 加上那一塊之後，這一支在九種寬度上全部紅字，
+         *   而畫面上一切正常。
+         *
+         *   getClientRects().length === 0 就是「這個元素沒有被畫出來」
+         *  （display:none、hidden 屬性、祖先被收起來都算）。
+         *   ⚠️ 不可以改用 width===0：真的被壓成 0 寬的欄位是**要抓**的問題。
+         */
+        if (!el.getClientRects().length) continue;
         const style = getComputedStyle(el);
         const textLeft = el.getBoundingClientRect().left + (parseFloat(style.paddingLeft) || 0);
         if (textLeft - headLeft < -3) {
@@ -118,7 +151,13 @@ async function measure() {
         }
       }
     }
-    return { overflow, wide: wide.slice(0, 4), flushHeads: flushHeads.slice(0, 4), misaligned: misaligned.slice(0, 4) };
+    return {
+      overflow,
+      wide: wide.slice(0, 4),
+      flushHeads: flushHeads.slice(0, 4),
+      misaligned: misaligned.slice(0, 4),
+      clippedButtons: clippedButtons.slice(0, 6),
+    };
   });
 }
 
@@ -133,6 +172,11 @@ for (const id of views) {
   ok(`${id}：沒有橫向溢出`, m.overflow <= 1, `${m.overflow}px ${m.wide.join(", ")}`);
   ok(`${id}：卡片標題都有內距`, m.flushHeads.length === 0, m.flushHeads.join("；"));
   ok(`${id}：表格第一欄與標題對齊`, m.misaligned.length === 0, m.misaligned.join("；"));
+  ok(
+    `${id}：按鈕文字沒有被裁掉`,
+    m.clippedButtons.length === 0,
+    m.clippedButtons.join("；"),
+  );
 }
 
 console.log("\n══ 多寬度掃描 ══");
@@ -147,6 +191,8 @@ for (const width of WIDTHS) {
     if (m.overflow > 1) bad.push(`${id} 溢出 ${m.overflow}px（${m.wide[0] || ""}）`);
     if (m.flushHeads.length) bad.push(`${id} 標題貼邊 ${m.flushHeads.length} 處`);
     if (m.misaligned.length) bad.push(`${id} 表格未對齊 ${m.misaligned.length} 處`);
+    if (m.clippedButtons.length)
+      bad.push(`${id} 按鈕文字被裁 ${m.clippedButtons.length} 處（${m.clippedButtons[0]}）`);
   }
   ok(`寬度 ${width}px 全分頁乾淨`, bad.length === 0, bad.join("；"));
 }
@@ -165,12 +211,26 @@ for (const width of WIDTHS) {
  */
 const navZones = await page.evaluate(() => {
   const nav = document.querySelector("nav");
-  const items = [...nav.children].map((node) => ({
-    tag: node.tagName,
-    zone: node.classList.contains("nav-zone"),
-    text: node.textContent.trim(),
-    view: node.dataset?.view || "",
-  }));
+  /*
+   * ⚠️ 2026-09-13 起大分頁按鈕被包進 .nav-row（右側要放收合鈕，
+   *   而按鈕不可以巢狀在按鈕裡）。這裡要**看穿那一層**，
+   *   否則 nav.children 全是 DIV，下面每一條都會變成恆真——
+   *   實測就是這樣：按鈕數變成 0、分區檢查空跑全綠，
+   *   只有「前置：要有十顆以上」那一條把它擋下來。
+   */
+  const items = [...nav.children].map((node) => {
+    const button = node.classList?.contains("nav-row")
+      ? node.querySelector("button[data-view]")
+      : null;
+    const target = button || node;
+    return {
+      tag: target.tagName,
+      zone: node.classList.contains("nav-zone"),
+      /* 收合鈕的符號不可以混進按鈕文字裡。 */
+      text: (button || node).textContent.trim(),
+      view: target.dataset?.view || "",
+    };
+  });
   /* 每一顆按鈕前面最近的那個小標，就是它所屬的區。 */
   let current = null;
   const orphan = [];

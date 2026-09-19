@@ -34,6 +34,15 @@
     { key: "worst", label: "範圍內服務水準最差的路段" },
     { key: "extremes", label: "範圍內旅行速率的最快／最慢" },
     { key: "losCount", label: "各服務水準等級的筆數統計" },
+    /*
+     * ⚠️ 這一項是**圖上算得出來、草稿以前寫不出來**的數字（使用者 2026-09-15：
+     *   「希望草稿產生器能讓使用者查到任何狀況下的數值，只要是可以從圖表中
+     *     獲得的數據或計算結果」）。
+     *   它的口徑必須與「三段分法」那張圖**完全相同**：每一季、每個路段一筆
+     *   代表紀錄，再按目前的三段分界歸成順暢／尚可／壅塞。
+     *   拿逐筆明細去算會多出三倍的筆數，數字和圖對不起來——那是最難查的一種錯。
+     */
+    { key: "bandShare", label: "三段分法佔比（順暢／尚可／壅塞，同「三段分法」圖）" },
   ];
 
   var DEFAULT_METRICS = ["los", "travel", "totalDelay"];
@@ -47,6 +56,60 @@
     metrics: DEFAULT_METRICS.slice(),
     grouping: "byRoad",
     digits: 1,
+    /*
+     * 資料層級——對應主工具列「尖峰」那一格的「代表尖峰（系統取最差）」。
+     *
+     * "detail"（預設，＝舊行為）：逐筆明細，一個路段一季最多四筆。
+     * "representative"：**先篩再挑最差**，與「尖峰彙總」「各路段 LOS 圖」
+     *   同一個口徑——同一組（計畫・年・季・路段・日別）裡，
+     *   從**符合條件的那幾筆**挑最差的一筆。
+     *
+     * ⚠️ 挑最差的規則不可以在這裡另寫一套，由呼叫端把 rebuild() 用的那一支
+     *   透過 meta.worstOf 傳進來（`describeWorst` 之外全站唯一一份）。
+     */
+    rowLevel: "detail",
+  };
+
+  /**
+   * 條件在畫面上的名字。草稿寫「不適用」時要寫使用者看得懂的字，不是欄位名。
+   */
+  var CONDITION_LABELS = {
+    scope: "統計範圍（季度）",
+    peaks: "尖峰",
+    directions: "方向",
+    days: "日別",
+    roads: "路段",
+    rowLevel: "資料層級",
+  };
+
+  /*
+   * ── 哪一個數字不吃哪一個條件 ────────────────────────────────
+   *
+   * 使用者 2026-09-15：「針對不適用某些篩選條件的結果，在產生草稿時，
+   *   可以直接說**該數值不適用 XXX 條件**」。
+   *
+   * ⚠️ 只列「這個數字**真的**不隨那個條件改變」的組合。
+   *   多列一項＝畫面說謊（明明會變卻說不適用），少列一項＝使用者以為
+   *   自己設的條件有生效。兩種都比不寫更糟。
+   * ⚠️ 只有在使用者**確實設了**那個條件時才寫出來——
+   *   沒設的條件寫一堆「不適用」只是噪音。
+   */
+  var METRIC_INAPPLICABLE = {
+    limit: [
+      { field: "peaks", reason: "公告速限是「這條路段這個方向」的設定值，不隨尖峰改變" },
+      { field: "days", reason: "公告速限不分平日假日" },
+    ],
+    directionText: [
+      { field: "peaks", reason: "方向文字是路段與方向的名稱，不隨尖峰改變" },
+      { field: "days", reason: "方向文字不分平日假日" },
+    ],
+    bandShare: [
+      {
+        field: "rowLevel",
+        reason:
+          "這一項固定以代表紀錄（每季每路段一筆）計算，才會與「三段分法」圖上的佔比相同",
+      },
+    ],
   };
 
   var LOS_ORDER = ["A", "B", "C", "D", "E", "F"];
@@ -130,9 +193,44 @@
     return true;
   }
 
-  function selectRows(details, condition) {
+  /**
+   * 「先篩再挑最差」——與尖峰彙總、各路段 LOS 圖同一個口徑。
+   *
+   * ⚠️ 絕對不可以拿已經挑好的代表紀錄再去篩：那一份是從**全部四筆**挑出來的，
+   *   篩掉之後只會剩下「剛好代表值就是方向1」的那幾列，其餘整組消失，
+   *   使用者會以為那些路段那一季沒有資料。所以一定是**先篩**（呼叫端已經做完）
+   *   **再挑**（這裡）。
+   * ⚠️ 挑最差的排序由 meta.worstOf 傳進來（就是 rebuild() 用的那一支）。
+   *   沒傳就原樣回傳逐筆明細——舊呼叫端與單元測試行為完全不變。
+   */
+  function reduceToRepresentative(rows, worstOf) {
+    if (typeof worstOf !== "function") return rows;
+    var groups = {};
+    var order = [];
+    for (var i = 0; i < rows.length; i += 1) {
+      var row = rows[i];
+      var key = [row.projectCode, row.year, row.quarter, row.road, row.day].join("|");
+      if (!groups[key]) {
+        groups[key] = [];
+        order.push(key);
+      }
+      groups[key].push(row);
+    }
+    var out = [];
+    for (var j = 0; j < order.length; j += 1) {
+      var list = groups[order[j]];
+      var best = worstOf(list);
+      if (best) out.push(best);
+    }
+    return out;
+  }
+
+  /**
+   * @param worstOf 只有 condition.rowLevel === "representative" 時才會用到。
+   */
+  function selectRows(details, condition, worstOf) {
     var c = condition || DEFAULT_CONDITION;
-    return (details || [])
+    var picked = (details || [])
       .filter(function (row) {
         if (!inScope(row, c.scope)) return false;
         if (c.peaks && c.peaks.length && c.peaks.indexOf(row.peak) < 0) return false;
@@ -141,7 +239,10 @@
         if (c.days && c.days.length && c.days.indexOf(row.day) < 0) return false;
         if (c.roads && c.roads.length && c.roads.indexOf(row.road) < 0) return false;
         return true;
-      })
+      });
+    if (c.rowLevel === "representative")
+      picked = reduceToRepresentative(picked, worstOf);
+    return picked
       .slice()
       .sort(function (a, b) {
         return (
@@ -364,6 +465,26 @@
     ];
   }
 
+  /**
+   * ══════════════════════════════════════════════════════════════════
+   *  ⚠️ 2026-09-16 起**不再寫「N 筆平均」**（使用者裁示）
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 使用者原話：
+   *   「每一行展示一筆季別+日別的結果，例如 A路段 在114Q1 平日結果XXX
+   *     假日結果YYY，而不是要你平均起來，除非評估過後 某個數值是以平均
+   *     來呈現最佳。」
+   *
+   * 那個平均本來就不該寫：它把**不同路段、不同季別、不同日別、不同尖峰、
+   * 不同方向**的旅行速率混成一個數字。路段長度與速限都不同，
+   * 平均出來的值不對應任何一條路在任何一個時段的實際速率——
+   * 這一點原本的括號裡自己就寫著「各路段長度與速限不同」，
+   * 既然如此就更不該取平均。
+   *
+   * ⚠️ 最快／最慢**保留**——那是在比大小，不是把數字混在一起。
+   * ⚠️ 筆數太多時**不給任何平均或合計**，只說明還有幾筆。
+   */
+  var EXTREME_LINE_LIMIT = 12;
   function describeExtremes(rows, digits) {
     var points = rows.filter(function (row) {
       return isNum(row.travel);
@@ -372,14 +493,10 @@
     var sorted = points.slice().sort(function (a, b) {
       return Number(b.travel) - Number(a.travel);
     });
-    var mean =
-      points.reduce(function (sum, row) {
-        return sum + Number(row.travel);
-      }, 0) / points.length;
     var name = function (row) {
       return periodText(row.period) + " " + row.road + "（" + row.day + "・" + row.peak + "・" + dirLabel(row) + "）";
     };
-    return [
+    var lines = [
       "　旅行速率最快為 " +
         name(sorted[0]) +
         " " +
@@ -388,14 +505,35 @@
         name(sorted[sorted.length - 1]) +
         " " +
         num(sorted[sorted.length - 1].travel, digits) +
-        " km/h，" +
-        points.length +
-        " 筆平均 " +
-        num(mean, digits) +
-        " km/h。（各路段長度與速限不同，此處僅比較大小。）",
+        " km/h。（各路段長度與速限不同，此處僅比較大小，不取平均。）",
     ];
+    if (sorted.length <= EXTREME_LINE_LIMIT)
+      for (var i = 0; i < sorted.length; i += 1)
+        lines.push(
+          "　　・" + name(sorted[i]) + "：" + num(sorted[i].travel, digits) + " km/h",
+        );
+    else
+      lines.push(
+        "　　（共 " +
+          sorted.length +
+          " 筆，逐筆列出過長，此處不列；各路段長度與速限不同，不取平均，" +
+          "要看個別數值請縮小路段或季度範圍後重新產生。）",
+      );
+    return lines;
   }
 
+  /*
+   * ⚠️ 分母必須與「三段分法」那一段相同＝**判定得出等級的筆數**。
+   *
+   * 稽核表 L：舊版這裡用 `rows.length`（全部筆數）當分母，而同一份草稿下方的
+   * 「三段分法佔比」用的是可判定筆數。兩組百分比**並排印在同一份草稿裡**，
+   * 讀的人無從分辨哪一個是哪一種分母——只要有一筆讀不到等級，
+   * 上面那組加起來不到 100%、下面那組剛好 100%，看起來像其中一組算錯了，
+   * 實際上兩個都「對」，只是口徑不同。抄進報告之後沒有人查得出來。
+   *
+   * 統一成可判定筆數，並且**把口徑寫在句子裡**（不能只改數字不改字）：
+   * 不寫的話，同一句話在修正前後印出不同的百分比，卻長得一模一樣。
+   */
   function describeLosCount(rows, digits) {
     var counts = {};
     var unknown = 0;
@@ -404,15 +542,200 @@
       if (LOS_ORDER.indexOf(los) < 0) unknown += 1;
       else counts[los] = (counts[los] || 0) + 1;
     }
+    var graded = rows.length - unknown;
     var parts = LOS_ORDER.filter(function (los) {
       return counts[los];
     }).map(function (los) {
-      return los + " 級 " + counts[los] + " 筆（" + pct((counts[los] / rows.length) * 100, digits) + "）";
+      return (
+        los +
+        " 級 " +
+        counts[los] +
+        " 筆（" +
+        (graded ? pct((counts[los] / graded) * 100, digits) : "—") +
+        "）"
+      );
     });
-    if (unknown) parts.push("無法判定 " + unknown + " 筆");
+    if (unknown) parts.push("無法判定 " + unknown + " 筆（不計入分母）");
     return parts.length
-      ? ["　共 " + rows.length + " 筆：" + parts.join("、") + "。"]
+      ? [
+          "　共 " +
+            rows.length +
+            " 筆（可判定 " +
+            graded +
+            " 筆，佔比的分母是可判定筆數，與下方「三段分法」相同）：" +
+            parts.join("、") +
+            "。",
+        ]
       : ["　範圍內沒有可統計的服務水準。"];
+  }
+
+  /** 一個等級落在三段的哪一段。認不得的等級回 null，**不可以**當成壅塞。 */
+  function bandOfGrade(los, bands) {
+    var index = LOS_ORDER.indexOf(String(los));
+    if (index < 0) return null;
+    var smooth = LOS_ORDER.indexOf(String((bands || {}).smoothEnd));
+    var congested = LOS_ORDER.indexOf(String((bands || {}).congestedStart));
+    /*
+     * ⚠️ 分界讀不到時回 null，**不可以**讓判斷式自己滑過去。
+     *   舊寫法直接用 indexOf 的結果比大小：分界是 undefined 時 indexOf 回 -1，
+     *   於是 `index >= -1` 恆真——**每一筆都會被歸成壅塞**，
+     *   而草稿上會寫出一個看起來很合理的 100%。
+     */
+    if (smooth < 0 || congested < 0 || smooth >= congested) return null;
+    if (index <= smooth) return "smooth";
+    if (index >= congested) return "congested";
+    return "fair";
+  }
+
+  /**
+   * 三段分法的佔比——**與「三段分法」那張圖同一個口徑**。
+   *
+   * 口徑（不可以自己另定一套，否則草稿與圖上的百分比會不一樣）：
+   *   ・每一季、每個路段各一筆**代表紀錄**（先篩再挑最差），不是逐筆明細。
+   *   ・分界走 meta.bandsOf(row)，所以「依季別區間／路段覆寫的分界」也會生效。
+   *
+   * @param rows 已經篩過的列（逐筆或代表紀錄都可以，這裡一律再歸一次）
+   */
+  function describeBandShare(rows, digits, meta) {
+    if (typeof meta.bandsOf !== "function")
+      return ["　讀不到三段分界設定，這一項沒有寫出來（請回報這個情形）。"];
+    var reps = reduceToRepresentative(rows, meta.worstOf);
+    if (!reps.length) return ["　範圍內沒有可統計的代表紀錄。"];
+    /*
+     * ⚠️ **一個日別一張圖**——這是「三段分法」那一塊自己的口徑
+     *  （app.js 的 renderBandPanel 依 row.day 分成好幾組 series）。
+     *   把平日與假日混在一起算，草稿上的百分比就和兩張圖上的都不一樣，
+     *   而三個數字加起來還是 100%，看起來完全正常。
+     */
+    var days = [];
+    var byDay = {};
+    for (var i = 0; i < reps.length; i += 1) {
+      var row = reps[i];
+      var day = row.day || "";
+      if (!byDay[day]) {
+        byDay[day] = [];
+        days.push(day);
+      }
+      byDay[day].push(row);
+    }
+    days.sort(function (a, b) {
+      return String(a).localeCompare(String(b), "zh-TW");
+    });
+    var names = { smooth: "順暢", fair: "尚可", congested: "壅塞" };
+    var signatures = {};
+    var lines = [];
+    var indent = days.length > 1 ? "　　" : "　";
+    days.forEach(function (day) {
+      if (days.length > 1) lines.push("　〔" + (day || "未標示日別") + "〕");
+      var group = byDay[day];
+      var periods = [];
+      var byPeriod = {};
+      group.forEach(function (row) {
+        if (!byPeriod[row.period]) {
+          byPeriod[row.period] = [];
+          periods.push(row.period);
+        }
+        byPeriod[row.period].push(row);
+        var bands = meta.bandsOf(row);
+        if (bands && bands.smoothEnd && bands.congestedStart)
+          signatures["順暢 A～" + bands.smoothEnd + "、壅塞 " + bands.congestedStart + "～F"] = true;
+      });
+      periods.sort(function (a, b) {
+        return periodKey(a) - periodKey(b);
+      });
+      periods.forEach(function (period) {
+        var list = byPeriod[period];
+        var counts = { smooth: 0, fair: 0, congested: 0 };
+        var unknown = 0;
+        list.forEach(function (row) {
+          var band = bandOfGrade(row.los, meta.bandsOf(row));
+          if (band) counts[band] += 1;
+          else unknown += 1;
+        });
+        /*
+         * ⚠️ 佔比的分母是**判定得出等級的筆數**，不是全部筆數——
+         *   這一條與 trend.js 的 buildBandSeries 完全相同，不可以各算各的。
+         *   用全部筆數當分母的話，只要有一筆讀不到等級，草稿上的三個百分比
+         *   加起來就不到 100%，而圖上是 100%。
+         */
+        var graded = counts.smooth + counts.fair + counts.congested;
+        var parts = ["smooth", "fair", "congested"].map(function (key) {
+          return (
+            names[key] +
+            " " +
+            counts[key] +
+            " 筆（" +
+            (graded ? pct((counts[key] / graded) * 100, digits) : "—") +
+            "）"
+          );
+        });
+        if (unknown) parts.push("無法判定 " + unknown + " 筆（不計入分母）");
+        lines.push(
+          indent +
+            periodText(period) +
+            "（可判定 " +
+            graded +
+            " 筆代表紀錄）：" +
+            parts.join("、") +
+            "。",
+        );
+      });
+    });
+    var keys = Object.keys(signatures);
+    lines.push(
+      "　（口徑：一個日別一組，每一季、每個路段各一筆代表紀錄，分母是判定得出等級的筆數，" +
+        "與「三段分法」圖完全相同；壅塞那一欄就是歷季趨勢圖的「壅塞級距佔比」指標。目前的分界：" +
+        (keys.length === 1
+          ? keys[0]
+          : keys.length > 1
+            ? keys.length + " 組（有依季別區間或路段覆寫），逐筆各自套用"
+            : "讀不到（請回報這個情形）") +
+        "。）",
+    );
+    return lines;
+  }
+
+  /**
+   * 「這個數字不吃你設的那個條件」——逐項寫出來。
+   *
+   * ⚠️ 只寫使用者**確實設了**的條件；沒設的不寫，否則整段都是噪音。
+   */
+  function describeInapplicable(c) {
+    var setFields = {};
+    if (c.scope && c.scope.kind && c.scope.kind !== "project") setFields.scope = true;
+    if (c.peaks && c.peaks.length) setFields.peaks = true;
+    if (c.directions && c.directions.length) setFields.directions = true;
+    if (c.days && c.days.length) setFields.days = true;
+    if (c.roads && c.roads.length) setFields.roads = true;
+    if (c.rowLevel && c.rowLevel !== DEFAULT_CONDITION.rowLevel) setFields.rowLevel = true;
+    var lines = [];
+    for (var i = 0; i < CONCLUSION_METRICS.length; i += 1) {
+      var metric = CONCLUSION_METRICS[i];
+      if (c.metrics.indexOf(metric.key) < 0) continue;
+      var rules = METRIC_INAPPLICABLE[metric.key] || [];
+      var hits = rules.filter(function (rule) {
+        return setFields[rule.field];
+      });
+      if (!hits.length) continue;
+      lines.push(
+        "　・" +
+          metric.label +
+          "：本數值不適用「" +
+          hits
+            .map(function (rule) {
+              return CONDITION_LABELS[rule.field];
+            })
+            .join("」「") +
+          "」條件——" +
+          hits
+            .map(function (rule) {
+              return rule.reason;
+            })
+            .join("；") +
+          "。",
+      );
+    }
+    return lines;
   }
 
   function buildConclusion(details, condition, meta) {
@@ -434,7 +757,9 @@
         : function (value) {
             return String(value == null ? "" : value);
           };
-    var rows = selectRows(details, c);
+    /* 舊範本沒有 rowLevel；認不得的值一律回到預設，不讓草稿悄悄換口徑。 */
+    if (c.rowLevel !== "representative") c.rowLevel = "detail";
+    var rows = selectRows(details, c, m.worstOf);
     var out = [];
     out.push("【結論草稿】" + scopeLabel(c.scope, rows));
     out.push(
@@ -476,6 +801,25 @@
         "不同路段的長度與速限不同，跨路段、跨季度只做比較，不做加總。" +
         "服務水準 A～F 是等級不是數值，不做平均。",
     );
+    /*
+     * ⚠️ 「資料層級」一定要寫在草稿裡。
+     *   逐筆明細與代表紀錄算出來的筆數、佔比、最快最慢**都不一樣**，
+     *   而文字上看不出差別——不寫的話，兩份用不同層級產生的草稿
+     *   會被當成同一件事互相對帳，然後怎麼對都對不起來。
+     */
+    out.push(
+      "資料層級：" +
+        (c.rowLevel === "representative"
+          ? "代表紀錄——同一組（季度・路段・日別）裡，從符合上列條件的那幾筆挑最差的一筆，" +
+            "與「尖峰彙總」「各路段 LOS 圖」同一個口徑。"
+          : "逐筆明細——每一個尖峰、每一個方向各寫一筆，與「尖峰明細」同一個口徑。") ,
+    );
+    var notes = describeInapplicable(c);
+    if (notes.length) {
+      out.push("");
+      out.push("條件適用情形：");
+      Array.prototype.push.apply(out, notes);
+    }
 
     var wants = function (key) {
       return c.metrics.indexOf(key) >= 0;
@@ -566,6 +910,10 @@
     if (wants("extremes")) {
       heading("旅行速率的最快與最慢");
       Array.prototype.push.apply(out, describeExtremes(rows, c.digits));
+    }
+    if (wants("bandShare")) {
+      heading("三段分法佔比（順暢／尚可／壅塞）");
+      Array.prototype.push.apply(out, describeBandShare(rows, c.digits, m));
     }
     if (wants("growth") && c.grouping !== "byRoad") {
       heading("季度之間的變動");

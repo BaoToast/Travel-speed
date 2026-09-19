@@ -14,10 +14,24 @@ import * as XLSX from "xlsx";
 
 const appSource = readFileSync(new URL("./app.js", import.meta.url), "utf8");
 const pdSource = readFileSync(new URL("./period-date.js", import.meta.url), "utf8");
+/*
+ * ⚠️ los-rule-scope.js 也要載進這個沙箱。
+ *
+ *   2026-09-15 起 app.js 的 periodIndex() 是**轉呼叫** LosRuleScope.periodIndex
+ *  （季別索引全站只有一份，避免三份實作漂移）。沒載進來的話，
+ *   這裡每一條牽涉到季別排序的測試都會炸在 "Cannot read properties of undefined"
+ *   ——而那不是程式的錯，是沙箱少載了一個相依。
+ *   網頁上的載入順序見 index.html：los-rule-scope 在 app.js 之前。
+ */
+const scopeSource = readFileSync(
+  new URL("./los-rule-scope.js", import.meta.url),
+  "utf8",
+);
 
 const box = { XLSX, console };
 box.window = box; box.globalThis = box; box.self = box;
 new Function("window", "self", "globalThis", pdSource).call(box, box, box, box);
+new Function("window", "self", "globalThis", scopeSource).call(box, box, box, box);
 
 /** 取出 app.js 所有最上層 function 宣告，一起求值。 */
 function loadAppFunctions(exports) {
@@ -327,7 +341,32 @@ test("切換鈕存在，而且切換只換文字、不換篩選值", () => {
   assert.match(appSource, /yearStyleButton\.dataset\.testid = "year-style-toggle"/,
     "要有年份顯示切換鈕");
   assert.match(appSource, /yearStyle: "roc"/, "預設是民國年");
-  assert.match(appSource, /function showQuarter\(period\)/, "要有統一的顯示換字函式");
+  /*
+   * ⚠️ 2026-09-13 起 showQuarter 多了第二個參數（計畫代碼），
+   *   而且要同時套上「年份寫法」與「期別寫法」兩層——
+   *   使用者回報「期別顯示調查月份……只有成功變成西元年，沒有變成調查月份」。
+   *   這裡連帶驗它**真的走了兩層**（委派給 projectPeriodLabel），
+   *   只驗「函式存在」的話，把它改回只換年份照樣會綠。
+   */
+  assert.match(
+    appSource,
+    /function showQuarter\(period, projectCode = state\.activeCode\)/,
+    "要有統一的顯示換字函式（第二個參數是計畫代碼）",
+  );
+  assert.match(
+    appSource,
+    /function showQuarter\([^)]*\)\s*\{\s*return projectPeriodLabel\(/,
+    "showQuarter 必須同時套上年份與期別兩層（委派給 projectPeriodLabel）",
+  );
+  /*
+   * ⚠️ 反面：map(showQuarter) 會把陣列索引當成計畫代碼傳進去，
+   *   查不到明細就安靜地退回季別寫法——我自己踩過這個坑。
+   */
+  assert.doesNotMatch(
+    appSource,
+    /\.map\(showQuarter\)/,
+    "不可以寫 list.map(showQuarter)：索引會被當成計畫代碼",
+  );
   /*
    * 下拉選單的 value 一定要是儲存值。舊寫法是 `<option ${selected}>${safe(x)}</option>`
    * ——沒有 value，文字就是值；文字一換成西元年，成果範圍與品質篩選立刻挑不到
@@ -363,19 +402,47 @@ test("切換鈕存在，而且切換只換文字、不換篩選值", () => {
     /<option value="\$\{esc\(showQuarter\(/,
     "季度選單的 value 不可以是顯示文字",
   );
-  /* 草稿的儲存鍵不可以跟著顯示切換走，否則切一次就找不到之前存的草稿 */
-  assert.match(quality, /return `\$\{state\.activeCode\}\|\$\{deliveryRange\(\)\.label\}`/);
+  /*
+   * 草稿的儲存鍵不可以跟著顯示切換走，否則切一次就找不到之前存的草稿。
+   *
+   * ⚠️ 2026-09-15 起這個鍵多了「方向｜尖峰」兩段（報告文字草稿新增了那兩個
+   *   條件，不同條件下的草稿不可以互相蓋掉）。所以這裡不再比對整行字面，
+   *   改成守**不變量**本身：
+   *     ① 基底一定是 `計畫代碼 | deliveryRange().label`（兩個都是儲存值）
+   *     ② draftKey() 裡**不可以**出現任何顯示換字函式
+   *   只比字面的話，任何合理的擴充都會紅，而真正的錯（把顯示值塞進鍵）
+   *   反而可以繞過去。
+   */
+  assert.match(
+    quality,
+    /const base = `\$\{state\.activeCode\}\|\$\{deliveryRange\(\)\.label\}`/,
+    "草稿鍵的基底必須是「計畫代碼｜deliveryRange().label」（都是儲存值）",
+  );
+  const draftKeyBody = quality.slice(
+    quality.indexOf("function draftKey()"),
+    quality.indexOf("let draftDirty"),
+  );
+  assert.ok(draftKeyBody.length > 0, "找得到 draftKey()");
+  assert.doesNotMatch(
+    draftKeyBody,
+    /showQuarter|projectPeriodLabel|quarterInYearStyle/,
+    "草稿的儲存鍵裡不可以出現任何顯示換字函式",
+  );
   assert.match(quality, /label: start === end \? start : `\$\{start\}-\$\{end\}`/,
     "deliveryRange().label 必須維持儲存值");
 
   /* 所有使用者看得到的季度提示都要經過同一個顯示函式。 */
-  assert.match(appSource, /impact\.periods\.map\(showQuarter\)\.join\("、"\)/,
-    "路段合併預覽的影響季度要跟著切換");
+  /* ⚠️ 2026-09-13 改寫成箭頭函式（見上面「不可以直接交給 map」那一條）。 */
+  assert.match(
+    appSource,
+    /impact\.periods\.map\(\(x\) => showQuarter\(x\)\)\.join\("、"\)/,
+    "路段合併預覽的影響季度要跟著切換",
+  );
   assert.match(appSource, /showQuarter\(batch\.period\)/,
     "刪除季度復原提示要跟著切換");
   assert.doesNotMatch(appSource, /detail: `相較 \$\{prev\.period\}/,
     "健康檢查的說明不可直接印出儲存值");
-  assert.match(quality, /range\.periods\.map\(showQuarter\)\.join\("、"\)/,
+  assert.match(quality, /range\.periods\.map\(\(x\) => showQuarter\(x\)\)\.join\("、"\)/,
     "成果草稿的季度清單要跟著切換");
   assert.doesNotMatch(quality, /`較 \$\{prev\.period\}/,
     "結論草稿的前期季度不可直接印出儲存值");
@@ -529,74 +596,80 @@ test("「要編輯的計畫」不得再叫「目前計畫」，且不一致時�
   );
 });
 
-/* ── F-3：路段有效期間的季度輸入（v2.20.30） ── */
+/* ── F-3：路段有效期間**已整組移除**（2026-09-15） ── */
 
-test("路段有效期間必須走共用把關，不得只檢查形狀", () => {
+test("路段有效期間必須真的被移除，不可以只是藏起來", () => {
   /*
-   * 舊版 saveRoadPeriod 只用 validPeriod()（/^\d{2,4}Q[1-4]$/），於是
-   * 2026Q1／89Q1／201Q4／2000Q1／2112Q1／9999Q1 全部照收、原樣存，
-   * 提示卻寫「季度格式應為民國年加 Q1～Q4」。實測後果：開始季度打成
-   * 9999Q1，該路段在所有真的有資料的季度都被判成不在有效期間，
-   * 悄悄從品質總覽與成果範圍消失，沒有任何警告。
+   * 使用者 2026-09-15 定案（原話）：
+   *   「不管是哪個程式，其實都是從檔案中匯入去抓取，**沒抓到＝沒資料了**，
+   *     可能是整個停止監測，也可能是暫時停止監測幾季，不論哪個情況，
+   *     使用者可能都會忘記回報。所以我偏向程式直接以有沒匯入去判斷就好，
+   *     沒匯入＝沒資料，篩選某季時，沒資料的路段就不顯示……
+   *     三份程式都已經有『前季有但本季沒有的路段』的異常提醒了，
+   *     就足夠應付狀況了。」
+   *
+   * ⚠️ 這一條**取代**了原本三條 F-3（輸入把關、界線退化、載入正規化）。
+   *   那三條守的是這個功能怎麼做對，功能不存在之後留著它們只會擋住刪除。
+   *
+   * ⚠️ 為什麼要有一條「已經刪掉」的守門：這個功能的欄位散在
+   *   roadMeta、migrate、路段合併、品質總覽、清冊六個地方，
+   *   刪一半是最可能的結果——留下一個沒有畫面可以編輯、卻仍在篩資料的欄位，
+   *   那比不刪更糟。
+   */
+  for (const name of [
+    "roadIsActive",
+    "periodBoundIndex",
+    "canonicalPeriod",
+    "roadObservedPeriods",
+    "saveRoadPeriod",
+    "roadStartPeriod",
+    "roadEndPeriod",
+    "periodRoad",
+  ]) {
+    /* 註解裡提到名字是可以的（那是在說「已經移除、不要加回來」）。 */
+    const code = appSource
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    assert.doesNotMatch(
+      code,
+      new RegExp(name),
+      `app.js 仍然有 ${name}——路段有效期間沒有刪乾淨`,
+    );
+  }
+  assert.doesNotMatch(
+    appSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""),
+    /startPeriod|endPeriod/,
+    "app.js 仍然在讀寫 roadMeta 的 startPeriod／endPeriod",
+  );
+});
+
+test("拿掉有效期間之後，「日別不完整」不可以對整季沒資料的路段報警", () => {
+  /*
+   * ⚠️ 這是移除有效期間時**最容易漏掉**的一步，而且漏掉不會有任何錯誤訊息。
+   *
+   *   「日別不完整」那一段是「全部季度 × 全部路段」的交叉迴圈，
+   *   舊版靠 roadIsActive() 把「這一季本來就沒有這條路」的組合擋掉。
+   *   直接把那一行刪掉、不補替代條件的話，一個分階段施工的計畫
+   *  （開工前調查 100 條、第一階段只調查其中 80 條）會在第一階段的每一季
+   *   各冒出 20 條假警報——使用者要的正好相反。
+   *
+   *   正確的替代是「這一季這條路段完全沒資料就跳過」：只報
+   *   「匯了平日卻漏了假日」這種真的漏了一半的情形。
    */
   const block = appSource.slice(
-    appSource.indexOf('$("saveRoadPeriod").onclick'),
-    appSource.indexOf('$("addAlias").onclick'),
+    appSource.indexOf("const periods = projectPeriods(),"),
+    appSource.indexOf("const limitKeys = new Map();"),
   );
-  assert.ok(block.length > 200, "找不到 saveRoadPeriod 區塊");
+  assert.ok(block.length > 200, "找不到「日別不完整」那一段");
   assert.match(
     block,
-    /PeriodDate\.checkSurveyPeriodInput\(text\)/,
-    "有效期間必須走共用的 checkSurveyPeriodInput()",
+    /if \(!days\.size\) continue;/,
+    "整季沒有資料的路段必須跳過，不可以報成「日別不完整」",
   );
-  assert.match(
+  assert.doesNotMatch(block, /roadIsActive/, "不可以再用有效期間判斷");
+  assert.doesNotMatch(
     block,
-    /PeriodDate\.surveyPeriodInputMessage\(check\.reason\)/,
-    "錯誤訊息必須與匯入路徑同一句",
-  );
-  assert.match(block, /bounds\.push\(check\.key\)/, "存下的必須是換算後的民國年鍵");
-  /* 只找實際呼叫，註解裡提到 validPeriod() 說明歷史是可以的 */
-  const code = block.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-  assert.doesNotMatch(
-    code,
-    /!validPeriod\(|validPeriod\(start\)|validPeriod\(end\)/,
-    "不可以再用只看形狀的 validPeriod() 當有效期間的把關",
-  );
-  assert.doesNotMatch(
-    code,
-    /toast\("季度格式應為民國年加/,
-    "那句提示與實際行為不符（它其實收四碼西元），必須改掉",
-  );
-});
-
-test("不可用的有效期間界線要退化成「沒有設定」，不可以讓路段消失", () => {
-  /*
-   * periodIndex() 只看形狀，9999Q1 算得出 32353。界線的失效方式必須和
-   * 「格式不合」一樣回 -1（＝視為沒有設定），否則路段會從畫面上消失——
-   * 看不見的錯誤比「暫時當成永遠有效」危險得多。
-   */
-  assert.match(
-    appSource,
-    /function periodBoundIndex\(v\) \{[\s\S]*?checkSurveyPeriodInput\(v\)/,
-    "應有 periodBoundIndex() 且走共用把關",
-  );
-  const active = appSource.slice(
-    appSource.indexOf("function roadIsActive("),
-    appSource.indexOf("function directionNameFrom("),
-  );
-  assert.match(active, /periodBoundIndex\(start\)/, "roadIsActive 的下界要走 periodBoundIndex");
-  assert.match(active, /periodBoundIndex\(end\)/, "roadIsActive 的上界要走 periodBoundIndex");
-});
-
-test("既有資料裡寫成西元的有效期間會在載入時統一成民國年", () => {
-  assert.match(
-    appSource,
-    /for \(const meta of Object\.values\(state\.roadMeta\)\)[\s\S]*?canonicalPeriod\(before\)/,
-    "migrateLosRules 應把既有的有效期間界線正規化",
-  );
-  assert.match(
-    appSource,
-    /function canonicalPeriod\(v\) \{[\s\S]*?check\.ok \? check\.key/,
-    "canonicalPeriod 應只換認得出來的，認不得的原樣留著",
+    /有效期間內沒有平日及假日資料/,
+    "那一句說明是有效期間時代的寫法，功能移除後不可以留著",
   );
 });

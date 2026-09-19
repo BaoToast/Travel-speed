@@ -1,13 +1,13 @@
 {
   "name": "travel-speed",
-  "version": "2.20.54",
+  "version": "2.20.65",
   "private": true,
   "description": "交通服務水準分析系統（純靜態網站：HTML + CSS + 原生 JavaScript，無框架、無建置步驟）",
   "scripts": {
-    "test": "node --test *.test.mjs && node check-version.mjs",
+    "test": "node glyph-guard.mjs && node --test *.test.mjs && node check-version.mjs",
     "fixtures": "node generate-test-fixtures.mjs",
-    "e2e": "npm run fixtures && node e2e-speed.mjs && node e2e-conclusion.mjs && node e2e-direction-name.mjs && node e2e-layout.mjs && node e2e-period-date.mjs && node e2e-year-style.mjs && node e2e-project-scope.mjs && node e2e-road-period.mjs && node e2e-reveal.mjs && node e2e-drop.mjs && node e2e-progress.mjs && node e2e-load-failure.mjs && node e2e-preview-los.mjs && node e2e-reimport.mjs && node e2e-column-filter.mjs && node e2e-storage-blocked.mjs && node e2e-trend.mjs && node e2e-chart-layout.mjs && node e2e-trend-excel.mjs",
-    "manual": "node manual-src/build-pdf.mjs && node manual-src/build-docx.mjs",
+    "e2e": "node generate-test-fixtures.mjs && node e2e-speed.mjs && node e2e-conclusion.mjs && node e2e-direction-name.mjs && node e2e-layout.mjs && node e2e-period-date.mjs && node e2e-year-style.mjs && node e2e-project-scope.mjs && node e2e-reveal.mjs && node e2e-drop.mjs && node e2e-progress.mjs && node e2e-load-failure.mjs && node e2e-preview-los.mjs && node e2e-reimport.mjs && node e2e-column-filter.mjs && node e2e-storage-blocked.mjs && node e2e-trend.mjs && node e2e-trend-multiline.mjs && node e2e-chart-layout.mjs && node e2e-sidebyside-labels.mjs && node e2e-trend-excel.mjs && node e2e-restore-point.mjs && node e2e-nav-sections.mjs && node e2e-nav-coverage.mjs && node e2e-view-scroll.mjs && node e2e-nav-scroll-position.mjs && node e2e-rule-shortcut.mjs && node e2e-figure-note-layout.mjs && node e2e-narrow-nav-clickable.mjs && node e2e-export-clean.mjs && node e2e-control-spacing.mjs && node e2e-period-display-everywhere.mjs && node e2e-nav-naming.mjs && node e2e-health-chips.mjs && node e2e-quality-scope.mjs && node e2e-modal-actions-visible.mjs && node e2e-nav-collapse.mjs && node e2e-section-scope.mjs && node e2e-chart-page.mjs && node e2e-view-isolation.mjs && node e2e-text-wrap.mjs && node e2e-nav-zone.mjs && node e2e-main-toolbar.mjs && node e2e-trend-options.mjs && node e2e-speed-confirm.mjs && node e2e-direction-confirm.mjs && node e2e-detached-popover.mjs && node e2e-sticky-offset.mjs && node e2e-filter-coverage.mjs && node e2e-apply-main.mjs && node e2e-los-rule-scope.mjs && node e2e-band-rule-scope.mjs && node e2e-speed-scope.mjs && node e2e-orphan-scope.mjs && node e2e-draft-conditions.mjs && node e2e-ack-button.mjs && node e2e-rename-quarter.mjs",
+    "manual": "node manual-src/build-pdf.mjs",
     "verify": "npm run test && npm run e2e"
   },
   "devDependencies": {

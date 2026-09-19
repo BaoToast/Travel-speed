@@ -535,6 +535,91 @@ if (importedRows) {
   }
 }
 
+/*
+ * ── 帶著 kind 標記的空殼，一樣不可以清空資料 ─────────────────────────
+ *
+ * ⚠️ 2026-09-12 稽核實測踩到：舊版只要看到 `kind === "TLM_PORTFOLIO_PACKAGE"`
+ *   就整份 state 換掉。一個 `{"kind":"TLM_PORTFOLIO_PACKAGE"}`
+ *  （檔案被截斷、或有人手打了一個殼）展開之後 projects 是 emptyState() 的
+ *   空陣列，下面「是不是陣列」的完整性檢查照樣通過，接著 save() 就把
+ *   使用者全部的計畫寫成空的，畫面只說「備份已載入：0 個計畫」。
+ *   上面那兩條擋的是**沒有** kind 的檔案，擋不到這一種。
+ *
+ * 專案包則是另一個洞：編號是主鍵，空編號會建出一個篩不出任何資料的計畫。
+ */
+const feedRestore = (json, filename) =>
+  page.evaluate(
+    async ([text, name]) => {
+      const file = new File([text], name, { type: "application/json" });
+      const input = document.getElementById("restoreFile");
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change"));
+      await new Promise((r) => setTimeout(r, 500));
+      return {
+        toast: document.getElementById("toast")?.textContent || "",
+        options: [...document.querySelectorAll("#projectSwitch option")].map((o) =>
+          (o.textContent || "").trim(),
+        ),
+      };
+    },
+    [json, filename],
+  );
+
+const projectsBefore = await page.evaluate(
+  () => document.querySelectorAll("#projectSwitch option").length,
+);
+for (const [label, json, filename] of [
+  [
+    "只有 kind 的全部計畫包空殼",
+    JSON.stringify({ kind: "TLM_PORTFOLIO_PACKAGE" }),
+    "空殼全部計畫包.json",
+  ],
+  [
+    "計畫陣列是空的全部計畫包",
+    JSON.stringify({ kind: "TLM_PORTFOLIO_PACKAGE", projects: [], details: [] }),
+    "無計畫.json",
+  ],
+  [
+    "編號是空字串的專案包",
+    JSON.stringify({ kind: "TLM_PROJECT_PACKAGE", project: { code: "", name: "沒有編號" } }),
+    "空編號專案包.json",
+  ],
+  [
+    "編號含「|」的專案包（會連別的計畫設定一起刪掉）",
+    JSON.stringify({ kind: "TLM_PROJECT_PACKAGE", project: { code: "A|B", name: "壞編號" } }),
+    "壞編號專案包.json",
+  ],
+]) {
+  const guard = await feedRestore(json, filename);
+  ok(
+    `⚠️ ${label} 會被擋下，原有計畫不變`,
+    guard.toast.includes("不是有效的備份檔") &&
+      guard.options.length === projectsBefore,
+    `${guard.toast}｜計畫數 ${guard.options.length}（原本 ${projectsBefore}）`,
+  );
+}
+
+/*
+ * ⚠️ 反面檢查：少了這一條，「全部擋掉」也會全綠——而那會讓使用者連
+ *   真正的備份都還原不了，比原本的漏洞更糟。
+ */
+const goodRestore = await feedRestore(
+  JSON.stringify({
+    kind: "TLM_PORTFOLIO_PACKAGE",
+    projects: [{ code: "E2E-RESTORE", name: "還原測試計畫" }],
+    details: [],
+  }),
+  "正常全部計畫包.json",
+);
+ok(
+  "⚠️ 正常的全部計畫包仍然還原得進來（不是把備份功能整個擋死）",
+  goodRestore.toast.includes("備份已載入") &&
+    goodRestore.options.some((x) => x.includes("E2E-RESTORE")),
+  `${goodRestore.toast}｜${goodRestore.options.join("、")}`,
+);
+
 ok("全程無 JS 錯誤", errors.length === 0, errors.slice(0, 3).join(" | "));
 await browser.close();
 server.close();

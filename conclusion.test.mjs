@@ -172,9 +172,59 @@ test("服務水準等級統計會列出各級筆數與百分比", () => {
     row({ los: "?" }),
   ];
   const text = buildSpeedConclusion(rows, cond({ metrics: ["losCount"] }), META);
-  assert.match(text, /A 級 1 筆（25\.0%）/);
-  assert.match(text, /C 級 2 筆（50\.0%）/);
-  assert.match(text, /無法判定 1 筆/);
+  /*
+   * ⚠️ 稽核表 L：分母是**可判定筆數**（3），不是全部筆數（4）。
+   *   舊版是 25.0%／50.0%（分母 4），與同一份草稿下方「三段分法」的分母不一致。
+   */
+  assert.match(text, /A 級 1 筆（33\.3%）/);
+  assert.match(text, /C 級 2 筆（66\.7%）/);
+  assert.match(text, /無法判定 1 筆（不計入分母）/);
+  assert.match(text, /共 4 筆（可判定 3 筆/);
+  /* 而且要把口徑寫出來——只改數字不改字的話，前後兩版長得一模一樣。 */
+  assert.match(text, /佔比的分母是可判定筆數/);
+});
+
+test("⚠️ 稽核表 L：等級統計與三段分法在同一份草稿裡用同一個分母", () => {
+  /*
+   * 這一條是這次補的重點，不可以只驗上面那條的字面值。
+   *
+   * 兩段並排印在同一份草稿裡：上面是「A 級 n 筆（x%）」，
+   * 下面是「順暢／尚可／壅塞 n 筆（x%）」。分母不同的話，
+   * **兩組百分比各自加起來會是不同的總和**，而讀的人看不出為什麼。
+   *
+   * 所以這裡不比字串，直接把兩段的百分比各自加起來——
+   * 都必須是 100%（容許浮點與四捨五入的 0.2 個百分點）。
+   * 資料刻意放一筆讀不到等級的（"?"），否則兩種分母剛好相同，整條恆真。
+   */
+  const rows = [
+    row({ los: "A" }),
+    row({ los: "C" }),
+    row({ los: "C" }),
+    row({ los: "?" }),
+  ];
+  const text = buildSpeedConclusion(
+    rows,
+    cond({ metrics: ["losCount", "bandShare"] }),
+    /* 三段分法要有分界才寫得出來；沒有的話這一條會恆真（下面有前置擋住）。 */
+    { ...META, bandsOf: () => ({ smoothEnd: "B", congestedStart: "E" }) },
+  );
+  const sumOf = (line) =>
+    [...line.matchAll(/（(\d+(?:\.\d+)?)%）/g)].reduce(
+      (total, hit) => total + Number(hit[1]),
+      0,
+    );
+  const losLine = text.split("\n").find((l) => /級 \d+ 筆（/.test(l));
+  const bandLine = text.split("\n").find((l) => /順暢 \d+ 筆（/.test(l));
+  assert.ok(losLine, "找不到等級統計那一行（找不到的話這條恆真）");
+  assert.ok(bandLine, "找不到三段分法那一行（找不到的話這條恆真）");
+  assert.ok(
+    Math.abs(sumOf(losLine) - 100) <= 0.2,
+    `等級統計的百分比加起來是 ${sumOf(losLine)}%，不是 100%：${losLine}`,
+  );
+  assert.ok(
+    Math.abs(sumOf(bandLine) - 100) <= 0.2,
+    `三段分法的百分比加起來是 ${sumOf(bandLine)}%，不是 100%：${bandLine}`,
+  );
 });
 
 test("服務水準不會被平均", () => {
@@ -187,13 +237,35 @@ test("服務水準不會被平均", () => {
   assert.doesNotMatch(text, /平均服務水準/);
 });
 
-test("最快最慢會寫明各路段長度與速限不同", () => {
+test("最快最慢會寫明各路段長度與速限不同，而且**不取平均**、逐筆列出", () => {
   const rows = [row({ road: "中山路", travel: 20 }), row({ road: "中正路", travel: 50 })];
   const text = buildSpeedConclusion(rows, cond({ metrics: ["extremes"] }), META);
   assert.match(text, /最快為 .*中正路.* 50\.0 km\/h/);
   assert.match(text, /最慢為 .*中山路.* 20\.0 km\/h/);
-  assert.match(text, /2 筆平均 35\.0 km\/h/);
   assert.match(text, /各路段長度與速限不同/);
+  /*
+   * ⚠️ 2026-09-16 起**不可以**再出現「N 筆平均」（使用者裁示：
+   *   「每一行展示一筆季別+日別的結果……而不是要你平均起來」）。
+   *   原本的括號裡自己就寫著「各路段長度與速限不同」——既然如此
+   *   就更不該把它們平均起來。這一條是反面守門。
+   */
+  assert.doesNotMatch(text, /筆平均/);
+  assert.match(text, /不取平均/);
+  /* 而且要逐筆列出（一行一筆：季別 × 路段 × 日別 × 尖峰 × 方向）。 */
+  assert.match(text, /・.*中正路.*：50\.0 km\/h/);
+  assert.match(text, /・.*中山路.*：20\.0 km\/h/);
+});
+
+test("筆數太多時不逐筆列，但也**不可以**改回給平均", () => {
+  const rows = Array.from({ length: 15 }, (_, index) =>
+    row({ road: `示範路${index}`, travel: 20 + index }),
+  );
+  const text = buildSpeedConclusion(rows, cond({ metrics: ["extremes"] }), META);
+  assert.match(text, /共 15 筆，逐筆列出過長/);
+  assert.doesNotMatch(text, /筆平均/);
+  /* 最快最慢仍然要寫得出來——那是比大小，不是把數字混在一起。 */
+  assert.match(text, /最快為 .*示範路14/);
+  assert.match(text, /最慢為 .*示範路0（/);
 });
 
 test("方向文字只有勾了才會出現", () => {
