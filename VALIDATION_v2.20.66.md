@@ -1,6 +1,21 @@
-# 交通服務水準 v2.20.65 驗證報告
+# 交通服務水準 v2.20.66 驗證報告
 
 ## GPT 獨立風險導向複查（2026-09-19）
+
+- 正式基準：`BaoToast/Travel-speed` `main`，複查前 HEAD／`origin/main`／GitHub 遠端 `main` 均為 `8420e1d7c2d481a98cfdf50f1b87d71e927a4782`，工作樹乾淨。
+- Claude 第二次複查指出：三句 `applied: true` 的說明仍帶 `data-inapplicable`，造成「文字說已套用、機器屬性說不適用」的語意矛盾。GPT 檢查 `inapplicableHtml()` 與全部三個 applied call site，確認屬實。
+- 風險分級：**低風險／共用說明 helper 與對應 E2E 守門**。本次不改 parser、資料、公式、篩選結果、畫面文字或匯出；但 helper 為共用程式，仍抽查全部呼叫位置並執行完整 Node／Playwright 回歸。
+- 修正：`options.applied` 為真時只輸出 `data-note-kind="applied"`，不再輸出 `data-inapplicable`；一般不適用說明維持原行為。
+- 新增永久守門：三種已套用說明都必須由 E2E 實際觸發，且 applied／inapplicable 屬性互斥。修正前守門以退出碼 1 精確列出三句矛盾說明；修正後聚焦 E2E 全綠。
+- 反證：在獨立暫存副本故意移除三個 `applied` 標記後，`e2e-filter-coverage.mjs` 以退出碼 1 失敗；季度、路段、日別三種條件均抓到「各路段 LOS 圖（losChartSection）」「各路段歷季旅行速率（speedTrendSection）」寫不適用卻實際變動，證明反向守門沒有被架空。
+- 依工程交接規則，只要 GPT 有額外程式修正就推進版號，因此由 Claude 原包 v2.20.65 升為正式 v2.20.66。
+- Node／契約／回歸：共 230 項，**228 passed、0 failed、2 skipped**；兩項需要正式 Repository 未提供的真實平／假日配對檔與同檔雙日期情境。Claude 在自己的環境宣稱 253／253 全過，但本輪無法取得其真實檔案，故不把該數字列為 GPT 已獨立證實。
+- Playwright E2E：先產生 6 份匿名 fixtures，56 支依序執行，**56／56 通過**；沒有並行。
+- `check-version.mjs`、`glyph-guard.mjs` 全綠；本專案沒有 TypeScript、lint 或 production build script，不能把不適用項目記為通過。
+- 手冊：v2.20.66 PDF 共 25 頁，已逐頁渲染並檢視；版號、日期、頁尾正常，未見裁切、重疊、缺字或異常空白頁。
+- 本次沒有改 Excel 匯出程式或 UI 版面；v2.20.65 已完成真實 Excel 開啟與 1536×864／1366×768 逐頁驗證，本輪完整 E2E 另含多寬度版面與 OOXML 檢查，未重複人工 Office 驗證。
+
+## 前一版 v2.20.65 的 GPT 獨立風險導向複查（2026-09-19）
 
 - 正式基準：`BaoToast/Travel-speed` `main`，複查前 HEAD／`origin/main`／GitHub 遠端 `main` 均為 `58167e0fe63c1de9812660572eabd15b598750f4`，工作樹乾淨。
 - 候選來源：Claude 提供的 v2.20.65 完整專案、試用版、手冊、給 GPT 的說明與 SHA-256 清單；五項原始交付雜湊均核對相符。

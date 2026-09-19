@@ -1005,7 +1005,7 @@ document
   .querySelectorAll("[data-go]")
   .forEach((b) => (b.onclick = () => gotoView(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.65";
+document.querySelector(".brand small").textContent = "正式版 v2.20.66";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 /*
  * ⚠️ 這裡原本有一顆「列印／另存 PDF」，使用者 2026-09-16 指名移除：
@@ -1041,7 +1041,7 @@ manualLinks.innerHTML =
    *   那種網址裡沒有檔名，使用者拿到的檔案就叫「下載」。
    *   （使用者 2026-09-14 實際回報過，三支都中。）
    */
-  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.65.pdf" download="交通服務水準程式手冊_v2.20.65.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
+  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.66.pdf" download="交通服務水準程式手冊_v2.20.66.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -2072,12 +2072,13 @@ function detachTableForOutOfScope(chartId) {
  *   路段」「只選了平日所以另一根柱子不出現」），不是「不適用」。
  *   2026-09-18 大檢查：e2e-filter-coverage 加了反向那一半（寫不適用卻變＝說謊），
  *   這幾句描述的正是條件生效後的結果，數字本來就會跟著變，
- *   所以要標成 data-note-kind="applied" 讓反向檢查跳過；正向檢查（有沒有交代）
- *   仍然算它有交代。
+ *   所以只標成 data-note-kind="applied"，不可以同時宣告 data-inapplicable；
+ *   正向檢查仍會從實際數值／圖形變化確認條件真的生效。
  */
 function inapplicableHtml(show, text, fields, options) {
   if (!show) return "";
-  const kind = options && options.applied ? ' data-note-kind="applied"' : "";
+  const applied = Boolean(options && options.applied);
+  const kind = applied ? ' data-note-kind="applied"' : "";
   /*
    * ⚠️ fields 要寫出這一句**交代了哪幾個條件**（使用者看不到，給守門用）。
    *
@@ -2085,7 +2086,7 @@ function inapplicableHtml(show, text, fields, options) {
    *   條件卻沒出現不受影響的提醒文字」——只驗「這一塊有沒有說明」會假綠：
    *   對季度講了一句、對顯示數值一個字都沒有，照樣算「有說明」。
    */
-  const mark = fields && fields.length
+  const mark = !applied && fields && fields.length
     ? ` data-inapplicable="${esc(fields.join(" "))}"`
     : "";
   return `<p class="chart-inapplicable" data-testid="chart-inapplicable"${mark}${kind}>${esc(text)}</p>`;

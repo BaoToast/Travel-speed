@@ -324,6 +324,8 @@ const views = await page.evaluate(() =>
   [...document.querySelectorAll("aside nav button")].map((b) => b.dataset.view),
 );
 const targets = DATA_VIEWS.filter(([id]) => views.includes(id));
+const seenAppliedNotes = new Set();
+const appliedAttributeConflicts = new Set();
 ok(
   "前置：名單上的分頁都找得到",
   targets.length === DATA_VIEWS.length,
@@ -393,6 +395,20 @@ for (const [label, testid, value, backTo, field] of CASES) {
   const lyingBlocks = [];
   for (const [view, name] of targets) {
     await goView(view);
+    const appliedNotes = await page.evaluate(() =>
+      [...document.querySelectorAll('.view.active [data-note-kind="applied"]')]
+        .filter((node) => node.offsetParent !== null || node.getClientRects().length > 0)
+        .map((node) => ({
+          text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+          hasInapplicable: node.hasAttribute("data-inapplicable"),
+        })),
+    );
+    for (const note of appliedNotes) {
+      if (/篩掉了/.test(note.text)) seenAppliedNotes.add("roads");
+      if (/另一根柱子不會出現/.test(note.text)) seenAppliedNotes.add("day");
+      if (/季度區間已縮小/.test(note.text)) seenAppliedNotes.add("periodFrom");
+      if (note.hasInapplicable) appliedAttributeConflicts.add(note.text);
+    }
     const after = await snapshot();
     const afterBlocks = await blockSnapshot();
     /*
@@ -476,6 +492,21 @@ for (const [label, testid, value, backTo, field] of CASES) {
   else await page.selectOption(`[data-testid="${testid}"]`, restore);
   await page.waitForTimeout(1100);
 }
+
+ok(
+  "三種『已套用』說明都有被實際觸發",
+  ["roads", "day", "periodFrom"].every((field) => seenAppliedNotes.has(field)),
+  `未觸發：${["roads", "day", "periodFrom"]
+    .filter((field) => !seenAppliedNotes.has(field))
+    .join("、") || "無"}`,
+);
+ok(
+  "『已套用』與『不適用』屬性互斥",
+  appliedAttributeConflicts.size === 0,
+  appliedAttributeConflicts.size
+    ? `同時帶 data-inapplicable：${[...appliedAttributeConflicts].join("、")}`
+    : "沒有矛盾屬性",
+);
 
 /*
  * ⚠️ 反面守門：全部回到預設之後，**不可以**還留著任何一句「不適用」。
