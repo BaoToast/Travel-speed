@@ -334,7 +334,8 @@ node check-version.mjs
 - Excel：由程式匯出後以本機 Microsoft Excel 唯讀開啟；3 工作表、2 個原生圖表均正常，沒有損毀／修復錯誤。
 - 手冊：PDF 25 頁逐頁渲染並人工檢視，未見裁切、重疊、缺字或異常空白頁。
 - production build／TypeScript／lint：不適用，因專案是純靜態且沒有這些腳本；單檔試用版由 `build-tryout.mjs` 產生。
-- 發布證據：GitHub Actions、Pages 與線上雜湊需在 push 完成後補記；不得在完成前宣稱成功。
+- 第一階段發布證據：建置與測試 run `35410073884` 成功；Pages run `35410073205` 成功，均對應交接 HEAD `18d2e3558e75a48fac01cd13848f12a584b8a6fb`。
+- 線上 `https://baotoast.github.io/Travel-speed/` 已顯示 v2.20.65；`index.html`、`app.js`、`main-filters.js`、`main-toolbar.js`、`los-rule-scope.js` 與 v2.20.65 手冊 SHA-256 均逐檔等於 Repository；新手冊 HTTP 200，舊 v2.20.54 手冊 URL 為 404。
 
 ## 13. 固定 Claude ↔ GPT 開發流程
 

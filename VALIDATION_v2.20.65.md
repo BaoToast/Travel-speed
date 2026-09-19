@@ -18,7 +18,9 @@
 - Microsoft Excel：由正式 UI E2E 產生 `e2e-trend-excel.xlsx`，再以本機 Microsoft Excel 唯讀開啟；無損毀／修復錯誤，3 個工作表完整，圖表頁 2 個原生圖表均可由 Excel 匯出且人工檢視正常。
 - 手冊：重建為 25 頁 PDF，已逐頁渲染與人工檢視；沒有空白頁、重疊或截斷。
 - 真實業務檔：本輪沒有取得新的使用者真實報告檔，因此未重跑 `verify-against-summary.mjs <檔案>`；不得把匿名 fixtures 說成真實業務檔驗證。
-- 發布與線上證據：本機發布門檻已完成；正式 commit、GitHub Actions、Pages 與線上雜湊在 push 後補記於本報告及 `PROJECT_HANDOFF.md`。
+- 正式功能 commit：`2888a319032ec7d7bcba59e794ef499157e1bc67`；第一階段交接 HEAD：`18d2e3558e75a48fac01cd13848f12a584b8a6fb`。
+- GitHub Actions：建置與測試 run `35410073884` 成功；Pages run `35410073205` 成功，兩者皆對應 `18d2e355...`。
+- GitHub Pages：`https://baotoast.github.io/Travel-speed/` 已顯示 v2.20.65。線上 `index.html`、`app.js`、`main-filters.js`、`main-toolbar.js`、`los-rule-scope.js` 與 v2.20.65 手冊 SHA-256 均逐檔等於 Repository；新手冊 HTTP 200，舊 v2.20.54 手冊 URL 為 404。
 
 ---
 
