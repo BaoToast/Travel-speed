@@ -4,10 +4,9 @@
 
 ## 0. 文件狀態與事實來源
 
-- 本文件建立日期：2026-09-13（Asia/Taipei）。
-- 本次只建立工程交接文件，沒有修改正式程式功能、交通工程計算或部署設定。
-- 功能正式版基準 commit（建立本文件前的 HEAD）：`54a4624ae08c570007cf0f888dd7435e6ffc22c1`，訊息為 `Release Travel-speed v2.20.54`。
-- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `54a4624...` 作為程式功能基準。
+- 本文件建立日期：2026-09-13；最近更新：2026-09-19（Asia/Taipei）。
+- 最新功能正式版基準 commit：`2888a319032ec7d7bcba59e794ef499157e1bc67`，訊息為 `Release Travel-speed v2.20.65`。
+- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `2888a319...` 作為程式功能基準。
 - 事實優先順序：目前可重現的 Repository／程式碼／Git／測試結果，高於舊聊天、舊交接文字、README 或其他說明。若彼此衝突，必須指出差異；無法驗證者標示「待確認」，不得猜測。
 
 ## 1. 正確程式與 Repository 身分
@@ -18,7 +17,7 @@
 |---|---|
 | 程式正式名稱 | 交通服務水準分析系統 |
 | 英文／識別名稱 | Travel-speed；Traffic LOS Manager |
-| 用途 | 匯入路段平均旅行速率調查 Excel，保存尖峰四筆方向資料，計算服務水準，提供單一計畫分析與 Manager 跨計畫比較 |
+| 用途 | 匯入路段平均旅行速率調查 Excel，保存尖峰四筆方向資料，計算服務水準，提供單一計畫的圖表、文字草稿與成果交付 |
 | 本機資料夾名稱 | `repo` |
 | 本機完整路徑 | `D:\Users\95108\Documents\Codex\2026-08-27\1\review_v253_0909\repo` |
 | GitHub Repository | `BaoToast/Travel-speed` |
@@ -26,8 +25,8 @@
 | Git origin（fetch／push） | `https://github.com/BaoToast/Travel-speed.git` |
 | 正式 GitHub Pages | `https://baotoast.github.io/Travel-speed/` |
 | branch | `main` |
-| 功能正式版基準 commit | `54a4624ae08c570007cf0f888dd7435e6ffc22c1` |
-| 目前程式／正式發布版本 | `v2.20.54` |
+| 功能正式版基準 commit | `2888a319032ec7d7bcba59e794ef499157e1bc67` |
+| 目前程式／正式發布版本 | `v2.20.65` |
 | 版本唯一來源 | `app.js` 內的 `APP_VERSION`；`check-version.mjs` 會檢查 HTML、手冊、驗證檔及資產 query string 一致性 |
 
 本機資料夾名 `repo` 很通用，不能只靠名稱判斷；每次接手都必須同時核對完整路徑、`.git`、origin、branch、`app.js` 版本與 GitHub Repository。三個交通系統不得混用資料夾或規則。
@@ -42,9 +41,9 @@
 
 ## 2. 系統用途、使用情境與完成程度
 
-本系統是純前端、可離線運作的單頁網站。每位同事可在自己的瀏覽器建立多個 Project，匯入各季度路段平均旅行速率調查檔、確認速限、檢查品質、製作圖表與成果包；管理者則將各 Project 匯出的 JSON 專案包匯入 Manager 做跨計畫比較。
+本系統是純前端、可離線運作的單頁網站。每位同事可在自己的瀏覽器建立多個 Project，匯入各季度路段平均旅行速率調查檔、確認速限、檢查品質、製作圖表、文字草稿與成果包。Manager 跨計畫比較已於 2026-09-13 依使用者決定整組移除，不得自行加回。
 
-目前主體、路段管理、速限版本、LOS、健康檢查、趨勢、結論草稿、成果匯出、Manager、備份／還原與新手手冊均已完成。v2.20.54 已完成一次高風險全面複查並正式發布。現階段工作原則是：修正錯誤、補缺漏功能、驗證結果；不要為未來平台整併而重構，也不要改變已確認計算規則。
+目前主體、路段管理、速限與 LOS／三段規則作用域、主工具列、資料異常檢查、趨勢、結論草稿、成果匯出、備份／還原與新手手冊均已完成。v2.20.65 已完成高風險全專案複查；本文件後段保存實際測試證據。現階段工作原則是：修正錯誤、補缺漏功能、驗證結果；不要為未來平台整併而重構，也不要改變已確認計算規則。
 
 資料不會上傳伺服器，存於目前網域、目前瀏覽器的 IndexedDB。同一網址在另一台電腦、另一個瀏覽器或另一個網域不會自動看到原資料；清除網站資料也會移除資料。換電腦或清除前必須下載 Project／全部計畫備份。
 
@@ -64,9 +63,11 @@
 |---|---|
 | `index.html` | 頁面骨架、主要功能區、腳本載入順序、靜態版本 query string |
 | `styles.css` | 全站版面、響應式、表格、圖表及錯誤／安全提示樣式 |
-| `app.js` | state、IndexedDB、Project、Excel parser、LOS、代表紀錄、匯入預覽／寫入、路段／方向、速限、圖表、Manager、備份還原、健康檢查的主協調器 |
+| `app.js` | state、IndexedDB、Project、Excel parser、LOS、代表紀錄、匯入預覽／寫入、路段／方向、速限、圖表、備份還原、資料異常檢查的主協調器 |
 | `period-date.js` | 民國／西元季度正規化、調查日期解析、季度相符檢查、顯示格式；此模組與另外兩套交通系統有共用契約，修改時需評估三套一致性 |
 | `column-filter.js` | 表頭漏斗、多選條件、篩選狀態與清除行為 |
+| `main-filters.js`／`main-toolbar.js` | 全站主工具列資料篩選、先篩再挑代表紀錄、區塊脫離／回歸；預設條件不得改變既有結果 |
+| `los-rule-scope.js` | LOS 規則依季別區間、路段與方向的覆寫順位、重疊偵測與舊資料相容 |
 | `trend.js` | 趨勢唯一計算來源；圖、說明與 Excel 必須共用 `buildTrendSeries()`／`buildBandSeries()` 的結果 |
 | `trend-excel.js` | 可編輯趨勢 Excel 組裝；依季度聯集對位，缺季保留空白 |
 | `excel-export.js` | OOXML 工作簿／圖表匯出共用工具；需維持舊版 Excel 可開啟的元素順序 |
@@ -74,14 +75,14 @@
 | `quality-extension.js` | 來源追溯、匯入品質、速限版本、異常規則、成果交付、操作復原等擴充；其二次 Excel 解析必須使用與主 parser 相同的安全選項 |
 | `vendor/xlsx.full.min.js` | SheetJS 0.20.3 瀏覽器版，Excel 讀取 |
 | `vendor/jszip.min.js` | 成果 ZIP 匯出 |
-| `manual-src/*` | 手冊單一來源與 PDF／DOCX 產生器 |
-| `manuals/*v2.20.54*` | 當版可下載新手手冊；正式包只能保留當版一組 |
+| `manual-src/*` | 手冊單一來源與 PDF 產生器；本版不再交付 DOCX |
+| `manuals/*v2.20.65*` | 當版可下載新手手冊；正式包只能保留當版一組 |
 | `*.test.mjs` | Node 單元、契約、回歸與安全測試 |
 | `e2e-*.mjs` | Playwright 瀏覽器端流程測試 |
 | `generate-test-fixtures.mjs` | 產生 6 份匿名 Excel 測資供 E2E 使用；不等同實際業務檔案驗證 |
 | `check-version.mjs` | 版本、資產引用、手冊及交付文件一致性檢查 |
 | `ooxml-check.mjs` | 檢查匯出 Excel 的 OOXML 結構與元素順序 |
-| `VALIDATION_v2.20.54.md` | v2.20.54 的實際複查與測試證據摘要 |
+| `VALIDATION_v2.20.65.md` | v2.20.65 的 Claude 修改摘要、GPT 獨立複查、修正與測試證據 |
 | `.github/workflows/ci.yml` | GitHub Actions 測試門；不部署 |
 
 ### 3.3 state 主要資料結構
@@ -95,11 +96,9 @@
 - `aliases`、`roadMeta`：檔名別名、正式路段資訊、方向顯示名、有效期間。
 - `losRules`：各 Project 的 A～E 最低速限比門檻。
 - `bandRules`：各 Project 的順暢／尚可／壅塞三段分界。
-- `managerBandRule`：Manager 自己的三段分界，與各 Project 完全隔離。
 - `anomalyRules`、`reportDrafts`、`conclusionTemplates`：品質門檻、報告／結論設定。
 - `imports`、`operations`：匯入批次與可復原操作。
 - `periodDisplay`、`yearStyle`：只影響顯示／匯出文字，不改內部鍵值或計算。
-- `manager`：匯入 Manager 的 Project 專案包快照。
 
 ## 4. 完整資料流程
 
@@ -114,8 +113,8 @@
 9. **預覽而不寫入**：新路段／既有路段／別名／疑似相符狀態、來源、錯誤、速限及預估 LOS 先顯示；寫入按鈕必須由有效 pending context 控制。
 10. **確認寫入**：同一資料鍵採 upsert；保存匯入批次、來源檔、工作表／儲存格追溯及雜湊。重新匯入既有季度依使用者選擇更新，不能無聲累加。
 11. **重建彙總**：先按當期有效速限及該 Project LOS 門檻重算明細，再從四筆中選一筆代表紀錄。
-12. **呈現／分析**：明細、彙總、路段速限、LOS 圖表、趨勢、三段組成、品質檢查、結論草稿及 Manager 均從 state 的同一批資料衍生。
-13. **匯出**：CSV、Project JSON、全部計畫 JSON、Manager 篩選結果、成果 ZIP、可編輯 Excel 圖表與手冊。
+12. **呈現／分析**：明細、彙總、路段速限、LOS 圖表、趨勢、三段組成、品質檢查與結論草稿均從 state 的同一批資料衍生。
+13. **匯出**：CSV、Project JSON、全部計畫 JSON、成果 ZIP、可編輯 Excel 圖表與手冊。
 
 ## 5. 不可任意改變的交通工程規則
 
@@ -150,9 +149,8 @@
 - 平均旅行速率、行駛速率、總延滯、速限比，對該期有有效數值的代表紀錄作算術平均。
 - 最差 LOS 是該期所有有效代表紀錄最差等級。
 - 壅塞佔比分母只含可判定 A～F 的紀錄；未知 `?` 另列，不能當作不壅塞稀釋分母。
-- 預設三段為順暢 A–B、尚可 C–D、壅塞 E–F；單一 Project 與 Manager 有各自獨立分界。
+- 預設三段為順暢 A–B、尚可 C–D、壅塞 E–F；各 Project 的分界彼此隔離。
 - 圖、圖旁說明與 Excel 必須使用 `trend.js` 同一次計算結果，禁止各自重算。
-- Manager 跨計畫比較以比例／平均等可比指標呈現，不把不同計畫路段總量直接相加當成同一母體。
 
 ### 5.4 精度與顯示
 
@@ -191,11 +189,10 @@
 
 ### 6.3 輸出
 
-- 尖峰明細、尖峰彙總及 Manager 篩選結果可匯出 UTF-8 BOM CSV。
+- 尖峰明細、尖峰彙總可匯出 UTF-8 BOM CSV。
 - CSV 欄位需使用聯集，不能以第一列欄位截掉後續 provenance 欄位；方向輸出需使用正式顯示名並保留可追溯資訊。
 - Project JSON：`kind: TLM_PROJECT_PACKAGE`，只含目前 Project；同代碼還原只覆蓋該計畫，其餘保留。
 - 全部計畫 JSON：`kind: TLM_PORTFOLIO_PACKAGE`。
-- Manager 接收 Project JSON 快照；同計畫代碼重新匯入為更新，不重複累加。
 - 成果 ZIP 可含明細、彙總、圖表、說明與可編輯 Excel。ZIP 只留當次生成資產。
 - Excel 圖表採 OOXML；元素順序不符時舊版 Excel 會提示修復甚至刪除圖表。`ooxml-check.mjs` 與實際 Microsoft Excel 開啟檢查都很重要，LibreOffice 能開不能取代 Excel 相容性證據。
 - 可編輯趨勢 Excel 要取所有數列季度聯集並逐季精確對位，缺值留空；不能把不同數列的第 N 點硬貼到同一季度。
@@ -209,9 +206,7 @@
 - Parse 失敗後清除 pending 並停用確認／取消，不能留下舊成功批次可誤按。
 - 新路段、疑似名稱、別名相符、既有路段的辨識信心要可見；沒有新路段時不要顯示冗長既有路段警告。
 - 路段管理可改正式名、方向 A/B 顯示名、別名、有效期間及合併重複路段；合併／改名先顯示影響季度、筆數與碰撞，再下載備份並確認。
-- 方向 `方向1／方向2` 是永久鍵值；自訂方向只改顯示。全站表格、CSV、結論、健康檢查與 Manager 必須走同一個方向名稱解析入口。
-- Manager 不會自動同步目前 Project；必須重新匯出 Project 專案包再匯入。若本機同代碼 Project 已變更，Manager 應顯示過期提醒，但不能自動覆蓋交付快照。
-- Project 與 Manager 的三段分級設定隔離；不得互相套用。
+- 方向 `方向1／方向2` 是永久鍵值；自訂方向只改顯示。全站表格、CSV、結論與資料異常檢查必須走同一個方向名稱解析入口。
 - 自動結論／報告只是草稿，正式交付前必須人工核對。
 - 危險操作（合併、刪季、刪計畫、淨空、復原）需清楚說明範圍；適用時先自動下載備份。復原不得覆蓋後來重新匯入的資料。
 - IndexedDB 載入失敗時鎖住 save 並顯示搶救流程，絕不能換成空白 state 後讓使用者儲存；儲存空間被封鎖與資料結構損壞需顯示不同指引。
@@ -221,7 +216,7 @@
 ## 8. 重要技術決策與原因
 
 1. **純靜態、資料留在瀏覽器**：不需後端與帳號即可部署，符合個人分散管理；代價是不同裝置不自動同步，容量受瀏覽器／裝置限制，必須備份。
-2. **Project／Manager 分離**：Project 是持續編修的工作資料，Manager 是有時間點與交付者的快照；自動同步會破壞資料來源責任。
+2. **Manager 已移除**：跨計畫比較與單一 Project 已有圖表重複、沒有足夠實質價值，2026-09-13 依使用者決定整組移除；回歸測試會阻止它無意間長回來。
 3. **同一代表紀錄整筆帶入**：避免旅行速率、行駛速率與延滯分別取自不同尖峰／方向而形成不存在的組合。
 4. **明確失敗優於猜測**：parser 遇到標籤或方向歧義直接報錯；錯讀一個合理數字比顯示失敗更危險。
 5. **計算與顯示分離**：民國／西元、季／月份、方向名稱、格式化精度不改鍵值與原始計算。
@@ -234,13 +229,14 @@
 
 - **Web Worker 背景解析**：大量檔案若要真正加速，需把 SheetJS 與 parser 搬入 worker，影響匯入核心且風險高；目前只以進度、分段讓出主執行緒與背景分頁 timeout fallback 改善體感，未做 worker。
 - **三套交通系統整併／智慧分析平台**：使用者討論後決定目前維持旅行速率、全日交通量、路口轉向三套獨立系統。現階段不要為未來整併重構；只避免不必要硬編碼並維持可移植性。
-- **伺服器多人共用資料庫**：目前不做。Manager 以專案包交換資料。
+- **伺服器多人共用資料庫**：目前不做；Project 以專案包交換資料。
 - **GPT Site**：已刪除且不再維護，除非未來明確重建。
 - **第二條 GitHub Pages deploy workflow**：曾有競速風險，禁止重建。
 
 ## 10. 重要歷史 Bug 與 Regression 警戒
 
 以下是維護時最容易重犯的類型；詳細演進可查 Git history、README 與歷版驗證檔。
+表內 Manager 項目只保留歷史原因；Manager 已移除，現行要求是不得重新加入。
 
 | 問題現象／Root cause | 修正與不可回退事項 |
 |---|---|
@@ -269,6 +265,12 @@
 | 多張三段圖 ZIP 下載被後段舊 handler 覆蓋、互動重複綁定 | v2.20.54 移除覆蓋／重綁；下載與點擊下鑽需回歸 |
 | 趨勢點下鑽只有模糊文字篩選，混入其他季度／日別／計畫 | v2.20.54 改成精確欄位條件；單一計畫及 Manager 都要測 |
 | Manager 重匯後保留已不存在的日別篩選 | 自動回到平日＋假日 |
+| v2.20.65 `package.json` 已升版但 lock 根版號仍停在 v2.20.61 | lock 名稱、根版號與 packages 根版號必須由 `dependency-manifest.test.mjs` 對照 package；發布前不可只看依賴清單 |
+| 測試用 `new URL(...).pathname` 在 Windows 組出 `D:\\D:\\...` | 檔案 URL 一律用 `fileURLToPath()` 轉換，不能直接把 pathname 當 Windows 路徑 |
+| E2E 指令內硬呼叫另一個 package manager，特定環境無法啟動 | `e2e` 直接先執行 `generate-test-fixtures.mjs`；守門驗證行為，不綁死工具名稱 |
+| 手冊兩列表格被分頁拆成單獨近空白頁 | 需對不可拆表格套 `page-break-inside: avoid`，長說明盒允許跨頁；每次都要重建並逐頁檢視 |
+| 主工具列若從既有 summaries 再篩，會遺失代表紀錄不符合條件的整組資料 | 必須先篩 details 候選，再依既有最差 LOS／最低 ratio／最低旅行速率挑代表；預設條件結果須逐筆等同既有資料流 |
+| LOS／速限／三段規則作用域交疊或改名後成為孤兒 | 維持季別×路段優先、季別優先於路段、同層最窄區間等規則；重疊要明示，路段改名要搬移覆寫，刪除要清理 |
 
 ## 11. 已知限制、未解事項與待確認
 
@@ -283,13 +285,13 @@
 
 ### 目前未發現的項目
 
-- v2.20.54 驗證報告沒有列出尚未修復的正式功能 Bug。
-- 本次交接未發現新的程式缺陷，且依任務限制沒有修改程式。
+- v2.20.65 完成 GPT 高風險全專案複查與修正後，沒有尚未修復的已知正式功能 Bug。
 
 ### 待確認／尚未在本次重新驗證
 
-- 本次交接沒有重新拿公司真實 Excel 樣本跑一遍輸入→解析→計算→顯示→匯出；v2.20.54 的乾淨驗證使用匿名 fixtures。歷史版本曾做真實樣本檢核，但不能宣稱等同 v2.20.54 本次實測。
-- 本次沒有人工用使用者公司的舊版 Microsoft Excel 開啟新生成的輸出檔；v2.20.54 交付前的手冊有用 Word 轉 PDF 視覺檢查，Excel 相容主要由 OOXML／E2E 回歸覆蓋。
+- 本輪沒有取得新的使用者真實公司報告檔，因此未重跑 `verify-against-summary.mjs <檔案>`；匿名 fixtures 不能冒充真實業務檔驗證。
+- 單元測試有 2 項依設計略過，分別需要真實平／假日配對檔與同一檔雙日期情境；不得記成通過。
+- 本輪已用實際 Microsoft Excel 開啟程式匯出的活頁簿並檢查原生圖表，但未涵蓋每個歷史 Office 版本。
 - 未知未來瀏覽器 quota、GitHub Pages 政策或第三方套件安全狀態；每次發布前需重新驗證。
 
 ## 12. 技術環境、依賴、測試與發布
@@ -313,26 +315,26 @@ node check-version.mjs
 ```
 
 - `npm test`：所有根目錄 `*.test.mjs`，再跑 `check-version.mjs`。
-- `npm run e2e`：先產生 6 份匿名測資，再依序跑 19 支 Playwright E2E。
-- 解析／交通計算變更必須額外驗證：輸入 → Parser → 驗證 → details → summary → UI → CSV／Excel／Project package／Manager。
+- `npm run e2e`：直接先產生 6 份匿名測資，再依序跑 56 支 Playwright E2E；不可並行。
+- 解析／交通計算變更必須額外驗證：輸入 → Parser → 驗證 → details → summary → UI → CSV／Excel／Project package。
 - OOXML 變更需跑結構檢查，並盡可能用實際舊版 Excel 開啟。
-- 手冊變更需重建 PDF／DOCX、檢查副本一致、頁面渲染及版本；`manuals/` 只留當版一組。
+- 手冊變更需重建 PDF、檢查副本一致、頁面渲染及版本；`manuals/` 只留當版一份 PDF，不再交付 DOCX。
 - 版本更新需執行 `check-version.mjs`，確保 `app.js`、HTML、資產 query、README、手冊、驗證檔與歷史規則一致。
 - 正式發布前要在乾淨解壓／乾淨 clone 上安裝鎖定依賴並重跑必要測試，避免工作目錄殘留掩蓋問題。
 
 ### 12.3 最後一次已實際完成的正式驗證
 
-對應版本 `v2.20.54`、功能 commit `54a4624ae08c570007cf0f888dd7435e6ffc22c1`：
+對應版本 `v2.20.65`、功能 commit `2888a319032ec7d7bcba59e794ef499157e1bc67`：
 
-- 風險：趨勢、Manager、圖表互動與 Excel 匯出跨模組，採全面複查。
-- 候選版單元／回歸：161 項，159 通過、0 失敗、2 項依設計略過。
-- 候選版 E2E：19／19 通過。
-- 乾淨封包：68 個程式檔；依鎖定版本安裝後，單元／回歸同為 159 通過、0 失敗、2 略過，E2E 19／19。
-- 手冊：DOCX 經 Word 轉 PDF 檢視 19 頁；PDF 檢視 26 頁，未見裁切、重疊、缺字或版號錯誤。
-- production build／TypeScript／lint：不適用，因專案沒有這些腳本。
-- 正式發布時 GitHub Actions 測試及 Pages 均成功，線上核心資產 hash 與 Repository 相符，新手冊可下載、舊版手冊 URL 為 404。
-
-本次 2026-09-13 交接只再次執行 `node check-version.mjs`（通過）及 Git／路徑／remote／branch／版本核對；沒有把已完成的 v2.20.54 全套測試重跑冒充新結果。
+- 風險：Parser、主工具列、LOS／速限／三段規則作用域、圖表、匯出、導覽與共用資料流跨模組，採高風險全專案複查。
+- Node／契約／回歸：230 項，228 通過、0 失敗、2 項依設計略過。
+- Playwright E2E：56／56 依序通過；先產生 6 份匿名 fixtures，沒有並行。
+- 乾淨複製：由 `package-lock.json` 轉出暫時 pnpm lock，鎖定安裝 Playwright 1.62.1 後，單元／回歸仍為 228／0／2，fixtures 與單檔試用版可重建。
+- 指定版面：18 頁 × 1536×864 與 18 頁 × 1366×768，程式量測與人工檢視均無文字重疊、圖表超界、水平溢出或表格裁切。
+- Excel：由程式匯出後以本機 Microsoft Excel 唯讀開啟；3 工作表、2 個原生圖表均正常，沒有損毀／修復錯誤。
+- 手冊：PDF 25 頁逐頁渲染並人工檢視，未見裁切、重疊、缺字或異常空白頁。
+- production build／TypeScript／lint：不適用，因專案是純靜態且沒有這些腳本；單檔試用版由 `build-tryout.mjs` 產生。
+- 發布證據：GitHub Actions、Pages 與線上雜湊需在 push 完成後補記；不得在完成前宣稱成功。
 
 ## 13. 固定 Claude ↔ GPT 開發流程
 
@@ -387,7 +389,7 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 7. 線上核對 `index.html` 顯示版號、核心資產實際 hash、手冊 URL；預期被移除的舊手冊／舊雜湊資產應 404。
 8. 完整交付資料夾使用：`D:\Users\95108\Downloads\交通系統交付_YYYYMMDD\交通服務水準_<版本>\`。同日同版修正版加 `_第2次`，不覆蓋或自動刪除先前交付。
 9. 交付至少含最新完整程式 ZIP、Pages 包（若該版流程需要）、驗證報告、SHA-256 清單與給 Claude 的獨立交接說明。給 Claude 的說明不可混在正式程式包內，除非既有交付規格明確要求。
-10. 不得把原始交通調查 Excel、正式 Project 資料、Manager 私有備份、瀏覽器資料庫或任何敏感資料上傳公開 Repository。
+10. 不得把原始交通調查 Excel、正式 Project 資料、瀏覽器資料庫或任何敏感資料上傳公開 Repository。
 
 ### 15.1 正式工程資料與使用者交付檔案分流規則
 
@@ -409,7 +411,7 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 - 不把缺資料補 0、不猜方向／標籤、不把未知 LOS 判 F。
 - 不混合平日與假日；不把跨計畫路段總數直接相加成可比較總量。
 - 不讓顯示名稱變成資料鍵；`方向1／方向2` 永遠是 canonical key。
-- 不讓 Manager 自動同步 Project；更新靠重新匯出／匯入，並提供過期提示。
+- 不重新加入已依使用者決定移除的 Manager 跨計畫比較。
 - 不加入 `.openai/hosting.json`；不回報或發布已刪除的 GPT Site。
 - 不建立第二條 Pages deploy workflow。
 - 不只依 README、舊聊天、Claude 聲明或手動瀏覽就宣稱通過。
@@ -441,10 +443,10 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 
 - 可由完整路徑、origin 與 Repository 名稱避免選錯三套交通程式。
 - 已保存目前 LOS、代表紀錄、延滯、趨勢與日別規則，避免用過時公式。
-- 已保存 Parser、資料結構、Project／Manager、方向名稱、速限版本與匯出契約。
+- 已保存 Parser、資料結構、Project、方向名稱、速限版本、規則作用域與匯出契約。
 - 已列出高風險歷史 Bug、Root cause 類型與 regression 防線。
 - 已完整保存 Claude/GPT 分工與風險導向複查規則，而非只寫一句名稱。
-- 已區分 v2.20.54 實際通過證據、本次只跑的檢查、歷史證據與尚未驗證事項。
+- 已區分 v2.20.65 實際通過證據、歷史證據與尚未驗證事項。
 - 已保存 GitHub Pages 單一路徑、無 hosting.json、無 GPT Site、交付與備份規則。
 - 已保存 AI 換代驗收及「新 GPT 未獲確認不得動工」規則。
 
@@ -452,8 +454,8 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 
 1. 使用本文件第 1 節的完整路徑打開 Repository。
 2. 執行只讀核對：`git status`、`git remote -v`、`git branch --show-current`、`git log -1`、版本檢查。
-3. 完整讀取本文件與當版 `VALIDATION_v2.20.54.md`，抽查 `app.js` 核心規則和 `.github/workflows/ci.yml`。
-4. 查 GitHub Actions、Pages 與線上 `https://baotoast.github.io/Travel-speed/` 是否仍對應 v2.20.54。
+3. 完整讀取本文件與當版 `VALIDATION_v2.20.65.md`，抽查 `app.js` 核心規則和 `.github/workflows/ci.yml`。
+4. 查 GitHub Actions、Pages 與線上 `https://baotoast.github.io/Travel-speed/` 是否仍對應 v2.20.65。
 5. 向使用者回報交接驗收；等待使用者明確回覆「交接確認完成」。
 6. 確認後才處理下一份 Claude 候選包或新需求，依第 14 節決定風險並執行。
 
