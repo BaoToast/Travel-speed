@@ -13,7 +13,10 @@
 - `e2e-filter-coverage.mjs` 反證：在隔離副本故意移除 roads 的 `applied` 標記後，以退出碼 1 精確抓到「各路段 LOS 圖」「各路段歷季旅行速率」寫不適用卻變動；還原後聚焦測試全綠。
 - `check-version.mjs`、`glyph-guard.mjs` 全綠；本專案沒有 TypeScript、lint 或 production build script，均為不適用，未虛報通過。
 - 本輪沒有使用者真實報告檔，因此未執行 `verify-against-summary.mjs <檔案>`；匿名 fixtures 不冒充真實業務檔驗證。
-- 正式 commit、Actions、Pages 與線上雜湊待發布完成後補入本節。
+- 功能正式版基準 commit：`4700d23d50ed71774f5aff021234a2337481a1ce`（`Release v2.20.68 after risk-based review`）。
+- GitHub Actions：建置與測試 run [`35545434854`](https://github.com/BaoToast/Travel-speed/actions/runs/35545434854) 成功；Pages run [`35545434337`](https://github.com/BaoToast/Travel-speed/actions/runs/35545434337) 成功，兩者均對應 `4700d23...`。
+- GitHub Pages：`https://baotoast.github.io/Travel-speed/` 首頁顯示 v2.20.68；線上 `index.html`、`app.js`、`trend.js`、`period-date.js`、`direction-pair.js`、`chart-levels.js` 與 v2.20.68 PDF 手冊 SHA-256 均逐檔等於 Repository。新版手冊 HTTP 200，舊 v2.20.66／v2.20.67 手冊 URL 均為 404。
+- 關鍵線上雜湊：`index.html` `594f286c82a3897fee762869a4fa88be5978b5503040d7e5395da8a5c11614b1`；`app.js` `9067257861b563e67360e6d0387ed24c2666ea7a5f6cd758bdfce7f3fa94a4fc`；`trend.js` `c788215537833c1b5bb149481986fd7c7de542d79b8f2cc8c6dd25f4f8c621b4`；手冊 `0208932a9acb90ed772559a86104043ab0d42ccf283a17380be7b1c7ac284462`。
 
 ## v2.20.67（2026-09-20）使用者回報 2 項 ＋ Claude 大檢查 2 項
 
