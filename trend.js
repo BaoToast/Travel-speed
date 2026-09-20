@@ -360,7 +360,13 @@
             return String(value);
           };
 
-    var out = { title: "", meaning: "", observed: "", caveats: [] };
+    /*
+     * ⚠️ levels ＝ 圖說的第 3 級「代表什麼狀況」與第 4 級「要怎麼處理」
+     *   （使用者 2026-09-20，三支同步）。判定一律走 chart-levels.js
+     *   （三支逐位元同一份規則），**不可以在這裡自己寫一套區間**。
+     *   寫不出來就維持 null，呼叫端看到 null 要**整段不畫**。
+     */
+    var out = { title: "", meaning: "", observed: "", caveats: [], levels: null };
 
     out.title = series.label + "（" + scopeText + "）";
 
@@ -434,6 +440,43 @@
         "各路段的長度與速限不同，這張圖只比同一條路段自己的歷季變化，" +
           "不同路段之間只能比大小，不可以相加，也不取平均。",
       );
+      /*
+       * 多條線時的第 3 級：講**有幾條在變好、幾條在變差**，
+       * 不可以把幾條線的變化平均起來講——各路段的長度與速限都不同，
+       * 平均出來的數字不對應任何一條路。
+       * ⚠️ 第 4 級只在「真的有路段變差」時才寫；全部持平或全部改善時
+       *   沒有具體要做的事，整段不寫。
+       */
+      var moved = series.lines
+        .map(function (line) {
+          var own = (line.points || []).filter(function (point) {
+            return point.value != null;
+          });
+          if (own.length < 2) return 0;
+          var delta = Number(own[own.length - 1].value) - Number(own[0].value);
+          if (Math.abs(delta) < Math.pow(10, -series.digits) / 2) return 0;
+          /* lowerIsWorse＝數值越小越糟（例如速率）；否則越大越糟（例如延滯）。 */
+          var improved = metric.lowerIsWorse ? delta > 0 : delta < 0;
+          return improved ? 1 : -1;
+        })
+        .filter(function (value) {
+          return value !== 0;
+        });
+      var worse = moved.filter(function (value) {
+        return value < 0;
+      }).length;
+      var better = moved.length - worse;
+      out.levels = {
+        state:
+          "這 " + series.lines.length + " 條路段之中，" + better + " 條往好的方向變、" +
+          worse + " 條往差的方向變，其餘大致持平。" +
+          "各路段的長度與速限不同，所以這裡講的是「條數」，不是平均幅度。",
+        action: worse
+          ? "往差的方向變的那 " + worse + " 條建議在報告中單獨列出；" +
+            "要判斷是資料問題還是真的變差，請先到「資料維護 → 執行資料異常檢查」" +
+            "確認那幾條沒有漏匯或速限設定改過。"
+          : undefined,
+      };
       return out;
     }
 
@@ -554,6 +597,40 @@
           " 級，共 " +
           last.worstCount +
           " 條路段。";
+      /*
+       * ══════════════════════════════════════════════════════════
+       *  第 3 級「代表什麼狀況」與第 4 級「要怎麼處理」
+       * ══════════════════════════════════════════════════════════
+       *
+       * 使用者 2026-09-20（三支同步）。判定一律走 chart-levels.js，
+       * **不可以在這裡自己寫一套區間**。
+       *
+       * ⚠️ 序數型指標（最差等級 A～F）**不可以算百分比變化**：
+       *   「從 D 變成 E」除以 D 沒有意義。那一種另外寫，
+       *   走的是「有沒有掉進壅塞段」那一支。
+       * ⚠️ 起點是 0 時也不可以算百分比（分母是 0）。
+       */
+      var CL = typeof globalThis !== "undefined" && globalThis.ChartLevels;
+      if (CL) {
+        if (series.metric === "worstLos" && last.worstLos) {
+          out.levels = CL.losLevels(
+            last.worstLos,
+            info.congestedStart || last.worstLos,
+            Number(last.worstCount) || 0,
+            Number(last.gradedSize) || Number(last.worstCount) || 0,
+          );
+        } else if (
+          !series.ordinal &&
+          Number(first.value) > 0 &&
+          points.length >= 2
+        ) {
+          out.levels = CL.trendChangeLevels(
+            ((Number(last.value) - Number(first.value)) / Number(first.value)) *
+              100,
+            points.length,
+          );
+        }
+      }
     }
 
     /* ── 四、判讀時要注意 ── */
@@ -743,10 +820,14 @@
       var own = byPeriod[period].rows;
       var counts = { smooth: 0, fair: 0, congested: 0 };
       var unknown = 0;
+      var worstIndex = -1;
       own.forEach(function (row) {
         var band = bandOfGrade(row.los, bandsOf(row));
-        if (band) counts[band] += 1;
-        else unknown += 1;
+        if (band) {
+          counts[band] += 1;
+          var gradeIndex = GRADES.indexOf(row.los);
+          if (gradeIndex > worstIndex) worstIndex = gradeIndex;
+        } else unknown += 1;
       });
       var graded = counts.smooth + counts.fair + counts.congested;
       return {
@@ -754,6 +835,8 @@
         counts: counts,
         unknown: unknown,
         graded: graded,
+        /* 圖說必須讀實際出現的最差等級，不可以由三段筆數反猜。 */
+        worstLos: worstIndex >= 0 ? GRADES[worstIndex] : null,
         size: own.length,
         /* 佔比的分母是**判定得出等級的筆數**，不是全部筆數。 */
         shares: graded

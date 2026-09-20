@@ -67,6 +67,21 @@ try {
     ["11017", "示範標案"],
   ]) {
     await go("setup");
+    /*
+     * ⚠️ v2.20.67 起，「要編輯的計畫」下拉停在哪一個計畫，就決定這次儲存
+     *   是「改那一個計畫的編號」還是「新增一個計畫」
+     *   （使用者 2026-09-20 指名修正的那個 bug：改編號會安靜新建空計畫）。
+     *   所以要新增第二個計畫時，一定要先把下拉切到「＋ 建立新計畫」——
+     *   不切的話第二次儲存會變成把第一個計畫改名，畫面上只剩一個計畫。
+     *   這不是放寬測試，是照著新的流程走。
+     */
+    await page.evaluate(() => {
+      const picker = document.getElementById("projectPicker");
+      if (!picker) return;
+      picker.value = "";
+      picker.onchange?.();
+    });
+    await page.waitForTimeout(300);
     await page.fill("#projectCode", code);
     await page.fill("#projectName", name);
     await page.click("#saveProject");

@@ -251,7 +251,21 @@ const detailCells = async () =>
   page.evaluate(() => {
     document.querySelector('[data-view="details"]')?.click();
     return [...document.querySelectorAll("#detailRows tr")].map((tr) =>
-      [...tr.children].map((td) => td.textContent.trim()),
+      [...tr.children].map((td) => {
+        /*
+         * ⚠️ v2.20.67 起「期間」那一格底下多了一行「調查日 …」
+         *   （使用者 2026-09-20 要的逐筆調查日期）。
+         *   直接讀 td.textContent 會把那一行也讀進來，
+         *   於是「期別欄顯示 115Q1」永遠不成立。
+         *   這裡把它拆掉再比——拆掉的是**另一件事**的文字，
+         *   不是放寬這一條的標準：期別那一格仍然必須逐字等於 115Q1。
+         *   ⚠️ 不可以改成 includes("115Q1")：那樣期別寫成
+         *   「115Q1（暫定）」也會過，等於把這一條驗廢了。
+         */
+        const own = td.cloneNode(true);
+        for (const line of own.querySelectorAll(".survey-date")) line.remove();
+        return own.textContent.trim();
+      }),
     );
   });
 /** 第 1 欄（期別）目前顯示什麼。 */

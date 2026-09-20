@@ -26,7 +26,7 @@
 | 正式 GitHub Pages | `https://baotoast.github.io/Travel-speed/` |
 | branch | `main` |
 | 功能正式版基準 commit | `111892943b2b83539062e5bf10d224690b25bda0` |
-| 目前程式／正式發布版本 | `v2.20.66` |
+| 目前程式／正式發布版本 | `v2.20.68` |
 | 版本唯一來源 | `app.js` 內的 `APP_VERSION`；`check-version.mjs` 會檢查 HTML、手冊、驗證檔及資產 query string 一致性 |
 
 本機資料夾名 `repo` 很通用，不能只靠名稱判斷；每次接手都必須同時核對完整路徑、`.git`、origin、branch、`app.js` 版本與 GitHub Repository。三個交通系統不得混用資料夾或規則。
@@ -65,6 +65,8 @@
 | `styles.css` | 全站版面、響應式、表格、圖表及錯誤／安全提示樣式 |
 | `app.js` | state、IndexedDB、Project、Excel parser、LOS、代表紀錄、匯入預覽／寫入、路段／方向、速限、圖表、備份還原、資料異常檢查的主協調器 |
 | `period-date.js` | 民國／西元季度正規化、調查日期解析、季度相符檢查、顯示格式；此模組與另外兩套交通系統有共用契約，修改時需評估三套一致性 |
+| `direction-pair.js` | 方向顯示名稱成對判定；只對完整方位詞表示意見，匯入提醒不阻擋，並有三系統共用契約 |
+| `chart-levels.js` | 圖說第 3 級「代表什麼狀況」與第 4 級「要怎麼處理」的共同規則；第 4 級無具體行動時整段省略 |
 | `column-filter.js` | 表頭漏斗、多選條件、篩選狀態與清除行為 |
 | `main-filters.js`／`main-toolbar.js` | 全站主工具列資料篩選、先篩再挑代表紀錄、區塊脫離／回歸；預設條件不得改變既有結果 |
 | `los-rule-scope.js` | LOS 規則依季別區間、路段與方向的覆寫順位、重疊偵測與舊資料相容 |
@@ -76,13 +78,13 @@
 | `vendor/xlsx.full.min.js` | SheetJS 0.20.3 瀏覽器版，Excel 讀取 |
 | `vendor/jszip.min.js` | 成果 ZIP 匯出 |
 | `manual-src/*` | 手冊單一來源與 PDF 產生器；本版不再交付 DOCX |
-| `manuals/*v2.20.66*` | 當版可下載新手手冊；正式包只能保留當版一組 |
+| `manuals/*v2.20.68*` | 當版可下載新手手冊；正式包只能保留當版一組 |
 | `*.test.mjs` | Node 單元、契約、回歸與安全測試 |
 | `e2e-*.mjs` | Playwright 瀏覽器端流程測試 |
 | `generate-test-fixtures.mjs` | 產生 6 份匿名 Excel 測資供 E2E 使用；不等同實際業務檔案驗證 |
 | `check-version.mjs` | 版本、資產引用、手冊及交付文件一致性檢查 |
 | `ooxml-check.mjs` | 檢查匯出 Excel 的 OOXML 結構與元素順序 |
-| `VALIDATION_v2.20.66.md` | v2.20.66 的 Claude 二次複查、GPT 獨立確認、修正、反證與測試證據；同檔保留前版歷史摘要 |
+| `VALIDATION_v2.20.68.md` | v2.20.68 的 Claude 候選、GPT 高風險獨立複查、額外修正、反證與測試證據；同檔保留前版歷史摘要 |
 | `.github/workflows/ci.yml` | GitHub Actions 測試門；不部署 |
 
 ### 3.3 state 主要資料結構
@@ -94,6 +96,8 @@
 - `summaries`：每路段／季度／日別的一筆最差代表紀錄。
 - `limits`、`limitConfirmed`、`speedVersions`：方向速限、確認狀態與有效期間版本。
 - `aliases`、`roadMeta`：檔名別名、正式路段資訊、方向顯示名、有效期間。
+- `surveyDateOverrides`：同檔多個日期時，依計畫及「季度｜來源檔名」保存使用者指定的顯示日期；只影響顯示與調查月份，不進交通計算鍵。
+- `showSurveyDate`：尖峰明細／彙總共同的逐筆調查日期顯示開關，預設開啟。
 - `losRules`：各 Project 的 A～E 最低速限比門檻。
 - `bandRules`：各 Project 的順暢／尚可／壅塞三段分界。
 - `anomalyRules`、`reportDrafts`、`conclusionTemplates`：品質門檻、報告／結論設定。
@@ -285,7 +289,9 @@
 
 ### 目前未發現的項目
 
-- v2.20.66 完成 GPT 低風險複查、反證與完整回歸後，沒有尚未修復的已知正式功能 Bug。
+- v2.20.68 完成 GPT 高風險全專案複查、兩項額外修正、反證與完整回歸後，沒有尚未修復的已知正式功能 Bug。
+- v2.20.67 候選新增／修正：人工確認指紋穩定與孤兒清理、重點路段總覽說明、方向名稱成對提醒、全表調查日期候選與人工指定、圖說第 3／4 級、計畫編號整棵 state 搬移、名稱長度與手冊名稱守門。已取消的「X 級以下路段占比可選」不得重新加入。
+- GPT 在 v2.20.67 候選發現並於 v2.20.68 修正：(1) 計畫改名確認訊息使用禁止的位置代稱，造成 `wording.test.mjs` 失敗；(2) 三段組成圖說由三段筆數反猜最差 LOS，可能把 D 說成 E 或把 E 說成 F。現在 `buildBandSeries()` 保存實際 `worstLos`，圖說只讀該值，並有永久回歸測試。
 
 ### 待確認／尚未在本次重新驗證
 
@@ -324,17 +330,18 @@ node check-version.mjs
 
 ### 12.3 最後一次已實際完成的正式驗證
 
-對應版本 `v2.20.66`、功能 commit `111892943b2b83539062e5bf10d224690b25bda0`：
+對應版本 `v2.20.68`（正式 commit 與發布證據待本輪發布完成後補入）：
 
-- 風險：低風險；只修正 `inapplicableHtml()` 的機器可讀屬性互斥，沒有變更 parser、資料、公式、篩選結果、畫面文字或匯出。因 helper 為共用程式，仍抽查全部呼叫位置並執行完整回歸。
-- 修正前新增守門會以退出碼 1 精確列出三句矛盾說明；修正後聚焦 E2E 全綠。另在獨立副本移除三個 applied 標記反證，季度、路段、日別均抓到 LOS／旅行速率兩塊「寫不適用卻變動」，證明反向守門有效。
-- Node／契約／回歸：230 項，228 通過、0 失敗、2 項依設計略過；正式 Repository 沒有 Claude 環境使用的真實檔案，因此不得把其 253／253 宣稱列為本輪獨立證實。
-- Playwright E2E：56／56 依序通過；先產生 6 份匿名 fixtures，沒有並行。
-- 手冊：v2.20.66 PDF 25 頁逐頁渲染並檢視，未見裁切、重疊、缺字或異常空白頁。
-- GitHub Actions：建置與測試 run `35446287153` 成功；Pages run `35446286843` 成功，均對應功能 commit `111892943b2b83539062e5bf10d224690b25bda0`。
-- 線上 `https://baotoast.github.io/Travel-speed/` 已顯示 v2.20.66；線上 `index.html`、`app.js` 與 v2.20.66 手冊 SHA-256 均逐檔等於 Repository；新手冊 HTTP 200，舊 v2.20.65 手冊 URL 為 404。
+- 風險：高風險；候選跨 Parser 日期掃描、state／備份、異常指紋、計畫主鍵改名、圖表說明與跨模組 UI，採全專案複查。
+- 原候選 `npm test` 並非 Claude 所稱全綠，而是 278 項中 1 失敗；GPT 修正位置代稱後，再修正三段組成圖說虛構最差 LOS，並新增永久回歸測試。
+- Node／契約／回歸：279 項，277 通過、0 失敗、2 項依設計略過；兩項需要真實平／假日配對檔與同檔雙日期情境。
+- Playwright E2E：56／56 依序通過；先產生 6 份匿名 fixtures，沒有並行。額度中斷後從第一個未完成腳本續跑，沒有重跑已確認部分。
+- 反證：隔離副本移除 roads 的 `applied` 標記後，`e2e-filter-coverage.mjs` 退出碼 1，精確抓到 LOS／旅行速率兩塊「寫不適用卻變動」；還原後聚焦測試全綠。
+- 手冊：v2.20.68 PDF 共 27 頁，已逐頁渲染並以聯絡表及代表原尺寸頁面檢視；版號、日期、頁尾正常，未見裁切、重疊、缺字或異常空白頁。
+- 本輪沒有使用者真實報告檔，未執行 `verify-against-summary.mjs <檔案>`；匿名 fixtures 不冒充真實業務檔驗證。
 - production build／TypeScript／lint：不適用，因專案是純靜態且沒有這些腳本；單檔試用版由 `build-tryout.mjs` 產生。
-- 本次不改 UI 版面或 Excel 匯出；沒有重複人工 Office 驗證。前版 v2.20.65 已完成 1536×864／1366×768 逐頁檢視與真實 Microsoft Excel 開啟確認。
+- 本次未修改 Excel 匯出模組；完整 E2E 已驗 OOXML、原生圖表、資料對位與缺值斷線。沒有重複人工 Office 開啟，前版 v2.20.65 已用真實 Microsoft Excel 確認同一套匯出路徑。
+- 正式 commit、Actions、Pages 與線上雜湊待本輪發布完成後補入。
 
 前一版 v2.20.65、功能 commit `2888a319032ec7d7bcba59e794ef499157e1bc67` 的完整複查證據：
 

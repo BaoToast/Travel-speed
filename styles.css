@@ -1954,3 +1954,95 @@ tr.issue-acked td:first-child{box-shadow:inset 3px 0 0 #2f7d69}
 .maintenance-run{margin-bottom:20px;border-left:4px solid var(--green)}
 .maintenance-run h3{margin:0 0 10px}
 .maintenance-run>p.muted{margin:0 0 14px;color:var(--muted);line-height:1.75}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ *  長計畫名稱／長計畫編號不可以撐破或互相遮蓋（三支共通）
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 使用者 2026-09-10 實測（附截圖）：
+ *   「長計畫名稱會撐破卡片」
+ *   「計畫名稱沒問題了，但忘記限制計畫編號（三個程式都是），
+ *     當編號過長時會遮蓋到計畫名稱」
+ *
+ * ⚠️ **上限與換行兩件事都要做**，只做一件不夠：
+ *   ・app.js 的 PROJECT_NAME_LIMIT／PROJECT_CODE_LIMIT 只擋**新輸入**；
+ *   ・**舊資料裡本來就有的超長名稱不會因此變短**，所以版面這一側也要擋。
+ *   另外兩支（路口轉向 app/globals.css、全日交通量 tests/project-name-limit）
+ *   都是這樣兩邊一起做的，這一支 2026-09-20 大檢查才補上。
+ *
+ * ⚠️ min-width: 0 不可省略。header 是 flex，flex item 的預設
+ *   min-width 是 auto，於是長字串會把它撐出去而不是換行——
+ *   這正是截圖裡「編號蓋到名稱」的直接原因。
+ */
+header > div:first-child {
+  min-width: 0;
+}
+header strong,
+header small,
+#headProject {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* 計畫下拉選單同理：選項字串很長時不可以把整列推開。 */
+#projectSwitch,
+select[id*="roject"] {
+  max-width: 280px;
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ *  逐筆調查日期：開關、表格裡那一行、以及異常清單上的指定下拉
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 使用者 2026-09-20：
+ *   「明細／彙總看不到逐筆調查日期……希望可以讓我看到確切日期」
+ *   「同一張表若你判讀到 2 個日期……你要如何讓使用者告訴你哪個才是正確的日期」
+ *
+ * ⚠️ 顏色一律沿用既有的 #3d5563（說明文字用色，白底 7.4:1，過 AA）。
+ *   不要為了「看起來次要」另外調一個更淡的灰——這一支 2026-09-15
+ *   才補上全站對比掃描，正是為了不要再出現量不過的淺灰字。
+ */
+.survey-date{display:block;margin-top:3px;font-size:11px;font-weight:700;
+  color:#3d5563;white-space:nowrap}
+/* 讀不到日期時那一行：同色但不加粗，與「有日期」一眼分得出來。 */
+.survey-date.muted-cell{font-weight:400}
+.muted-cell{color:#3d5563}
+.survey-date-toggle{display:inline-flex;align-items:center;gap:5px;
+  font-size:12px;font-weight:700;color:#3d5563;white-space:nowrap;cursor:pointer}
+.survey-date-toggle input{margin:0}
+/*
+ * 「指定調查日期」下拉。
+ * ⚠️ 與「已人工確認」鈕同一行，所以用 inline-flex 並對齊基線；
+ *   下拉本身要能換行到下一行（異常表的這一欄本來就窄），
+ *   不然會把整張表撐出水平捲軸。
+ */
+.resolution-pick{display:inline-flex;align-items:center;gap:6px;
+  margin:7px 8px 0 0;font-size:12px;font-weight:700;color:#3d5563}
+.resolution-pick select{font:inherit;font-size:12px;padding:3px 6px;
+  border:1px solid #cbd7dd;border-radius:7px;background:#fff;color:var(--ink)}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ *  圖說的第 3 級「代表什麼狀況」與第 4 級「要怎麼處理」
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 使用者 2026-09-20：「圖旁說明文字升到第 3 級（代表什麼狀況）、
+ *   第 4 級（要怎麼處理）」「請記得滑動看文字時，圖可以保持隨時可見，
+ *   還有文字不要超出標框或重疊等，以前踩過的雷不要再次發生」。
+ *
+ * ⚠️ 圖保持可見那一件**已經有了**（上面 .figure-row>.trend-figure 的 sticky，
+ *   而且刻意只在說明在右側時才釘），所以這裡只處理「字變多之後不可以
+ *   撐破或重疊」：
+ *   ・分隔線用 border-top 而不是 margin 疊加 ── 相鄰兩段不會黏在一起
+ *   ・overflow-wrap:anywhere ── 長路名與長數字串不可以把框撐寬
+ * ⚠️ 顏色沿用既有的 #33566d（.figure-note-body p 的顏色，白底過 AA），
+ *   不要為了「次要」另外調更淡的灰——對比由 text-contrast 測試把關。
+ */
+.figure-note-level{margin-top:10px;padding-top:9px;border-top:1px solid #d3e3e3}
+.figure-note-level h5{margin:0 0 5px;font-size:12.5px;font-weight:800;color:var(--navy)}
+.figure-note-level p{margin:0 0 6px;font-size:13px;line-height:1.75;color:#33566d}
+.figure-note-level p:last-child{margin-bottom:0}
+.figure-note-body p,.figure-note-level p,.figure-note-level h5{
+  overflow-wrap:anywhere;word-break:normal}

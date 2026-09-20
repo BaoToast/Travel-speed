@@ -26,15 +26,37 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
 const {
   buildTrendSeries,
+  buildBandSeries,
   describeTrendChart,
   trendScript,
   trendMetricLabel,
   alignTrendSeriesForExcel,
 } = require("./trend.js");
+
+test("三段組成保留實際最差等級，不可用分界或 F 級反猜", () => {
+  const series = buildBandSeries(
+    [
+      { period: "115Q1", road: "甲", los: "C" },
+      { period: "115Q1", road: "乙", los: "D" },
+      { period: "115Q2", road: "甲", los: "E" },
+      { period: "115Q2", road: "乙", los: "C" },
+    ],
+    { bands: { smoothEnd: "B", congestedStart: "E" } },
+  );
+  assert.equal(series.points[0].worstLos, "D", "沒有壅塞筆數時，最差仍應是實際的 D 級");
+  assert.equal(series.points[1].worstLos, "E", "有壅塞筆數時，不可一律猜成 F 級");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const at = app.indexOf("var bandLevels =");
+  assert.notEqual(at, -1, "找不到三段組成的第 3、4 級說明");
+  const block = app.slice(at, at + 500);
+  assert.ok(block.includes("last.worstLos"), "畫面說明沒有使用資料層保存的實際最差等級");
+  assert.ok(!block.includes("LOS_GRADES[LOS_GRADES.length - 1]"), "畫面仍把有壅塞時一律猜成 F 級");
+});
 
 test("Excel 匯出以所有數列的季度聯集精確對位，缺季保留空白", () => {
   const aligned = alignTrendSeriesForExcel(

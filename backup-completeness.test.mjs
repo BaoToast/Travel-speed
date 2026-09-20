@@ -32,6 +32,12 @@ const MUST_TRAVEL = [
   "speedVersions",
   "reportDrafts",
   "conclusionTemplates",
+  /*
+   * 「同一份檔案有兩個日期，哪一個才對」的指定（使用者 2026-09-20）。
+   * 不帶走的話，換一台電腦匯入之後系統會退回自己判讀的那一個日期，
+   * 明細上的調查日期與期別顯示的調查月份當場變成另一天。
+   */
+  "surveyDateOverrides",
 ];
 
 function block(startMarker, endMarker) {

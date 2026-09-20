@@ -172,8 +172,13 @@
    */
   const SURVEY_DATE_LABEL = /(?:調查|監測|施測|檢測|觀測|測量|作業)?日期[:：]/;
   /** 這些不是調查日期，不可以拿來比對期別。 */
+  /*
+   * ⚠️ 2026-09-20 補上「複核／覆核／複查／複驗／送審／簽收」。
+   *   清單裡原本有「校核」卻沒有「複核」，於是複核日期會被當成第二個
+   *   調查日期問使用者。⚠️ 新增詞要同步三支。
+   */
   const NON_SURVEY_DATE_LABEL =
-    /(?:製表|列印|印製|報告|出圖|填表|核定|審查|校核|繪製|修正|更新|彙整|輸出|建檔|產製)日期/;
+    /(?:製表|列印|印製|報告|出圖|填表|核定|審查|校核|複核|覆核|複查|複驗|送審|簽收|繪製|修正|更新|彙整|輸出|建檔|產製)日期/;
 
   const flatten = (text) =>
     String(text ?? "")
@@ -235,6 +240,44 @@
       loose = loose || hit;
     }
     return loose;
+  }
+
+  /**
+   * 找出**全部**不同的調查日期，不是只找第一個。
+   *
+   * 使用者 2026-09-20 指定（三支同步）：
+   *   「同一張表若你判讀到 2 個日期，在資料匯入時就應該做為異常顯示提醒使用者，
+   *     在異常資料檢查結果也要檢查出來……因為有可能另一個不同的日期在該資料中
+   *     有其意義存在，所以使用者不會修正資料」
+   *
+   * ⚠️ findSurveyDate() 的語意是「挑一個出來用」，那是下游計算採用的那一個，
+   *   不可以改。這一支只負責把看到的全部列出來，交給畫面去問使用者。
+   * ⚠️ 依 iso 去重、有標籤的排前面——排序要與 findSurveyDate 的挑選規則一致，
+   *   否則畫面上第一個候選會不是系統實際採用的那一個。
+   */
+  function findAllSurveyDates(cells) {
+    const list = Array.isArray(cells) ? cells : [];
+    const seen = new Map();
+    for (const item of list) {
+      const text = String(item?.text ?? "");
+      if (NON_SURVEY_DATE_LABEL.test(flatten(text))) continue;
+      const iso = parseSurveyDateText(text);
+      if (!iso) continue;
+      const hit = {
+        iso,
+        raw: text.trim(),
+        sheet: String(item?.sheet ?? ""),
+        cell: String(item?.cell ?? ""),
+        labelled: isLabelledSurveyDateText(text),
+      };
+      const previous = seen.get(iso);
+      /* 同一個日期出現多次時，留下有標籤的那一個當代表（出處比較有用）。 */
+      if (!previous || (!previous.labelled && hit.labelled)) seen.set(iso, hit);
+    }
+    return [...seen.values()].sort(
+      (a, b) =>
+        Number(b.labelled) - Number(a.labelled) || a.iso.localeCompare(b.iso),
+    );
   }
 
   function surveyDateSourceLabel(found) {
@@ -385,6 +428,22 @@
   }
 
   /**
+   * 一個 ISO 日期在畫面上的寫法（115年5月4日 ⇄ 2026年5月4日）。
+   *
+   * ⚠️ 這一支是**從全日交通量 app/period-date.ts 移植過來的**，
+   *   行為必須一致（同一份調查檔在兩支程式要寫出同一個字串）。
+   *   改這裡就要一起改那邊，並重跑 survey-date-contract。
+   * ⚠️ 認不得的輸入回空字串，不要回原字串：呼叫端要靠空字串判斷
+   *   「這一筆沒有日期」，回原字串的話畫面上會出現一串 ISO。
+   */
+  function surveyDateInYearStyle(iso, style) {
+    const m = String(iso ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return "";
+    const year = style === "ad" ? m[1] : String(adToRoc(Number(m[1])));
+    return year + "年" + Number(m[2]) + "月" + Number(m[3]) + "日";
+  }
+
+  /**
    * quarter：資料實際掛的季別字串（例："115Q1"），永遠是分組與鍵值的依據。
    * isoDates：這一季底下每一筆的調查日期（YYYY-MM-DD），沒有的就別放進來。
    * yearStyle：顯示用的年份寫法，預設民國年（沿用舊行為）。
@@ -456,6 +515,7 @@
     isNonSurveyDateText,
     parseSurveyDateText: parseSurveyDateText,
     findSurveyDate: findSurveyDate,
+    findAllSurveyDates: findAllSurveyDates,
     surveyDateSourceLabel: surveyDateSourceLabel,
     readableDate: readableDate,
     checkPeriodAgainstDate: checkPeriodAgainstDate,
@@ -463,6 +523,7 @@
     periodUnknownNotice: periodUnknownNotice,
     periodDisplayLabel: periodDisplayLabel,
     quarterInYearStyle: quarterInYearStyle,
+    surveyDateInYearStyle: surveyDateInYearStyle,
     PERIOD_DISPLAY_LABELS: PERIOD_DISPLAY_LABELS,
     YEAR_STYLE_LABELS: YEAR_STYLE_LABELS,
   };

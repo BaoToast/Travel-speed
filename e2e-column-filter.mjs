@@ -104,12 +104,32 @@ await page.evaluate(async (roads) => {
 await page.evaluate(() => go("detail"));
 await page.waitForTimeout(500);
 
+/*
+ * ⚠️ v2.20.67 起「期間」那一格底下多了一行「調查日 …」
+ *   （使用者 2026-09-20 要的逐筆調查日期）。
+ *   直接讀 td.textContent 會把那一行也讀進來，
+ *   於是「這一格等於 115Q2」永遠不成立。
+ *   這裡把它拆掉再比——拆掉的是**另一件事**的文字，
+ *   不是放寬標準：那一格仍然必須逐字相等。
+ */
+const CELL_TEXT = `(td) => {
+  if (!td) return undefined;
+  const own = td.cloneNode(true);
+  for (const line of own.querySelectorAll(".survey-date")) line.remove();
+  return own.textContent;
+}`;
+
 const shown = () => page.evaluate(() => document.querySelectorAll("#detailRows tr").length);
 const countText = () => page.evaluate(() => document.getElementById("detailCount").textContent);
 const firstCells = (col) =>
   page.evaluate(
-    (c) => [...document.querySelectorAll("#detailRows tr")].map((tr) => tr.children[c]?.textContent),
-    col,
+    ([c, src]) => {
+      const cellText = eval(src);
+      return [...document.querySelectorAll("#detailRows tr")].map((tr) =>
+        cellText(tr.children[c]),
+      );
+    },
+    [col, CELL_TEXT],
   );
 
 ok("先看到全部 24 筆", (await shown()) === 24, await countText());
@@ -153,11 +173,12 @@ ok(
 
 await pick(1, ["A路段(甲～乙)"]);
 ok("再篩路段 A → 剩 4 筆（115Q2 × A路段）", (await shown()) === 4, await countText());
-const rows = await page.evaluate(() =>
-  [...document.querySelectorAll("#detailRows tr")].map((tr) =>
-    [...tr.children].slice(0, 2).map((td) => td.textContent),
-  ),
-);
+const rows = await page.evaluate((src) => {
+  const cellText = eval(src);
+  return [...document.querySelectorAll("#detailRows tr")].map((tr) =>
+    [...tr.children].slice(0, 2).map(cellText),
+  );
+}, CELL_TEXT);
 ok(
   "每一列都是 115Q2 ＋ A路段",
   rows.every(([p, r]) => p === "115Q2" && r === "A路段(甲～乙)"),
@@ -268,11 +289,12 @@ await page.fill("#summarySearch", "");
 await page.waitForTimeout(350);
 ok(
   "尖峰彙總清除搜尋後恢復原條件結果",
-  await page.evaluate(() =>
-    [...document.querySelectorAll("#summaryRows tr")].every(
-      (tr) => tr.children[0]?.textContent === "115Q2",
-    ),
-  ),
+  await page.evaluate((src) => {
+    const cellText = eval(src);
+    return [...document.querySelectorAll("#summaryRows tr")].every(
+      (tr) => cellText(tr.children[0]) === "115Q2",
+    );
+  }, CELL_TEXT),
 );
 await page.click("#summaryFilterState .col-filter-clear");
 await page.waitForTimeout(250);

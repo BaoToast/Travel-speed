@@ -119,7 +119,19 @@ const detailCells = async () =>
   page.evaluate(() => {
     document.querySelector('[data-view="detail"]').click();
     return [...document.querySelectorAll("#detailRows tr")].map((tr) =>
-      [...tr.children].map((td) => td.textContent.trim()),
+      [...tr.children].map((td) => {
+        /*
+         * ⚠️ v2.20.67 起「期間」那一格底下多了一行「調查日 …」
+         *   （使用者 2026-09-20 要的逐筆調查日期）。
+         *   直接讀 td.textContent 會把那一行也讀進來，
+         *   於是「期別欄是 114Q4」永遠不成立。
+         *   這裡把它拆掉再比——拆掉的是**另一件事**的文字，
+         *   不是放寬這一條的標準：期別那一格仍然必須逐字相等。
+         */
+        const own = td.cloneNode(true);
+        for (const line of own.querySelectorAll(".survey-date")) line.remove();
+        return own.textContent.trim();
+      }),
     );
   });
 const toggleText = async () =>

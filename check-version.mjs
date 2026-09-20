@@ -36,6 +36,9 @@ const scripts = [
   "trend-excel.js",
   "column-filter.js",
   "period-date.js",
+  /* 2026-09-20 新增：方向名稱成對判定（三支共用）。 */
+  "direction-pair.js",
+  "chart-levels.js",
   /*
    * ⚠️ 2026-09-15 補上的三支。它們在主工具列改版時新增，當時忘了加進這份清單，
    *   於是「沒有殘留其他版號」那一條**從來沒掃過它們**——

@@ -80,6 +80,32 @@ const emptyState = () => ({
    *   只是多標一欄「已確認」。交出去的檔案少東西，比畫面上多幾列嚴重得多。
    */
   ackedIssues: {},
+  /*
+   * ══════════════════════════════════════════════════════════════════
+   *  同一份檔案有兩個日期時，使用者指定的那一個（使用者 2026-09-20）
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 形狀：{ 計畫代碼: { "季別|來源檔名": "YYYY-MM-DD" } }
+   *
+   * ⚠️ 為什麼是**覆寫**而不是直接改明細：使用者原話是「有可能另一個不同
+   *   的日期在該資料中有其意義存在，**所以使用者不會修正資料**」。
+   *   同理，系統這一端也不該把原始判讀結果洗掉——留著才有辦法換回來，
+   *   也才看得出當初到底有幾個候選。
+   * ⚠️ 只影響**顯示**（尖峰明細／彙總的調查日期、期別顯示成調查月份時）。
+   *   不進 rowKey、不進 id，不影響覆蓋判斷、速率、延滯或 LOS 的任何計算。
+   */
+  surveyDateOverrides: {},
+  /*
+   * 尖峰明細／彙總要不要把**逐筆的調查日期**寫出來（使用者 2026-09-20：
+   * 「明細／彙總看不到逐筆調查日期……目前只有功能只有顯示年和月而已，
+   *   希望可以讓我看到確切日期」「只需要增加一個開關讓我可以看到調查日期就好」）。
+   *
+   * ⚠️ 預設是**開**。做成預設關的話，使用者得先知道有這顆開關才找得到
+   *   這個資訊——那等於把功能藏起來。
+   * ⚠️ 這顆只管**顯示**，與「期別顯示季別／調查月份」是兩件事：
+   *   那一顆換的是期別那一欄的文字，這一顆多寫一行「這一筆是哪一天做的」。
+   */
+  showSurveyDate: true,
   imports: [],
   last: { year: "", quarter: "2", time: "" },
   /*
@@ -1005,7 +1031,7 @@ document
   .querySelectorAll("[data-go]")
   .forEach((b) => (b.onclick = () => gotoView(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.66";
+document.querySelector(".brand small").textContent = "正式版 v2.20.68";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 /*
  * ⚠️ 這裡原本有一顆「列印／另存 PDF」，使用者 2026-09-16 指名移除：
@@ -1041,7 +1067,7 @@ manualLinks.innerHTML =
    *   那種網址裡沒有檔名，使用者拿到的檔案就叫「下載」。
    *   （使用者 2026-09-14 實際回報過，三支都中。）
    */
-  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.66.pdf" download="交通服務水準程式手冊_v2.20.66.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
+  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.68.pdf" download="交通服務水準程式手冊_v2.20.68.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -1058,7 +1084,7 @@ manual.className = "manual";
  * ⚠️ 區塊本身**沒有被刪掉**，只是不放進側欄。
  */
 manual.setAttribute("data-nav-skip", "explanation");
-manual.innerHTML = `<article class="panel manual-intro"><span class="eyebrow">完整工作流程</span><h2>建立計畫 → 匯入核對 → 產出成果</h2><p>每一個計畫的季度資料、速限與判定標準都各自獨立保存，互不影響；換電腦或交接時用專案包帶走。</p></article><div class="manual-grid"><article class="panel"><h3>一、第一次建立 Project</h3><ol><li>進入「計畫設定」，輸入公司計畫編號與完整名稱。</li><li>按「儲存計畫設定」，並確認頁面上方中央顯示正確計畫。</li><li>同一位使用者可建立任意數量計畫，之後從上方選單切換。</li></ol></article><article class="panel"><h3>二、每一季度匯入</h3><ol><li>進入「尖峰批次匯入」，輸入民國年與季度。</li><li>一次選取同一季度的平日、假日 Excel。</li><li>按「讀取並預覽」；每份正常檔案應有4筆。</li><li>確認沒有錯誤或未確認新路段，再按「確認寫入尖峰明細」。</li></ol></article><article class="panel"><h3>三、速限與 LOS</h3><ol><li>進入「路段速限」，核對方向1、方向2的公告速限。</li><li>預設為50 km/h；快慢車道速限不同時，依實際調查車流所使用的道路／車道設定。</li><li>按「套用並重算 LOS」。</li><li>代表值先比較4筆LOS與速限比，再將同一筆紀錄的旅行速率、行駛速率及總延滯一起帶入。</li></ol></article><article class="panel"><h3>四、檢查與圖表判讀</h3><ul><li><b>尖峰明細：</b>查看每路段、日別、上午／下午及兩方向的原始4筆結果。</li><li><b>尖峰彙總：</b>查看每路段日別的最差代表紀錄。</li><li><b>LOS圖表：</b>每路段一張圖，比較歷季平日與假日變化。</li><li><b>資料維護：</b>檢查名稱、4筆資料組、平假日及數值完整性。</li></ul></article><article class="panel"><h3>五、資料錯誤時</h3><ul><li>剛完成的錯誤匯入：到「匯入紀錄」按復原。</li><li>整季需重做：到「資料維護」選擇季度，備份後刪除，再重新匯入。</li><li>路段名稱不一致：到「路段速限」使用「路段名稱修改／合併」。</li><li>疑似新路段：預覽時先判斷是新路段或名稱差異，不確定時不要寫入。</li></ul></article><article class="panel"><h3>六、交出成果</h3><ol><li>確認資料異常檢查通過。</li><li>到「結論草稿產生器」產生分析文字草稿。</li><li>到「LOS 圖表」下載高解析圖片或可編輯的 Excel 圖表。</li><li>到「備份與淨空」下載專案包，做為交付與存檔。</li></ol></article><article class="panel"><h3>七、多人協作方式</h3><p>每位同事在自己的瀏覽器管理任意數量計畫，定期下載專案包交付。要接手別人的計畫時，在「備份與淨空」匯入他的專案包即可；相同計畫編號會被取代，其他計畫不受影響。</p></article><article class="panel"><h3>八、備份與安全</h3><ul><li>每完成一季，下載一次Project專案包。</li><li>換電腦、清除瀏覽器資料或瀏覽器重設前，一定要先備份。</li><li>資料儲存在目前瀏覽器；同一網址在另一台電腦開啟，不會自動看到本機資料。</li><li>專案包支援還原，也可交給同事接手。</li></ul></article><article class="panel"><h3>九、舊版 Excel 相容</h3><p>支援 .xls、.xlsx、.xlsm，以及「上午尖峰／下午尖峰」、「上午／下午」、AM／PM與名稱前後空白。若顯示欄位缺值，先用Excel開啟原始檔、重新計算並儲存，再回網頁預覽。</p></article><article class="panel"><h3>十、每季完成檢核</h3><ol><li>每份檔案4筆且失敗0。</li><li>路段速限已核對並重算。</li><li>資料異常檢查三項為0。</li><li>彙總代表值三項數值來自同一筆。</li><li>圖表路段數正確。</li><li>已下載專案包存檔。</li></ol></article></div>`;
+manual.innerHTML = `<article class="panel manual-intro"><span class="eyebrow">完整工作流程</span><h2>建立計畫 → 匯入核對 → 產出成果</h2><p>每一個計畫的季度資料、速限與判定標準都各自獨立保存，互不影響；換電腦或交接時用專案包帶走。</p></article><div class="manual-grid"><article class="panel"><h3>一、第一次建立 Project</h3><ol><li>進入「建立與管理計畫」，輸入公司計畫編號與完整名稱。</li><li>按「儲存計畫設定」，並確認頁面上方中央顯示正確計畫。</li><li>同一位使用者可建立任意數量計畫，之後從上方選單切換。</li></ol></article><article class="panel"><h3>二、每一季度匯入</h3><ol><li>進入「尖峰批次匯入」，輸入民國年與季度。</li><li>一次選取同一季度的平日、假日 Excel。</li><li>按「讀取並預覽」；每份正常檔案應有4筆。</li><li>確認沒有錯誤或未確認新路段，再按「確認寫入尖峰明細」。</li></ol></article><article class="panel"><h3>三、速限與 LOS</h3><ol><li>進入「路段速限」，核對方向1、方向2的公告速限。</li><li>預設為50 km/h；快慢車道速限不同時，依實際調查車流所使用的道路／車道設定。</li><li>按「套用並重算 LOS」。</li><li>代表值先比較4筆LOS與速限比，再將同一筆紀錄的旅行速率、行駛速率及總延滯一起帶入。</li></ol></article><article class="panel"><h3>四、檢查與圖表判讀</h3><ul><li><b>尖峰明細：</b>查看每路段、日別、上午／下午及兩方向的原始4筆結果。</li><li><b>尖峰彙總：</b>查看每路段日別的最差代表紀錄。</li><li><b>LOS圖表：</b>每路段一張圖，比較歷季平日與假日變化。</li><li><b>資料維護：</b>檢查名稱、4筆資料組、平假日及數值完整性。</li></ul></article><article class="panel"><h3>五、資料錯誤時</h3><ul><li>剛完成的錯誤匯入：到「匯入紀錄」按復原。</li><li>整季需重做：到「資料維護」選擇季度，備份後刪除，再重新匯入。</li><li>路段名稱不一致：到「路段速限」使用「路段名稱修改／合併」。</li><li>疑似新路段：預覽時先判斷是新路段或名稱差異，不確定時不要寫入。</li></ul></article><article class="panel"><h3>六、交出成果</h3><ol><li>確認資料異常檢查通過。</li><li>到「結論草稿產生器」產生分析文字草稿。</li><li>到「LOS 圖表」下載高解析圖片或可編輯的 Excel 圖表。</li><li>到「備份與淨空」下載專案包，做為交付與存檔。</li></ol></article><article class="panel"><h3>七、多人協作方式</h3><p>每位同事在自己的瀏覽器管理任意數量計畫，定期下載專案包交付。要接手別人的計畫時，在「備份與淨空」匯入他的專案包即可；相同計畫編號會被取代，其他計畫不受影響。</p></article><article class="panel"><h3>八、備份與安全</h3><ul><li>每完成一季，下載一次Project專案包。</li><li>換電腦、清除瀏覽器資料或瀏覽器重設前，一定要先備份。</li><li>資料儲存在目前瀏覽器；同一網址在另一台電腦開啟，不會自動看到本機資料。</li><li>專案包支援還原，也可交給同事接手。</li></ul></article><article class="panel"><h3>九、舊版 Excel 相容</h3><p>支援 .xls、.xlsx、.xlsm，以及「上午尖峰／下午尖峰」、「上午／下午」、AM／PM與名稱前後空白。若顯示欄位缺值，先用Excel開啟原始檔、重新計算並儲存，再回網頁預覽。</p></article><article class="panel"><h3>十、每季完成檢核</h3><ol><li>每份檔案4筆且失敗0。</li><li>路段速限已核對並重算。</li><li>資料異常檢查三項為0。</li><li>彙總代表值三項數值來自同一筆。</li><li>圖表路段數正確。</li><li>已下載專案包存檔。</li></ol></article></div>`;
 document.querySelector("#guide .warning").before(manual);
 
 /*
@@ -2246,7 +2272,7 @@ $("projectPicker").onchange = () => {
   $("projectName").value = p?.name || "";
   renderProjectSetupActions();
 };
-// 刪除計畫的入口放在「計畫設定」，使用者要刪計畫時第一個就會找這裡。
+// 刪除計畫的入口放在「建立與管理計畫」，使用者要刪計畫時第一個就會找這裡。
 const deleteProjectBtn = document.createElement("button");
 deleteProjectBtn.id = "deleteProject";
 deleteProjectBtn.className = "danger-button full";
@@ -3105,7 +3131,17 @@ function dayFromWorkbook(wb) {
   }
   return "";
 }
-function surveyDateFromWorkbook(wb) {
+/*
+ * 活頁簿裡所有「可能是日期」的儲存格。
+ *
+ * ⚠️ deep=false 只掃前 13 列（表頭），deep=true 掃整張表。
+ *   使用者 2026-09-20：「日期的欄位檔案可能不一致，所以應該使用全文搜索
+ *   找出日期來判讀，不要依靠讀取固定欄位，導致經常找不到」。
+ *   系統**實際採用**哪一個仍以表頭優先（正常檔案的行為完全不變），
+ *   但**列給使用者挑**的候選一律走全表，否則正確的日期寫在下面時
+ *   使用者連看都看不到它。
+ */
+function surveyDateCellsOf(wb, deep) {
   const cells = [];
   for (const name of wb.SheetNames) {
     const sheet = wb.Sheets[name];
@@ -3116,7 +3152,8 @@ function surveyDateFromWorkbook(wb) {
     } catch {
       continue;
     }
-    for (let r = range.s.r; r <= Math.min(range.e.r, 12); r++)
+    const last = deep ? range.e.r : Math.min(range.e.r, 12);
+    for (let r = range.s.r; r <= last; r++)
       for (let c = range.s.c; c <= range.e.c; c++) {
         const address = XLSX.utils.encode_cell({ r, c });
         const cell = sheet[address];
@@ -3125,7 +3162,19 @@ function surveyDateFromWorkbook(wb) {
         if (text) cells.push({ text, sheet: name, cell: address });
       }
   }
-  const found = globalThis.PeriodDate.findSurveyDate(cells);
+  return cells;
+}
+function surveyDateFromWorkbook(wb) {
+  const cells = surveyDateCellsOf(wb, false);
+  /*
+   * ⚠️ 表頭一個日期都找不到才往下掃整張表。
+   *   先掃全表再挑的話，表頭那一個明確標示「調查日期」的，
+   *   可能被表身某一格更前面的日期蓋過去——那是行為改變，不是修 bug。
+   */
+  const deepCells = globalThis.PeriodDate.findSurveyDate(cells)
+    ? cells
+    : surveyDateCellsOf(wb, true);
+  const found = globalThis.PeriodDate.findSurveyDate(deepCells);
   /*
    * 同一份活頁簿裡出現「兩個都有標示、但不同季度」的調查日期時要講出來。
    *
@@ -3137,16 +3186,89 @@ function surveyDateFromWorkbook(wb) {
    * 都已經會回報來源衝突，日期是唯一漏掉的一個。
    */
   if (!found) return found;
-  const others = [];
-  for (const item of cells) {
-    if (globalThis.PeriodDate.isNonSurveyDateText(item.text)) continue;
-    if (!globalThis.PeriodDate.isLabelledSurveyDateText(item.text)) continue;
-    const iso = globalThis.PeriodDate.parseSurveyDateText(item.text);
-    if (!iso || iso === found.iso) continue;
-    if (!others.some((o) => o.iso === iso))
-      others.push({ iso, sheet: item.sheet, cell: item.cell });
-  }
-  return others.length ? { ...found, conflicts: others } : found;
+  /*
+   * ⚠️ 候選一律走**全表**（findAllSurveyDates），不再只看有標示的那幾格。
+   *   使用者 2026-09-20：「有可能另一個不同的日期在該資料中有其意義存在，
+   *   所以使用者不會修正資料」——所以系統要把看到的全部列出來讓他指定，
+   *   而不是自己決定哪幾個「算數」。
+   *   判定規則（去重、排序、排除製表／複核日期）在三支共用的
+   *   period-date 模組，不可以在這裡自己再寫一份。
+   */
+  const all = globalThis.PeriodDate.findAllSurveyDates(
+    surveyDateCellsOf(wb, true),
+  );
+  const others = all
+    .filter((hit) => hit.iso !== found.iso)
+    .map((hit) => ({ iso: hit.iso, sheet: hit.sheet, cell: hit.cell }));
+  /*
+   * ⚠️ 候選清單的**第一個一定是系統實際採用的那一個**。
+   *   直接用 findAllSurveyDates 的順序會出問題：那是對「全表」排的，
+   *   而實際採用的是「表頭優先」挑出來的，兩者可能不同——
+   *   畫面上請使用者確認的第一個候選，與計算實際用的那一個不一樣，
+   *   比不問還糟。
+   */
+  return others.length
+    ? {
+        ...found,
+        conflicts: others,
+        candidates: [found.iso, ...others.map((o) => o.iso)],
+      }
+    : found;
+}
+
+/**
+ * 一筆明細的調查日期歸屬鍵——`季別|來源檔名`。
+ *
+ * ⚠️ 覆寫、候選、異常三邊**一定要用同一把鑰匙**，各寫各的就會出現
+ *   「異常清單上挑了，明細卻沒變」這種對不起來的情形。
+ */
+function surveyDateScopeKey(row) {
+  return `${row.period || ""}|${row.source || ""}`;
+}
+/**
+ * 這一筆實際要顯示的調查日期：使用者指定過就用他指定的，否則用判讀到的。
+ *
+ * ⚠️ 覆寫值**必須是候選之一**才採用。備份被手改、或候選在重新匯入後變了
+ *   之後，一個不在候選裡的覆寫會讓畫面顯示一個原始檔上根本沒有的日期——
+ *   那比顯示錯的還糟，因為使用者無從發現。
+ */
+function effectiveSurveyDate(row, projectCode = state.activeCode) {
+  if (!row) return "";
+  const own = (state.surveyDateOverrides || {})[projectCode] || {};
+  const picked = own[surveyDateScopeKey(row)];
+  if (!picked) return row.surveyDate || "";
+  const candidates = row.surveyDateCandidates;
+  if (Array.isArray(candidates) && candidates.length && !candidates.includes(picked))
+    return row.surveyDate || "";
+  return picked;
+}
+
+/**
+ * 「期間」欄位底下那一行「這一筆是哪一天做的」。
+ *
+ * ⚠️ 讀不到日期時寫**原因**，不留白：使用者 2026-09-20 指定
+ *   「如果讀不到應該是我們這邊先確認不是程式問題所造成，而是原始資料檔
+ *     沒有寫日期，只有寫季，這樣你才能說原始檔讀不到日期，而不留白」。
+ *   留白的話使用者分不出「程式沒做」與「原始檔真的沒寫」。
+ * ⚠️ 只在開關打開時才出現；關掉就整行不寫（連「讀不到」也不寫），
+ *   因為那時使用者根本不想看到這一欄。
+ */
+function surveyDateLine(row, code) {
+  /*
+   * ⚠️ 用 `=== false` 而不是 `!state.showSurveyDate`：
+   *   舊的存檔沒有這個欄位（undefined），那時要**顯示**（預設開）。
+   *   用 `!` 的話舊存檔會不顯示，但勾選框卻是勾著的——當場對不起來。
+   */
+  if (state.showSurveyDate === false) return "";
+  const iso = effectiveSurveyDate(row, code);
+  if (!iso)
+    return '<br><small class="survey-date muted-cell">原始檔讀不到日期</small>';
+  const yearStyle = state.yearStyle === "ad" ? "ad" : "roc";
+  return (
+    '<br><small class="survey-date">調查日 ' +
+    esc(globalThis.PeriodDate.surveyDateInYearStyle(iso, yearStyle)) +
+    "</small>"
+  );
 }
 
 /*
@@ -3157,9 +3279,11 @@ function periodLabelFromRows(period, rows) {
   const yearStyle = state.yearStyle === "ad" ? "ad" : "roc";
   if (state.periodDisplay !== "month")
     return globalThis.PeriodDate.quarterInYearStyle(period, yearStyle);
+  /* ⚠️ 走 effectiveSurveyDate：使用者指定過哪一個才對，這裡要跟著走。 */
   const dates = (rows || [])
-    .filter((x) => x.period === period && x.surveyDate)
-    .map((x) => x.surveyDate);
+    .filter((x) => x.period === period)
+    .map((x) => effectiveSurveyDate(x, x.projectCode))
+    .filter(Boolean);
   return globalThis.PeriodDate.periodDisplayLabel(period, dates, "month", yearStyle);
 }
 /** 目前 Project 的期別顯示，只能採用目前計畫自己的原始明細日期。 */
@@ -3292,6 +3416,15 @@ async function parseFile(file, year, q, defSpeed) {
       source: file.name,
       /* 只作顯示用；rowKey 與 id 都不含它，覆蓋判斷完全不受影響。 */
       surveyDate: surveyDateFound ? surveyDateFound.iso : "",
+      /*
+       * 同一份檔案讀到兩個以上不同日期時的全部候選（第一個＝系統採用的）。
+       * ⚠️ 一定要**存下來**：原始檔匯完就不在手上了，事後執行異常檢查
+       *   沒有辦法再掃一次。只有一個日期時不寫這一欄。
+       */
+      surveyDateCandidates:
+        surveyDateFound && surveyDateFound.candidates
+          ? surveyDateFound.candidates
+          : undefined,
     });
   }
   const complete =
@@ -3411,13 +3544,206 @@ function adoptDirectionNames(rows) {
   }
 }
 
+/*
+ * 計畫名稱與編號的長度上限——**三支程式同一組數字**。
+ *
+ * 使用者 2026-09-10 實測（附截圖）：
+ *   「長計畫名稱會撐破卡片」
+ *   「計畫名稱沒問題了，但忘記限制計畫編號（三個程式都是），
+ *     當編號過長時會遮蓋到計畫名稱」
+ *
+ * 另外兩支（路口轉向 lib/final-features.ts 的 PROJECT_NAME_LIMIT／
+ * PROJECT_CODE_LIMIT、全日交通量 tests/project-name-limit.test.mjs）
+ * 早就做了，這一支 2026-09-20 大檢查才補上。
+ *
+ * ⚠️ 40／20 是產品決定不是技術限制：使用者現有最長的名稱 15 字、
+ *   最長的編號像「11017-RKC02」約 16 字，都很寬裕。
+ */
+const PROJECT_NAME_LIMIT = 40;
+const PROJECT_CODE_LIMIT = 20;
+
+/**
+ * 截字，但**不會把已經超長的既有值一刀砍掉**。
+ *
+ * ⚠️ 直接 `slice(0, limit)` 有一個很難發現的副作用：舊資料裡本來就有
+ *   30 字的編號時，使用者只要點一下那個欄位、什麼都沒改，input 事件
+ *   也可能被觸發（輸入法、瀏覽器自動填），於是**資料被無聲截短**。
+ *   所以上限取「limit 與原值長度的較大者」：既有的超長值可以原樣留著、
+ *   可以刪短，但不能再變得更長。
+ */
+function capText(next, previous, limit) {
+  const allowed = Math.max(limit, (previous || "").length);
+  return next.length <= allowed ? next : next.slice(0, allowed);
+}
+
+/*
+ * maxLength 擋鍵盤輸入、capText 擋貼上——**兩個都要**。
+ * 只設 maxLength 的話，整段貼上仍然進得來。
+ */
+(function capProjectFields() {
+  for (const [id, limit] of [
+    ["projectCode", PROJECT_CODE_LIMIT],
+    ["projectName", PROJECT_NAME_LIMIT],
+  ]) {
+    const input = $(id);
+    if (!input) continue;
+    input.setAttribute("maxlength", String(limit));
+    let previous = input.value;
+    input.addEventListener("input", () => {
+      const capped = capText(input.value, previous, limit);
+      if (capped !== input.value) input.value = capped;
+      previous = input.value;
+    });
+  }
+})();
+
+/**
+ * 把一個計畫的「計畫編號」整批改名。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ *  為什麼需要這一支（使用者 2026-09-20 指名修正）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 舊版 `saveProject` 是這樣找既有計畫的：
+ *   `const i = state.projects.findIndex((p) => p.code === code);`
+ * 所以**改了編號就找不到**，於是走 `push` —— 畫面上多出一個同名但空的計畫，
+ * 原本那個還在，而且**沒有任何訊息說發生了什麼**。
+ *
+ * ⚠️ 這比「多一筆資料」嚴重得多：計畫編號是**全系統的主鍵**。
+ *   速限、別名、方向名稱、速限版本、異常門檻、LOS 門檻與覆寫、三段分法、
+ *   結論範本、報告草稿、已確認異常、每一筆尖峰明細的 id——全部以它為鍵。
+ *   改了編號等於把上面所有東西一次性孤兒化，而使用者只看到「新計畫已建立」。
+ *
+ * ── 做法：**整棵 state 走一遍**，不是逐一列舉 ──
+ *
+ * ⚠️ 刻意**不**寫成「limits 改一下、aliases 改一下、roadMeta 改一下…」。
+ *   那種寫法每加一個以 code 為鍵的新儲存區就會漏掉一個，而漏掉的症狀是
+ *   「資料安靜消失」——最難發現的那一種。改成走訪整棵物件樹：
+ *     ・物件的鍵等於舊編號、或以「舊編號|」開頭 → 換前綴
+ *     ・任何 `projectCode` 欄位等於舊編號 → 換掉
+ *     ・任何 `id` 欄位以「舊編號|」開頭 → 換前綴
+ *   新增的儲存區只要沿用同一種鍵形狀，就自動被涵蓋。
+ *
+ * ⚠️ 撞名一律**擋下來，不自行合併**——與季度改名同一條原則。
+ */
+function renameProjectCode(root, oldCode, newCode) {
+  if (!oldCode || !newCode || oldCode === newCode) return 0;
+  const prefix = oldCode + "|";
+  let touched = 0;
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    /* 先換鍵：鍵等於舊編號，或以「舊編號|」開頭。 */
+    for (const key of Object.keys(node)) {
+      if (key !== oldCode && !key.startsWith(prefix)) continue;
+      const next = key === oldCode ? newCode : newCode + "|" + key.slice(prefix.length);
+      if (next === key) continue;
+      /*
+       * ⚠️ 目標鍵已經存在時**不可以覆蓋**——那會把另一份資料無聲吃掉。
+       *   呼叫端已經先擋過撞名，這裡是第二道；真的撞到就留在原處不動，
+       *   下面的守門（改完之後舊編號一個都不可以剩）會因此轉紅。
+       */
+      if (Object.prototype.hasOwnProperty.call(node, next)) continue;
+      node[next] = node[key];
+      delete node[key];
+      touched += 1;
+    }
+    /* 再換欄位值。 */
+    for (const key of Object.keys(node)) {
+      const value = node[key];
+      if (key === "projectCode" && value === oldCode) {
+        node[key] = newCode;
+        touched += 1;
+        continue;
+      }
+      if (key === "code" && value === oldCode) {
+        node[key] = newCode;
+        touched += 1;
+        continue;
+      }
+      if (key === "id" && typeof value === "string" && value.startsWith(prefix)) {
+        node[key] = newCode + "|" + value.slice(prefix.length);
+        touched += 1;
+        continue;
+      }
+      walk(value);
+    }
+  };
+  walk(root);
+  if (root.activeCode === oldCode) {
+    root.activeCode = newCode;
+    touched += 1;
+  }
+  return touched;
+}
+
 $("saveProject").onclick = async () => {
-  const code = $("projectCode").value.trim(),
-    name = $("projectName").value.trim();
+  const code = capText($("projectCode").value.trim(), "", PROJECT_CODE_LIMIT),
+    name = capText($("projectName").value.trim(), "", PROJECT_NAME_LIMIT);
   if (!code || !name) return toast("請完整輸入計畫編號與名稱");
   // 所有設定都以「計畫編號|…」當鍵值，編號含有「|」會讓刪除計畫時
   // 連同另一個計畫的設定一起被清掉。
   if (code.includes("|")) return toast("計畫編號不可包含「|」符號");
+  /*
+   * ══════════════════════════════════════════════════════════════════
+   *  改「計畫編號」＝改主鍵，要整批搬，不可以安靜新建一個空計畫
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 使用者 2026-09-20 指名修正。舊版只用 `findIndex(p => p.code === code)`，
+   * 改了編號就找不到 → 走 push → 畫面上多一個同名但空的計畫、原本那個還在，
+   * 而且訊息只寫「新計畫已建立」。詳見 renameProjectCode 的說明。
+   *
+   * ⚠️ 判斷「這是改名還是新建」的依據是**上面那個「要編輯的計畫」下拉**，
+   *   不是「輸入的編號存不存在」——後者分不出
+   *   「改成一個新編號」與「本來就想建一個新計畫」。
+   */
+  const editing = ($("projectPicker")?.value || "").trim();
+  const renaming =
+    editing && editing !== code && state.projects.some((x) => x.code === editing);
+  if (renaming) {
+    /*
+     * ⚠️ 撞名一律擋下來，**不自行合併**——與季度改名同一條原則。
+     *   合併看起來像幫使用者省事，實際上是把兩個計畫的資料混在一起，
+     *   而且事後分不回來。
+     */
+    if (state.projects.some((x) => x.code === code))
+      return toast(
+        `已經有一個計畫的編號是「${code}」了。系統不會把兩個計畫合併——` +
+          `請先改用別的編號，或到那個計畫確認之後再處理。`,
+      );
+    const own = state.details.filter((x) => x.projectCode === editing).length;
+    if (
+      !confirm(
+        `要把計畫編號從「${editing}」改成「${code}」嗎？\n\n` +
+          `計畫編號是全系統的主鍵。這個動作會一併搬移這個計畫的\n` +
+          `${own} 筆尖峰明細，以及速限、速限版本、別名、方向名稱、\n` +
+          `LOS 門檻與覆寫、三段分法、異常門檻、結論範本、報告草稿\n` +
+          `與已確認異常。\n\n` +
+          `資料不會遺失，但建議先到「備份與淨空」下載一份專案包。\n\n` +
+          /*
+           * ⚠️ 這一句是**必要的**，不是客套話。
+           *   「改編號」與「新增一個計畫」在這張表單上長得一模一樣：
+           *   都是把編號欄改成一個新值再按儲存。判斷依據是上面那個
+           *   「要編輯的計畫」下拉，而使用者不一定注意到它停在哪一個。
+           *   不寫這一句的話，想新增計畫的人會在這裡按下確定，
+           *   結果把原本那個計畫改名了——而他要的是兩個計畫。
+           */
+          `如果你其實是想「新增一個計畫」，請按取消，\n` +
+          `再把「要編輯的計畫」選單改成「＋ 建立新計畫」，然後重新儲存。`,
+      )
+    )
+      return;
+    renameProjectCode(state, editing, code);
+    const i = state.projects.findIndex((p) => p.code === code);
+    if (i >= 0) state.projects[i] = { code, name };
+    state.activeCode = code;
+    await save();
+    renderAll();
+    return toast(`計畫編號已從「${editing}」改成「${code}」，相關資料一併搬移完成。`);
+  }
   const i = state.projects.findIndex((p) => p.code === code);
   if (i >= 0) state.projects[i] = { code, name };
   else state.projects.push({ code, name });
@@ -4029,6 +4355,38 @@ $("commit").onclick = async () => {
   importPeriodTouched = false;
   await save();
   toast(`寫入完成：新增 ${batch.added}、更新 ${batch.updated}、略過 ${batch.skipped}`);
+  /*
+   * ⚠️ 匯入時的方向名稱提醒：**只提醒，絕對不阻擋**（使用者 2026-09-20 指定
+   *   「匯入時也可以做異常提醒，但不阻擋匯入」）。
+   *
+   *   所以它擺在**寫入完成之後**，而且只是多一個 toast。放在寫入之前、
+   *   或做成需要按確認的視窗，都等於變相阻擋——使用者急著匯入十幾份檔案時，
+   *   一個擋路的提醒會被無腦按掉，那比不提醒更糟。
+   *
+   * ⚠️ 只看**這一批真的寫進去的路段**，不是全部路段。
+   *   掃全部的話，使用者每匯一次就被提醒一次早就看過、也決定不改的那幾條。
+   */
+  try {
+    const touchedRoads = [...new Set(pending.map((r) => r.road).filter(Boolean))];
+    const unpaired = [];
+    for (const road of touchedRoads) {
+      const meta = roadMeta(road);
+      const verdict = globalThis.DirectionPair.judgeDirectionPair(
+        meta.directionA || "",
+        meta.directionB || "",
+      );
+      if (verdict.kind === "mismatched")
+        unpaired.push(`${road}（${meta.directionA}／${meta.directionB}）`);
+    }
+    if (unpaired.length)
+      toast(
+        `提醒（不影響這次匯入）：${unpaired.length} 條路段的方向名稱看起來不成對——` +
+          `${unpaired.slice(0, 3).join("、")}${unpaired.length > 3 ? "…" : ""}。` +
+          `到「資料維護 → 執行資料異常檢查」可以看完整清單並逐條確認。`,
+      );
+  } catch {
+    /* 提醒失敗不可以影響匯入結果。 */
+  }
   pending = [];
   roadAlert.style.display = "none";
   renderPreview();
@@ -4661,6 +5019,15 @@ function renderSummaryFilterNotes(full, shown) {
       : "");
 }
 function renderDetails() {
+  /*
+   * ⚠️ 開關的勾選狀態要從 state 回填。不回填的話，重新整理之後
+   *   畫面上的勾是 HTML 寫死的「勾著」，但實際行為跟著 state 走——
+   *   兩邊當場對不起來。
+   */
+  {
+    const box = $("detailShowSurveyDate");
+    if (box) box.checked = state.showSurveyDate !== false;
+  }
   const q = normalize($("detailSearch")?.value || ""),
     code = state.activeCode;
   /*
@@ -4688,7 +5055,7 @@ function renderDetails() {
     ? rows
         .map(
           (x) =>
-            `<tr><td>${esc(projectPeriodLabel(x.period, code))}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, Number.isInteger(Number(x.limit)) ? 0 : 1)}</td><td>${losChip(x.los)}</td></tr>`,
+            `<tr><td>${esc(projectPeriodLabel(x.period, code))}${surveyDateLine(x, code)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}</td><td>${esc(rowDirectionName(x))}</td><td>${fmt(x.travel, 3)}</td><td>${fmt(x.running, 3)}</td><td>${fmt(x.totalDelay, 3)}</td><td>${fmt(x.limit, Number.isInteger(Number(x.limit)) ? 0 : 1)}</td><td>${losChip(x.los)}</td></tr>`,
         )
         .join("")
     : `<tr><td colspan="10" class="empty">${
@@ -4704,6 +5071,15 @@ function renderDetails() {
   detailFilter.mount(searched, all, ownAll);
 }
 function renderSummaries() {
+  /*
+   * ⚠️ 開關的勾選狀態要從 state 回填。不回填的話，重新整理之後
+   *   畫面上的勾是 HTML 寫死的「勾著」，但實際行為跟著 state 走——
+   *   兩邊當場對不起來。
+   */
+  {
+    const box = $("summaryShowSurveyDate");
+    if (box) box.checked = state.showSurveyDate !== false;
+  }
   const q = normalize($("summarySearch")?.value || ""),
     code = state.activeCode;
   /*
@@ -4757,7 +5133,7 @@ function renderSummaries() {
              *   **候選是哪幾筆**。不寫的話，同一個路段在兩種條件下
              *   會給出兩個不同的代表值，而使用者看不出是從哪裡挑的。
              */
-            `<tr><td>${esc(projectPeriodLabel(x.period, code))}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}${
+            `<tr><td>${esc(projectPeriodLabel(x.period, code))}${surveyDateLine(x, code)}</td><td>${esc(x.road)}</td><td>${esc(x.day)}</td><td>${esc(x.peak)}${
               x.pickedFrom && summaryNarrowed
                 ? `<br><small class="muted-cell">候選：${esc(x.pickedFrom)}</small>`
                 : ""
@@ -5381,6 +5757,31 @@ $("resetLosRules").onclick = async () => {
 };
 $("detailSearch").oninput = renderDetails;
 $("summarySearch").oninput = renderSummaries;
+/*
+ * 「顯示調查日期」開關（使用者 2026-09-20）。
+ *
+ * ⚠️ 明細與彙總各有一顆，但寫的是**同一個** state.showSurveyDate：
+ *   兩顆各存各的話，同一份資料在兩張表上會一張有日期一張沒有，
+ *   使用者會以為是資料的問題。所以改完要把兩顆一起同步回畫面。
+ * ⚠️ 要存進 state（而不是只放在 DOM）：重新整理之後還記得使用者的選擇，
+ *   與「期別顯示」「年份寫法」兩顆的做法一致。
+ */
+async function setShowSurveyDate(on) {
+  state.showSurveyDate = Boolean(on);
+  const d = $("detailShowSurveyDate");
+  const s = $("summaryShowSurveyDate");
+  if (d) d.checked = state.showSurveyDate;
+  if (s) s.checked = state.showSurveyDate;
+  await save();
+  renderDetails();
+  renderSummaries();
+}
+if ($("detailShowSurveyDate"))
+  $("detailShowSurveyDate").onchange = (e) =>
+    void setShowSurveyDate(e.target.checked);
+if ($("summaryShowSurveyDate"))
+  $("summaryShowSurveyDate").onchange = (e) =>
+    void setShowSurveyDate(e.target.checked);
 $("rebuild").onclick = async () => {
   rebuild();
   await save();
@@ -5688,7 +6089,40 @@ async function downloadCardCharts(gridId, zipName) {
   chartDownloadToast(await downloadChartImages(items, zipName));
 }
 
-function chartCardNote(title, lead, lines) {
+/**
+ * 圖旁說明的一整份。
+ *
+ * ⚠️ 四級的分工（使用者 2026-09-20 定案，三支一致）：
+ *   title + lines ＝ 第 1、2 級（這是什麼圖、圖上讀得出來的事實）
+ *   levels.state  ＝ 第 3 級「代表什麼狀況」——**每張圖都要寫得出來**
+ *   levels.action ＝ 第 4 級「要怎麼處理」——寫不出具體的就不給，
+ *                    這裡看到沒有就**整段不畫**，不可以留一個空標題。
+ *
+ * ⚠️ 第 3、4 級的判定一律走 chart-levels.js（三支逐位元同一份規則），
+ *   **不可以在這裡自己寫一套區間**——自己寫的結果是同一個數字在三支
+ *   被說成不同的狀況，而使用者會把三種說法都抄進同一份報告。
+ * ⚠️ 第 3、4 級與第 1、2 級放在**同一個框**裡，不另開一塊：
+ *   分成兩塊的話捲動時會各自對齊，圖與文字的對應關係就斷了。
+ */
+function chartCardNote(title, lead, lines, levels) {
+  var extra = (globalThis.ChartLevels
+    ? globalThis.ChartLevels.levelSections(levels)
+    : []
+  )
+    .map(function (section) {
+      return (
+        '<section class="figure-note-level"><h5>' +
+        esc(section.title) +
+        "</h5>" +
+        section.lines
+          .map(function (line) {
+            return "<p>" + esc(line) + "</p>";
+          })
+          .join("") +
+        "</section>"
+      );
+    })
+    .join("");
   return (
     '<details class="figure-note card-note">' +
     "<summary><b>" + esc(title) + "</b>" +
@@ -5707,6 +6141,7 @@ function chartCardNote(title, lead, lines) {
     "</summary>" +
     '<div class="figure-note-body">' +
     lines.map(function (line) { return "<p>" + line + "</p>"; }).join("") +
+    extra +
     "</div>" +
     "</details>"
   );
@@ -5760,7 +6195,38 @@ function losCardScript(road, rows, code) {
     "⚠️ 等級是由速限比判定的，和旅行速率的絕對值不是同一件事——" +
       "速限不同的路段，同樣的速率可能落在不同等級。要看速率本身請對照「各路段歷季旅行速率」。",
   );
-  return chartCardNote("這張圖在說什麼", lead, lines);
+  /*
+   * 第 3、4 級（使用者 2026-09-20）：LOS 圖判讀的是「最差落在哪一級、
+   * 有幾筆掉進使用者自己設定的壅塞段」。
+   * ⚠️ 壅塞的起始等級要用**這個路段這一季實際套用的那一組**（bandsFor 會
+   *   解析季別×路段的覆寫），不可以用計畫預設——那兩者可能不同，
+   *   用錯的話文字會說「還沒進壅塞段」而圖上明明已經紅了。
+   */
+  /*
+   * ⚠️ 要用 bandHitFor（會解析「季別區間 × 路段」的覆寫），不是 bandsFor：
+   *   bandsFor 只回計畫預設，這個路段這一季如果設過覆寫，兩者會不同——
+   *   用錯的話文字會說「還沒進壅塞段」而圖上明明已經紅了。
+   */
+  /* ⚠️ bandHitFor 回的是 { rules, tier, … }，分界在 .rules 裡面。 */
+  var bands = bandHitFor(last, road, code).rules;
+  var congestedIndex = LOS_GRADES.indexOf(bands.congestedStart);
+  var worst = withLos.reduce(function (acc, r) {
+    var rank = LOS_GRADES.indexOf(r.los);
+    return rank > acc ? rank : acc;
+  }, -1);
+  var congestedCount = withLos.filter(function (r) {
+    return LOS_GRADES.indexOf(r.los) >= congestedIndex && congestedIndex >= 0;
+  }).length;
+  var levels =
+    worst >= 0 && globalThis.ChartLevels
+      ? globalThis.ChartLevels.losLevels(
+          LOS_GRADES[worst],
+          bands.congestedStart,
+          congestedCount,
+          withLos.length,
+        )
+      : null;
+  return chartCardNote("這張圖在說什麼", lead, lines, levels);
 }
 
 /** 各路段歷季旅行速率的說明。 */
@@ -5806,7 +6272,27 @@ function speedCardScript(road, own, code) {
     "⚠️ 速率高不等於服務水準好：等級是拿速率和該路段的速限相比得出來的。" +
       "兩條速限不同的路段，速率一樣但等級可能不同，請對照「各路段 LOS 圖」。",
   );
-  return chartCardNote("這張圖在說什麼", lead, lines);
+  /*
+   * 第 3、4 級（使用者 2026-09-20）：速率圖判讀的是**歷季的變化幅度**。
+   * ⚠️ 只看平日那一條：平日與假日本來就不該相等，把兩條混在一起算變化
+   *   會得到一個不對應任何一天的數字。平日算不出來時整段不寫。
+   */
+  var weekdayPeriods = periods.filter(function (period) {
+    return pick(period, "平日") !== null;
+  });
+  var levels = null;
+  if (
+    globalThis.ChartLevels &&
+    weekdayPeriods.length >= 2 &&
+    firstWeekday !== null &&
+    firstWeekday > 0 &&
+    lastWeekday !== null
+  )
+    levels = globalThis.ChartLevels.trendChangeLevels(
+      ((lastWeekday - firstWeekday) / firstWeekday) * 100,
+      weekdayPeriods.length,
+    );
+  return chartCardNote("這張圖在說什麼", lead, lines, levels);
 }
 
 function renderTravelCharts(rows, gridId, labelPeriod = projectPeriodLabel) {
@@ -6649,6 +7135,13 @@ function projectPackage() {
      */
     conclusionTemplates: (state.conclusionTemplates || {})[p.code] || [],
     /*
+     * 「同一份檔案有兩個日期，哪一個才對」的指定也要跟著專案包走。
+     * ⚠️ 不帶的話，換一台電腦匯入之後系統會退回自己判讀的那一個日期，
+     *   明細上的調查日期與期別顯示的調查月份**當場變成另一天**，
+     *   而畫面只會說「匯入成功」。
+     */
+    surveyDateOverrides: (state.surveyDateOverrides || {})[p.code] || {},
+    /*
      * 還原點（「版本差異與還原」那一份）也要跟著專案包走。
      *
      * ⚠️ 舊版只有**全部計畫**的組合包帶走 operations，單一計畫的專案包沒帶。
@@ -6708,6 +7201,8 @@ portfolioBtn.onclick = () => {
         bandRuleScopes: state.bandRuleScopes || {},
         /* 條件範本（依計畫代碼分組），理由同 projectPackage。 */
         conclusionTemplates: state.conclusionTemplates || {},
+        /* 調查日期的指定（依計畫代碼分組），理由同 projectPackage。 */
+        surveyDateOverrides: state.surveyDateOverrides || {},
       },
       null,
       2,
@@ -6738,6 +7233,7 @@ function looksLikeLegacyBackup(x) {
     "losRuleScopes",
     "bandRules",
     "bandRuleScopes",
+    "surveyDateOverrides",
   ];
   return bags.some((k) => x[k] && typeof x[k] === "object");
 }
@@ -6836,6 +7332,13 @@ $("restoreFile").onchange = async (e) => {
       state.conclusionTemplates = state.conclusionTemplates || {};
       if (Array.isArray(x.conclusionTemplates))
         state.conclusionTemplates[x.project.code] = x.conclusionTemplates;
+      /*
+       * 調查日期的指定：理由同條件範本——專案包裡有才覆蓋，
+       * 舊版專案包沒有這一欄時維持這台電腦原本的，不要清空。
+       */
+      state.surveyDateOverrides = state.surveyDateOverrides || {};
+      if (x.surveyDateOverrides && typeof x.surveyDateOverrides === "object")
+        state.surveyDateOverrides[x.project.code] = x.surveyDateOverrides;
       /*
        * 還原點：專案包裡有就換成它的（這個計畫的整份替換）。
        * 沒有（舊版專案包）就維持原本的——理由同上面的條件範本。
@@ -7507,10 +8010,36 @@ function roadSignature(s) {
 /**
  * 一筆異常的指紋——「已確認」是記在這把鑰匙上的。
  *
- * ⚠️ 一定要帶 detail。它裡面有數字（「總延滯增加 30.7%」），
+ * ⚠️ **多數類別一定要帶 detail**。它裡面有數字（「總延滯增加 30.7%」），
  *   所以數字一變指紋就變，上一次的確認**自動失效**、這一筆會重新出現。
  *   少了它，確認過一次之後同一個路段就再也不會提醒，
  *   而使用者完全不知道自己把後來更嚴重的變化按掉了。
+ *   ——這個理由對「異常變化」「數值異常」成立，**不可以拿掉**。
+ *
+ * ⚠️ 但**有一個類別剛好相反**，而且 2026-09-20 使用者實際踩到了：
+ *
+ *   使用者原話：「我將路段車流方向手動修正為 北上/南下，導致我每季匯入資料，
+ *   每一次都抓出車流方向不一致的問題。怎會把我手動修改這件事當作異常來回報給我呢?」
+ *
+ *   「方向對應不一致」的 detail 是
+ *     「不同報告把這個方向寫成：A--->B、B--->A」
+ *   ——**目前所有季度出現過的寫法全部列出來**。於是：
+ *     ・又匯入一季、那一季多了一種寫法 → detail 變 → 指紋變 → 確認失效
+ *     ・甚至同樣的內容、只是匯入順序不同 → Set 的排列順序不同 → 指紋一樣會變
+ *
+ *   可是**使用者確認的是「這兩季講的是同一個方向」這件事，不是那一串字**。
+ *   多一種寫法不代表出現了新問題，所以不該重新提醒。
+ *
+ *   ⚠️ 附帶後果：舊指紋永遠不會再對上，`state.ackedIssues` 只進不出，
+ *   使用者看不見地一直長大（見 pruneOrphanAcks）。
+ *
+ * 所以改成**逐類別決定**：`ackScope: "identity"` 的類別，指紋只看
+ * 「這是哪一筆」（代碼＋期間＋路段／日別／項目），不看說明文字；
+ * 其餘維持原本的行為。
+ *
+ * ⚠️ 用 `code` 而不是 `type`：同一個 type（「數值異常」）底下有兩種不同的檢查，
+ *   它們的 type／期間／路段／項目完全一樣，**以前只靠 detail 區分**。
+ *   若哪天要把某一種也改成 identity，沒有 code 就會與另一種撞成同一把鑰匙。
  */
 function issueFingerprint(issue) {
   /*
@@ -7519,15 +8048,49 @@ function issueFingerprint(issue) {
    *   要嘛是罕見符號而踩到字型守門（微軟正黑體沒有的字會顯示成空白，
    *   雖然這個字串不會顯示，但守門不分場合——它是對的，不該為它開例外）。
    */
-  return JSON.stringify([
-    issue.type,
+  const parts = [
+    issue.code || issue.type,
     issue.fromPeriod || "",
     issue.period || "",
     issue.road || "",
     issue.day || "",
     issue.item || "",
-    issue.detail || "",
-  ]);
+    issue.ackScope === "identity" ? "" : issue.detail || "",
+  ];
+  /*
+   * ⚠️ choices 有值才加第 8 格，**不可以無條件加一格空的**：
+   *   無條件加的話每一種舊異常的指紋字串都會變長，使用者先前按過的
+   *   「已人工確認」會全部失效、當場重新冒出來——正是本版剛修掉的那個
+   *   「每季又冒出來」的 bug，不要在同一版裡用另一種方式重演一次。
+   * ⚠️ 反過來，候選日期**必須**進指紋：本來兩個候選、重新匯入後變三個，
+   *   那是新的狀況，要重新提醒。
+   */
+  if (issue.choices && issue.choices.length)
+    parts.push(issue.choices.join("|"));
+  return JSON.stringify(parts);
+}
+
+/**
+ * 清掉「再也對不上任何一筆現存異常」的確認紀錄。
+ *
+ * 使用者 2026-09-20 問：「那我看完後我要怎麼點選確認，讓之後不會一直出現?
+ * 不然資料會累積越來越多」。他擔心的是畫面上的清單，但**真正會無限長大的
+ * 是使用者看不到的 `state.ackedIssues`**：指紋一變，舊紀錄就永遠是孤兒。
+ *
+ * ⚠️ 只在「這一輪真的跑完整檢查」之後清，而且只清孤兒。
+ *   資料還沒匯入就清，會把使用者上一季的確認全部誤殺。
+ */
+function pruneOrphanAcks(issues) {
+  if (!state.activeCode) return false;
+  const own = (state.ackedIssues && state.ackedIssues[state.activeCode]) || {};
+  const keys = Object.keys(own);
+  if (!keys.length) return false;
+  const alive = new Set(issues.filter(issueCanAck).map(issueFingerprint));
+  const kept = {};
+  for (const k of keys) if (alive.has(k)) kept[k] = own[k];
+  if (Object.keys(kept).length === keys.length) return false;
+  state.ackedIssues = { ...state.ackedIssues, [state.activeCode]: kept };
+  return true;
 }
 /** 這個計畫已經確認過的指紋表（唯讀，沒有就回空物件）。 */
 function ackMap() {
@@ -7541,7 +8104,7 @@ function issueAcked(issue) {
   return issueCanAck(issue) && Boolean(ackMap()[issueFingerprint(issue)]);
 }
 /** 按下「已確認」／「取消確認」。 */
-async function setIssueAck(fingerprint, on) {
+async function setIssueAck(fingerprint, on, options) {
   if (!state.activeCode) return;
   if (!state.ackedIssues) state.ackedIssues = {};
   const own = { ...(state.ackedIssues[state.activeCode] || {}) };
@@ -7549,6 +8112,12 @@ async function setIssueAck(fingerprint, on) {
   else delete own[fingerprint];
   state.ackedIssues = { ...state.ackedIssues, [state.activeCode]: own };
   await save();
+  /*
+   * ⚠️ silent 只給「呼叫端自己會出一句更完整的提示」的情形用
+   *   （例如指定調查日期：那一句要寫出指定成哪一天）。
+   *   兩句一起跳的話後一句會蓋掉前一句，使用者只看得到半件事。
+   */
+  if (options && options.silent) return;
   toast(on ? "已記錄為「已確認」，下次檢查不再提醒。" : "已取消確認，這一筆會重新提醒。");
 }
 const RESOLUTION_KIND_CLASS = {
@@ -7578,6 +8147,38 @@ function issueResolutionCell(issue) {
         '">前往「' +
         esc(r.viewLabel || r.view) +
         '」</button>'
+      : "") +
+    /*
+     * 「哪一個才是調查日期」的下拉（使用者 2026-09-20）。
+     * 只有帶 choices 的異常有。
+     *
+     * ⚠️ 預設值刻意是空的「請指定…」，**不預選系統判讀的那一個**：
+     *   預選的話使用者按下去也看不出自己到底有沒有做過選擇。
+     */
+    (issue.choices && issue.choices.length && issue.choiceScope
+      ? '<label class="resolution-pick">指定調查日期<select data-pick-scope="' +
+        esc(issue.choiceScope) +
+        '" data-pick-key="' +
+        esc(issueFingerprint(issue)) +
+        '"><option value="">請指定…</option>' +
+        issue.choices
+          .map(function (iso) {
+            const own =
+              ((state.surveyDateOverrides || {})[state.activeCode] || {})[
+                issue.choiceScope
+              ] || "";
+            return (
+              '<option value="' +
+              esc(iso) +
+              '"' +
+              (iso === own ? " selected" : "") +
+              ">" +
+              esc(globalThis.PeriodDate.readableDate(iso)) +
+              "</option>"
+            );
+          })
+          .join("") +
+        "</select></label>"
       : "") +
     /*
      * 「已確認」鈕（使用者 2026-09-17）。
@@ -7612,6 +8213,38 @@ function bindIssueButtons(body) {
     const ack = event.target.closest?.("[data-ack-key]");
     if (ack) void setIssueAck(ack.dataset.ackKey, ack.dataset.ackOn === "1");
   });
+  /*
+   * 調查日期的下拉是 change 不是 click，所以要另外委派一次。
+   * ⚠️ 同樣綁在 tbody 上、同樣只綁一次（共用上面那個 dataset 旗標）。
+   */
+  body.addEventListener("change", function (event) {
+    const pick = event.target.closest?.("[data-pick-scope]");
+    if (pick) void setSurveyDatePick(pick.dataset.pickScope, pick.dataset.pickKey, pick.value);
+  });
+}
+/**
+ * 使用者指定了「哪一個才是調查日期」。
+ *
+ * ⚠️ 要**同時**寫覆寫與記為已確認：只寫覆寫的話這一列會一直掛著，
+ *   只記確認的話系統仍然在用它自己猜的那一個日期。
+ * ⚠️ 選回「請指定…」＝收回指定，覆寫與確認兩邊都要拿掉，
+ *   否則會留下一個「已確認但沒有指定」的狀態，使用者看不懂。
+ */
+async function setSurveyDatePick(scope, ackKey, iso) {
+  if (!state.activeCode || !scope) return;
+  state.surveyDateOverrides = state.surveyDateOverrides || {};
+  const own = { ...(state.surveyDateOverrides[state.activeCode] || {}) };
+  if (iso) own[scope] = iso;
+  else delete own[scope];
+  state.surveyDateOverrides[state.activeCode] = own;
+  await setIssueAck(ackKey, Boolean(iso), { silent: true });
+  await save();
+  renderAll();
+  toast(
+    iso
+      ? `已指定調查日期為 ${globalThis.PeriodDate.readableDate(iso)}；明細、彙總與期別顯示都會改用這一個，並記為已確認。`
+      : "已取消指定，這一筆會重新提醒。",
+  );
 }
 function inspectHealth() {
   const rows = state.details.filter((x) => x.projectCode === state.activeCode),
@@ -7621,6 +8254,7 @@ function inspectHealth() {
     const clean = stripRoadSuffix(road);
     if (clean !== road)
       issues.push({
+        code: "name-invalid",
         type: "異常名稱",
         period: "全部",
         road,
@@ -7641,6 +8275,7 @@ function inspectHealth() {
     const names = [...new Set(variants)];
     if (names.length > 1)
       issues.push({
+        code: "name-duplicate",
         type: "名稱疑似重複",
         period: "全部",
         item: names.join("／"),
@@ -7712,6 +8347,12 @@ function inspectHealth() {
        */
       if (roadMeta(road).directionConfirmed) continue;
       issues.push({
+        code: "direction-mismatch",
+        /*
+         * ⚠️ 這一類的確認是釘在「這一筆」上，不是釘在說明文字上。
+         *   理由見 issueFingerprint 的說明（使用者 2026-09-20 實際踩到）。
+         */
+        ackScope: "identity",
         type: "方向對應不一致",
         period: "全部",
         item: `${road}／${direction}`,
@@ -7724,6 +8365,51 @@ function inspectHealth() {
         },
       });
     }
+  /*
+   * ══════════════════════════════════════════════════════════════════
+   *  方向顯示名稱「成不成對」（使用者 2026-09-20 指定）
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 使用者原話：「其中『北』對應『南』，『東』對應『西』，不管方向後面
+   * + 了什麼字……如果出現不成對的話，請在異常檢查中檢查出來（匯入時也可以
+   * 做異常提醒，但不阻擋匯入），由使用者手動去按確認（堅持是對的話），
+   * 或自行修正資料後，重新匯入」
+   *
+   * ⚠️ 這與上面的「方向對應不一致」是**兩件不同的事**：
+   *   ・上面看的是**原始報告上寫的旅次順序**，防的是調查員換了起跑方向；
+   *   ・這一段看的是**使用者自己取的顯示名稱**，防的是打錯字。
+   *   兩者並存，不可以合併。
+   *
+   * ⚠️ 判定一律走 direction-pair.js（三支同一套規則，由
+   *   direction-pair-contract.mjs 釘住），**不可以在這裡自己寫一份**。
+   *   自己寫一份的結果是同一個名稱在三支得到不同結論。
+   */
+  for (const road of [...new Set(rows.map((d) => d.road))]) {
+    const meta = roadMeta(road);
+    const a = meta.directionA || "";
+    const b = meta.directionB || "";
+    const verdict = globalThis.DirectionPair.judgeDirectionPair(a, b);
+    if (verdict.kind !== "mismatched") continue;
+    issues.push({
+      code: "direction-not-paired",
+      /*
+       * ⚠️ 這一類的確認要釘在「這一筆」上，不是釘在說明文字上——
+       *   理由與 direction-mismatch 相同，見 issueFingerprint 的說明。
+       */
+      ackScope: "identity",
+      type: "方向名稱不成對",
+      period: "全部",
+      road,
+      item: `${road}／${a}｜${b}`,
+      detail: globalThis.DirectionPair.directionPairMessage(a, b, verdict),
+      resolution: {
+        kind: "人工確認",
+        text: "一條路的兩個方向通常是相反的（北對南、東對西）。請到「路段管理 → 方向顯示名稱」核對這兩個名稱：打錯字就改過來；如果這條路確實不是這樣命名的（例如單行道配對、或依地標命名），按下方的「已確認」即可，下次檢查不再提醒。⚠️ 這一項不會阻擋任何操作，也不影響任何計算——方向的鍵值仍然是方向1／方向2。",
+        view: "roadadmin",
+        viewLabel: "路段管理",
+      },
+    });
+  }
   // 分組的 key 用 | 串接，但還原欄位時不能再 split 回來——路段名稱本身可能
   // 含有 |，切出來的片段會變成錯誤的路段／日別，而那些值現在會進到篩選的
   // 下拉選單裡。改成把欄位直接掛在分組上。
@@ -7738,6 +8424,7 @@ function inspectHealth() {
       Number(d.limit) > 0
     ))
       issues.push({
+        code: "value-missing",
         type: "數值異常",
         period: d.period,
         road: d.road,
@@ -7764,6 +8451,7 @@ function inspectHealth() {
       Number(d.travel) > Number(d.running)
     )
       issues.push({
+        code: "value-travel-gt-running",
         type: "數值異常",
         period: d.period,
         road: d.road,
@@ -7782,6 +8470,7 @@ function inspectHealth() {
   for (const g of Object.values(groups))
     if (g.length !== 4)
       issues.push({
+        code: "group-incomplete",
         type: "資料組不完整",
         period: g.period,
         road: g.road,
@@ -7823,6 +8512,7 @@ function inspectHealth() {
       if (!days.size) continue;
       if (!days.has("平日") || !days.has("假日"))
         issues.push({
+          code: "day-incomplete",
           type: "日別不完整",
           period,
           road,
@@ -7846,6 +8536,7 @@ function inspectHealth() {
   for (const [key, meta] of limitKeys)
     if (!state.limitConfirmed[key])
       issues.push({
+        code: "limit-unconfirmed",
         type: "速限未確認",
         period: "全部",
         road: meta.road,
@@ -7858,6 +8549,62 @@ function inspectHealth() {
           viewLabel: "路段速限",
         },
       });
+  /*
+   * ══════════════════════════════════════════════════════════════════
+   *  同一份檔案讀到兩個以上的調查日期（使用者 2026-09-20，三支同步）
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 使用者原話：「同一張表若你判讀到 2 個日期，在資料匯入時就應該做為異常
+   * 顯示提醒使用者，在異常資料檢查結果也要檢查出來，我在想的是你要如何讓
+   * 使用者告訴你哪個才是正確的日期（因為有可能另一個不同的日期在該資料中
+   * 有其意義存在，所以使用者不會修正資料）」
+   *
+   * ⚠️ 分組鍵是`季別|來源檔名`，不是路段：一份檔案會產出四筆明細
+   *   （上午／下午 × 方向1／方向2），用路段分組會把同一件事報好幾次。
+   * ⚠️ 候選是匯入當下存進明細的（surveyDateCandidates），這裡只是撿出來，
+   *   **不會再去碰原始檔**——原始檔匯完就不在手上了。
+   */
+  const dateGroups = new Map();
+  for (const d of rows) {
+    const candidates = d.surveyDateCandidates;
+    if (!Array.isArray(candidates) || candidates.length < 2) continue;
+    const key = surveyDateScopeKey(d);
+    if (dateGroups.has(key)) continue;
+    dateGroups.set(key, d);
+  }
+  for (const [key, row] of dateGroups) {
+    const candidates = row.surveyDateCandidates;
+    const chosen = effectiveSurveyDate(row);
+    const picked = ((state.surveyDateOverrides || {})[state.activeCode] || {})[key];
+    issues.push({
+      code: "survey-date-multi",
+      type: "調查日期不只一個",
+      period: row.period,
+      road: row.road,
+      day: row.day,
+      item: row.source || "（沒有來源檔名）",
+      /*
+       * ⚠️ detail 裡有「你指定的／尚未指定」會變的字，所以這一類走
+       *   ackScope: "identity"，指紋不看 detail；候選清單另外用 choices
+       *   進指紋（候選真的變了才重新提醒）。
+       */
+      ackScope: "identity",
+      choices: candidates,
+      choiceScope: key,
+      detail:
+        `這份檔案讀到 ${candidates.length} 個不同的日期（` +
+        candidates.map((iso) => globalThis.PeriodDate.readableDate(iso)).join("、") +
+        `）。目前採用的是「${chosen ? globalThis.PeriodDate.readableDate(chosen) : "無"}」` +
+        (picked ? "（你指定的）" : "（系統依標籤判讀的，尚未指定）") +
+        "。請用這一列的「指定調查日期」選單挑出哪一個才對。",
+      resolution: {
+        kind: "人工確認",
+        text: "同一份檔案上找到兩個以上不同的日期，系統無從判斷哪一個才是調查日期（另一個可能是製表、複核或現場補測的日期，本來就該留在表上）。請用這一列的「指定調查日期」選單挑出正確的調查日期，挑完就會記為已確認，尖峰明細、彙總與「期別顯示調查月份」都會改用你指定的那一個。系統不會自己挑、也不會取平均——這一項不影響速率、延滯或服務水準的任何計算。",
+        view: "detail",
+        viewLabel: "尖峰明細",
+      },
+    });
+  }
   for (const road of roads)
     for (const day of ["平日", "假日"]) {
       const seq = state.summaries
@@ -7870,6 +8617,7 @@ function inspectHealth() {
           speedChange = prev.travel ? Math.abs(now.travel - prev.travel) / prev.travel : 0;
         if (drop >= 2 || speedChange >= 0.25)
           issues.push({
+            code: "trend-change",
             type: "異常變化",
             // 異常變化是「相鄰兩季之間」的比較，兩端都要記著，
             // 季度區間篩選才能用「比較區間有重疊就列出」的語意。
@@ -7891,6 +8639,8 @@ function inspectHealth() {
   healthIssues = issues;
   healthChecked = true;
   healthStale = false;
+  /* 指紋改過之後留下的孤兒確認紀錄，在這裡清掉（見 pruneOrphanAcks）。 */
+  if (pruneOrphanAcks(issues)) void save();
   renderHealth();
   return issues;
 }
@@ -9177,6 +9927,12 @@ function trendDescriptions(list) {
       /* 說明要講的是**這一張圖**的日別，不是選單上那個「平日＋假日」。 */
       scopeText: trendScopeText(series.day),
       bandText: labels.congested.replace(/^壅塞（|）$/g, ""),
+      /*
+       * 第 3 級要說「有沒有掉進壅塞段」，所以要把**使用者自己設定的**
+       * 壅塞起始等級傳進去。不傳的話那一段只能拿最差等級跟自己比，
+       * 等於永遠說「沒有落入壅塞段」。
+       */
+      congestedStart: bandsFor().congestedStart,
       showPeriod: function (period) {
         return projectPeriodLabel(period, state.activeCode);
       },
@@ -9409,7 +10165,32 @@ function figureRow(figureHtml, script) {
     /* 同上：箭頭用 <i>，不用 CSS content——理由見 chartCardNote()。 */
     '<i class="figure-note-caret" aria-hidden="true">▼</i>' +
     "</summary>" +
-    '<div class="figure-note-body">' + script.body + "</div>" +
+    '<div class="figure-note-body">' +
+    script.body +
+    /*
+     * 第 3、4 級（使用者 2026-09-20）。
+     * ⚠️ 第 4 級沒有內容時**整段不畫**——levelSections 已經處理，
+     *   這裡不可以自己再補一個空標題：畫面上一個只有標題的區塊
+     *   看起來像壞掉，而且使用者會以為系統漏了什麼。
+     */
+    (globalThis.ChartLevels
+      ? globalThis.ChartLevels.levelSections(script.levels)
+          .map(function (section) {
+            return (
+              '<section class="figure-note-level"><h5>' +
+              esc(section.title) +
+              "</h5>" +
+              section.lines
+                .map(function (line) {
+                  return "<p>" + esc(line) + "</p>";
+                })
+                .join("") +
+              "</section>"
+            );
+          })
+          .join("")
+      : "") +
+    "</div>" +
     "</details>" +
     "</div>"
   );
@@ -9736,8 +10517,30 @@ function renderBandPanel() {
         lines.push(
           "有 " + gaps.length + " 季整季沒有資料（圖上是淺色的空槽），不是「那幾季 0%」。",
         );
+      /*
+       * 第 3、4 級（使用者 2026-09-20，三支同步）。
+       *
+       * 三段圖判讀的是**最新一季有多少比例落在壅塞段**，所以第 3 級走
+       * losLevels：把「最新一季壅塞的條數／判定得出的條數」交給它。
+       * ⚠️ 判定一律走 chart-levels.js，**不可以在這裡自己寫一套區間**。
+       * ⚠️ 判定得出等級的條數是 0 時整段不寫（losLevels 會回 null）——
+       *   那時候連分母都沒有，講什麼都是編的。
+       * ⚠️ 最差等級用**實際出現過的最差那一級**，不可以拿壅塞起始等級
+       *   當最差：沒有任何一條落在壅塞段時那樣會說謊。
+       */
+      var bandRule = bandsFor();
+      var bandLevels =
+        globalThis.ChartLevels && last.graded > 0
+          ? globalThis.ChartLevels.losLevels(
+              last.worstLos,
+              bandRule.congestedStart,
+              Number(last.counts.congested) || 0,
+              Number(last.graded) || 0,
+            )
+          : null;
       return {
         title: series.day ? series.day + " 三段組成" : "三段組成",
+        levels: bandLevels,
         /* 重點那一句＝壅塞比例的頭尾對照，收合時只露這一行。 */
         lead: lines[1] || lines[0] || "",
         body: lines
@@ -9921,6 +10724,8 @@ function renderTrendPanel() {
           if (!description) return '<div class="figure-row">' + figureHtml + "</div>";
           return figureRow(figureHtml, {
             title: description.title,
+            /* 第 3、4 級跟著同一份說明走（使用者 2026-09-20）。 */
+            levels: description.levels,
             /* 收合時只露這一句：實際看到的變化，最有資訊量的那一行。 */
             lead: description.observed || description.meaning,
             body:

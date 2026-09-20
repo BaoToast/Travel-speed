@@ -106,7 +106,21 @@ const detailRows = async () => {
   await page.waitForTimeout(900);
   return page.evaluate(() =>
     [...document.querySelectorAll("#detail tbody tr")].map((row) =>
-      [...row.children].map((cell) => (cell.textContent || "").trim()).join("|"),
+      [...row.children]
+        .map((cell) => {
+          /*
+           * ⚠️ v2.20.67 起「期間」那一格底下多了一行「調查日 …」
+           *   （使用者 2026-09-20 要的逐筆調查日期）。
+           *   下面會把第一格當成季別字串拿去填「季別（起）」，
+           *   不拆掉的話填進去的是「115Q1原始檔讀不到日期」，
+           *   速限設定根本套不上，於是整條驗「LOS 真的變了」會紅——
+           *   而那不是產品壞了，是測試讀錯了東西。
+           */
+          const own = cell.cloneNode(true);
+          for (const line of own.querySelectorAll(".survey-date")) line.remove();
+          return (own.textContent || "").trim();
+        })
+        .join("|"),
     ),
   );
 };
