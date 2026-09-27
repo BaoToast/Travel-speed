@@ -54,5 +54,20 @@ test("⚠️ 這個 ES5 版與另外兩支的 TS 版**行為**要一致（逐句
   /* 順便確認檔案真的有內容，不是被清空之後這一支還安靜通過。 */
   const source = await readFile(new URL("./chart-levels.js", import.meta.url));
   assert.ok(source.length > 6000, "chart-levels.js 太短，內容可能被清掉了");
-  assert.ok(createHash("sha256").update(source).digest("hex").length === 64);
+  /*
+   * ⚠️ 2026-09-23 修正：這一行原本是
+   *     assert.ok(createHash("sha256").update(source).digest("hex").length === 64);
+   *   SHA-256 的十六進位摘要**永遠**是 64 個字，所以那一行什麼都沒有驗。
+   *   放在一份到處寫著「SHA-256 釘死」的包裡，很容易被讀成「內容有被釘住」。
+   *
+   *   真正該釘的是**三支共用的案例表**（chart-levels-contract.mjs），
+   *   那一份已經由 shared-contract-pins.test.mjs 用 SHA-256 釘住了。
+   *   本檔的 chart-levels.js 是這一支自己的實作（原生 JS，與另外兩支的
+   *   TypeScript 本來就不可能逐位元相同），所以這裡只確認它沒有被清空，
+   *   並把「案例表有沒有被釘住」指過去，不再放一行假的雜湊檢查。
+   */
+  assert.ok(
+    /losLevels|levelSections/.test(source.toString("utf8")),
+    "chart-levels.js 讀得到內容，但找不到判定函式——檔案可能被換掉了",
+  );
 });

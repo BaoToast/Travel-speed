@@ -44,10 +44,21 @@
   };
   const textCell = (ref, value, style = 0) =>
     `<c r="${ref}" t="inlineStr" s="${style}"><is><t xml:space="preserve">${xml(value)}</t></is></c>`;
-  const numCell = (ref, value, style = 3) =>
-    value == null || value === "" || !Number.isFinite(Number(value))
+  /*
+   * ⚠️ 2026-09-25 修正：數字儲存格也要先擋型別再轉。
+   *   舊寫法只排掉 null／""，而 Number(" ")、Number([])、Number(false) 都是 0、
+   *   Number(true) 是 1，於是缺值會在 Excel 裡變成一個實心的 0——
+   *   交出去的報表看不出那一格其實讀不到。空值要留空白格，不是 0。
+   *   與 conclusion.js 的 isNum()、trend.js 的 isNum() 同一判準。
+   */
+  const numCell = (ref, value, style = 3) => {
+    const usable =
+      typeof value === "number" ||
+      (typeof value === "string" && value.trim() !== "");
+    return !usable || !Number.isFinite(Number(value))
       ? ""
       : `<c r="${ref}" s="${style}"><v>${Number(value)}</v></c>`;
+  };
 
   /* 折線顏色：與畫面上的跨計畫圖同一組，已通過色盲可辨識檢核。 */
   const SERIES_COLORS = ["2A78D6", "EB6834", "1BAF7A", "EDA100", "4A3AA7", "E34948"];

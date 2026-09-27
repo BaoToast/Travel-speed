@@ -107,7 +107,8 @@
       {
         field: "rowLevel",
         reason:
-          "這一項固定以代表紀錄（每季每路段一筆）計算，才會與「三段分法」圖上的佔比相同",
+          "這一項「固定以代表紀錄」（每季每路段各一筆）計算，才會與「三段分法」圖上的佔比相同；" +
+          "所以選「逐筆明細」時，上方統計範圍寫的筆數與這一段的筆數本來就不一樣",
       },
     ],
   };
@@ -148,14 +149,32 @@
    * 不能只寫 isFinite(Number(v))：Number(null) 是 0、Number("") 也是 0，
    * 讀不到的欄位會被當成「確實量到 0」，接著變動幅度就會拿 0 當基期，
    * 而那句話會原封不動寫進報告。
+   *
+   * ══════════════════════════════════════════════════════════════════
+   *  ⚠️ 2026-09-25 修正：只排掉 null／undefined／"" **不夠**
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 第一版寫成 `value !== null && value !== undefined && value !== "" &&
+   * isFinite(Number(value))`。上面那段註解講對了雷，程式只擋掉三種值。
+   * 實測漏掉的（每一種 Number() 都給得出「看起來正常」的數字）：
+   *
+   *     " "   → Number 0      "\t"  → Number 0
+   *     []    → Number 0      false → Number 0
+   *     true  → Number 1
+   *
+   * 於是 `travel: " "` 會讓草稿寫「旅行速率 0.0 km/h」——0 km/h 的意思是
+   * 完全動不了，會被讀報告的人當成最嚴重的壅塞；`changeText(" ", 25)`
+   * 還會寫出「由 0 km/h 增為 25.0 km/h」，一句憑空造出來的結論。
+   *
+   * 正解是**先擋型別再轉數字**：只有「真的是數字」或「去掉空白之後還有東西
+   * 的字串」才算有值。與 quality-extension.js 的 asNumber() 同一個判準，
+   * 兩邊必須一致（跨檔守門 draft-key-and-missing.test.mjs 會盯）。
    */
   function isNum(value) {
-    return (
-      value !== null &&
-      value !== undefined &&
-      value !== "" &&
-      isFinite(Number(value))
-    );
+    var usable =
+      typeof value === "number" ||
+      (typeof value === "string" && value.trim() !== "");
+    return usable && isFinite(Number(value));
   }
 
   function num(value, digits) {
@@ -300,13 +319,24 @@
     return row.directionLabel || row.direction;
   }
 
+  /*
+   * 草稿抬頭的「方向：…」。
+   *
+   * ⚠️ 2026-09-25 修正：去重要用**鍵值**，顯示才用名稱。
+   *   舊寫法拿 dirLabel() 去重，兩個方向撞名時會寫成「只有一個方向」，
+   *   而實際上兩個方向都在這一批資料裡。
+   *   與 sameSlot 同一個修法（判斷用鍵值、顯示用標籤）。
+   */
   function uniqueDirections(rows) {
-    var seen = [];
+    var seenKeys = [];
+    var labels = [];
     for (var i = 0; i < rows.length; i += 1) {
-      var name = dirLabel(rows[i]);
-      if (seen.indexOf(name) < 0) seen.push(name);
+      var key = rows[i].direction;
+      if (seenKeys.indexOf(key) >= 0) continue;
+      seenKeys.push(key);
+      labels.push(dirLabel(rows[i]));
     }
-    return seen;
+    return labels;
   }
 
   function uniqueBy(rows, field) {
@@ -350,11 +380,36 @@
           " 秒",
       );
     if (wants("limit"))
+      /*
+       * ══════════════════════════════════════════════════════════════
+       *  ⚠️ 速限與速限比的寫法，要能跟表格對得起來
+       * ══════════════════════════════════════════════════════════════
+       *
+       * 2026-09-23 的反向對帳抓到兩件事：
+       *
+       * ① **速限的位數寫死 0**。`app.js` 的尖峰明細是
+       *    `fmt(x.limit, Number.isInteger(x.limit) ? 0 : 1)`——程式本身就
+       *    預期速限可能不是整數，會顯示 47.5。草稿卻把它四捨五入成 48，
+       *    而速限比是拿 47.5 算的，讀的人怎麼除都對不上。
+       *    改成**整數就不寫小數、非整數就寫一位**，與表格同一套。
+       *
+       * ② **速限比全站用比值，只有草稿用百分比**。彙總表寫 `0.782`、
+       *    判定標準頁的門檻寫「A：速限比 ≧ 0.90」、趨勢圖寫 `0.78`、
+       *    成果包 CSV 的欄名是「速限比（比值，0～1）」——只有這裡寫 78.2%。
+       *    使用者拿草稿回去核對時，兩邊長得不一樣。
+       *    改成**先寫比值、括號附百分比**：比值那一個對得上表格與門檻，
+       *    百分比那一個是給不熟比值的人看的，兩邊都不必再換算。
+       */
       parts.push(
         "速限 " +
-          num(row.limit, 0) +
+          num(row.limit, Number.isInteger(Number(row.limit)) ? 0 : 1) +
           " km/h、速限比 " +
-          (isNum(row.ratio) ? pct(Number(row.ratio) * 100, digits) : "—"),
+          (isNum(row.ratio)
+            ? num(Number(row.ratio), 3) +
+              "（" +
+              pct(Number(row.ratio) * 100, digits) +
+              "）"
+            : "—"),
       );
     /*
      * 只勾「方向文字」時 parts 是空的。舊寫法直接回空陣列，等於這個選項
@@ -366,11 +421,45 @@
   }
 
   /** 同一路段、同一日別、同一尖峰、同一方向，跨季度才可以比。 */
-  function describeGrowth(rows, digits) {
+  /**
+   * 季度之間的變動。
+   *
+   * ══════════════════════════════════════════════════════════════════
+   *  ⚠️ 分組鍵要看「資料層級」，不可以永遠帶著尖峰與方向
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 2026-09-23 的反向對帳抓到，而且**踩在預設動線上**：
+   *
+   *   主工具列的尖峰預設是「代表尖峰」→ 套用到結論草稿時 `rowLevel` 會變成
+   *   `"representative"` → 每一季每條路只留**最差的那一筆**。而「最差的那一筆
+   *   是哪個尖峰、哪個方向」**逐季會不同**（114Q1 最差是上午·方向1、
+   *   114Q2 最差是下午·方向2）。
+   *
+   *   舊的分組鍵帶著 `peak` 與 `direction`，於是那兩季被分進**兩個不同的群組**，
+   *   每組只剩 1 筆 → `group.length < 2` → 直接 return。後果分兩種，都很糟：
+   *     ・`byRoad` 分組：**一行都不印，也沒有任何說明**
+   *     ・其他分組：印出「範圍內沒有任何一筆具備兩季以上的資料，未做季度比較。」
+   *       ——**這句話是錯的**，範圍內就是兩季，而同一份資料在
+   *       「各路段歷季旅行速率」圖上畫得出下降線，重點路段總覽也把它列為需優先檢視。
+   *
+   * ⚠️ 修法不是新口徑，是**比照全站另外兩個地方**：
+   *   `quality-extension.js` 的 `narrative()` 與重點路段總覽都是用
+   *   `road + day` 當鍵。代表紀錄本來就是「這條路這一天的代表」，
+   *   再往下切尖峰與方向等於把代表紀錄當成逐筆明細用。
+   *
+   * ⚠️ 逐筆明細（`rowLevel === "detail"`）維持原本的四個鍵，一個字都不改——
+   *   那時候同一條路同一天真的有好幾筆，不分尖峰與方向會把不同的東西比在一起。
+   *
+   * @param rowLevel "representative" 或 "detail"（舊的呼叫端沒傳就當 detail）
+   */
+  function describeGrowth(rows, digits, rowLevel) {
+    var representative = rowLevel === "representative";
     var groups = {};
     for (var i = 0; i < rows.length; i += 1) {
       var row = rows[i];
-      var key = [row.road, row.day, row.peak, row.direction].join("|");
+      var key = representative
+        ? [row.road, row.day].join("|")
+        : [row.road, row.day, row.peak, row.direction].join("|");
       (groups[key] = groups[key] || []).push(row);
     }
     var lines = [];
@@ -381,8 +470,37 @@
       if (group.length < 2) return;
       var first = group[0];
       var last = group[group.length - 1];
-      var label =
-        "　" + first.road + "（" + first.day + "）・" + first.peak + "・" + dirLabel(first) + "：";
+      /*
+       * ⚠️ 代表紀錄時，頭尾兩季的尖峰／方向可能不同——那正是這個修正的起因。
+       *   標題要**照實寫出兩季各自是哪一個**，不可以只寫第一季那一個
+       *   （只寫第一季的話，讀的人會以為兩季比的是同一個尖峰同一個方向）。
+       */
+      /*
+       * ⚠️ 2026-09-25 修正：可比性要比**鍵值**，不可以比給人看的名稱。
+       *
+       * 舊寫法是 `dirLabel(first) === dirLabel(last)`，而 dirLabel() 回的是
+       * `row.directionLabel || row.direction`——使用者在「路段管理」自己取的
+       * 顯示名稱。兩個方向被取成同一串名稱時（程式不擋撞名），
+       * sameSlot 會誤判為 true，於是「（代表紀錄，兩季最差的時段／方向不同）」
+       * 這句警語被整句吞掉，讀的人會以為兩季比的是同一個方向。
+       *
+       * 鍵值（`row.direction`）永遠是「方向1／方向2」，不會因為改名而變，
+       * 那才是判斷「是不是同一個方向」的依據。顯示仍然用 dirLabel()。
+       * 這與系統其他地方「判斷用鍵值、顯示用標籤」的原則一致。
+       */
+      var sameSlot =
+        first.peak === last.peak && first.direction === last.direction;
+      var slot = sameSlot
+        ? first.peak + "・" + dirLabel(first)
+        : first.peak +
+          "・" +
+          dirLabel(first) +
+          " → " +
+          last.peak +
+          "・" +
+          dirLabel(last) +
+          "（代表紀錄，兩季最差的時段／方向不同）";
+      var label = "　" + first.road + "（" + first.day + "）・" + slot + "：";
       var speed = changeText(first.travel, last.travel, "旅行速率", digits, "km/h");
       var delay = changeText(first.totalDelay, last.totalDelay, "總延滯", digits, "秒");
       lines.push(
@@ -399,10 +517,41 @@
           (first.los || "?") +
           " → " +
           (last.los || "?") +
+          losShiftText(first.los, last.los) +
           "。",
       );
     });
     return lines;
+  }
+
+  /*
+   * ══════════════════════════════════════════════════════════════════════
+   *  「C → D」到底是變好還是變差？（使用者 2026-09-23 核准新增）
+   * ══════════════════════════════════════════════════════════════════════
+   *
+   * 舊版只寫「服務水準 C → D」，讀報告的人要自己記得 A 最好、F 最差，
+   * 才知道那是變差了。而**畫面上的歷季服務水準圖早就寫著**
+   *「平日從 114Q1 的 C 到 115Q2 的 D，等級變差了。」（app.js 的 losCardScript）——
+   * 表格講得出來、草稿講不出來，正是這一輪要補的那一類。
+   *
+   * ⚠️ 好壞方向一律由 LOS_ORDER 決定，**不另外寫一份順序**。
+   *   app.js 那邊用的是 losRank（A=6…F=1，數字越大越好），
+   *   這裡用的是 LOS_ORDER 的索引（A=0…F=5，索引越小越好）。
+   *   兩者方向相反，很容易寫反——所以下面刻意用「索引變大＝變差」
+   *   一句話講死，並且有一支測試把 A→F 與 F→A 兩個方向都釘住。
+   *
+   * ⚠️ 任一季讀不出等級時回空字串，不寫「無法判斷」之類的話——
+   *   前面已經印了「? → D」，再補一句只是噪音。
+   */
+  function losShiftText(before, after) {
+    var from = LOS_ORDER.indexOf(before);
+    var to = LOS_ORDER.indexOf(after);
+    if (from < 0 || to < 0) return "";
+    if (from === to) return "（等級沒有變化）";
+    /* 索引變大＝往 F 走＝變差。 */
+    return (
+      "（等級" + (to > from ? "變差 " : "變好 ") + Math.abs(to - from) + " 級）"
+    );
   }
 
   /*
@@ -684,7 +833,7 @@
     var keys = Object.keys(signatures);
     lines.push(
       "　（口徑：一個日別一組，每一季、每個路段各一筆代表紀錄，分母是判定得出等級的筆數，" +
-        "與「三段分法」圖完全相同；壅塞那一欄就是歷季趨勢圖的「壅塞級距佔比」指標。目前的分界：" +
+        "與「三段分法」圖完全相同；壅塞那一欄就是歷季趨勢圖那個壅塞佔比指標（分界只有一組時，那個指標就叫「X 級以下路段佔比」，X 就是上面寫的壅塞起始等級；不只一組時兩邊都逐筆各自套用，指標名稱不指名等級）。目前的分界：" +
         (keys.length === 1
           ? keys[0]
           : keys.length > 1
@@ -707,7 +856,24 @@
     if (c.directions && c.directions.length) setFields.directions = true;
     if (c.days && c.days.length) setFields.days = true;
     if (c.roads && c.roads.length) setFields.roads = true;
-    if (c.rowLevel && c.rowLevel !== DEFAULT_CONDITION.rowLevel) setFields.rowLevel = true;
+    /*
+     * ⚠️ 2026-09-23 修正：`rowLevel` 的判斷**方向是反的**。
+     *
+     *   舊寫法是「使用者改過預設值才算有設」（預設是 `"detail"`），於是：
+     *     ・選「代表紀錄」→ 印出「本數值不適用『資料層級』條件」，
+     *       但三段分法本來就用代表紀錄，兩者**一致**，這句話是多餘的；
+     *     ・選「逐筆明細」→ **什麼都不印**，而三段分法會強制再歸一次代表紀錄
+     *       （見 describeBandShare），使用者的選擇**真的沒作用**——
+     *       這才是該講的那一種，卻剛好不講。
+     *
+     *   症狀：草稿開頭寫「資料層級：逐筆明細……共 8 筆」，
+     *   三段分法那一段卻寫「可判定 1 筆代表紀錄」，兩個筆數並排在同一份草稿裡，
+     *   而唯一會解釋這件事的那句提示剛好不出現。
+     *
+     *   `rowLevel` 與別的條件不同：它**永遠有值**（不是「沒設就是全部」），
+     *   所以只要那個指標宣告不吃它，就一律要寫出來。
+     */
+    if (c.rowLevel) setFields.rowLevel = true;
     var lines = [];
     for (var i = 0; i < CONCLUSION_METRICS.length; i += 1) {
       var metric = CONCLUSION_METRICS[i];
@@ -740,11 +906,28 @@
 
   function buildConclusion(details, condition, meta) {
     var c = Object.assign({}, DEFAULT_CONDITION, condition || {});
-    /* 舊範本可能沒有 digits；匯入內容也可能超出畫面允許的 0～2。 */
+    /*
+     * 舊範本可能沒有 digits；匯入內容也可能超出畫面允許的 0～2。
+     *
+     * ⚠️ 本版：**先擋型別再轉數字**，順序不可以反。
+     *   舊寫法只擋 null 與 ""，而 Number() 對好幾種不是數字的東西
+     *   都給得出落在 0～2 裡面的整數：
+     *
+     *       Number([])   === 0    ← 空陣列會變成 0 位（實測踩到）
+     *       Number(" ")  === 0    ← 空白字串同上
+     *       Number(true) === 1
+     *
+     *   於是存著 `digits: []` 的舊範本會讓百分比與速率**安靜地變成 0 位**，
+     *   使用者設定的 1 位被吃掉，畫面上沒有任何提示。
+     *   姊妹系統全日交通量的 safeConclusionDigits() 早就有這個型別守衛，
+     *   本支漏了——判準現在三支一致，不要再改回只判 null 與 ""。
+     */
+    var acceptable =
+      typeof c.digits === "number" ||
+      (typeof c.digits === "string" && c.digits.trim() !== "");
     var parsedDigits = Number(c.digits);
     c.digits =
-      c.digits !== null &&
-      c.digits !== "" &&
+      acceptable &&
       Number.isInteger(parsedDigits) &&
       parsedDigits >= 0 &&
       parsedDigits <= 2
@@ -853,7 +1036,11 @@
           }
           Array.prototype.push.apply(out, describeRow(row, c));
         });
-        if (wants("growth")) Array.prototype.push.apply(out, describeGrowth(group, c.digits));
+        if (wants("growth"))
+          Array.prototype.push.apply(
+            out,
+            describeGrowth(group, c.digits, c.rowLevel),
+          );
       });
     } else if (c.grouping === "byPeriod") {
       periods.forEach(function (period) {
@@ -917,7 +1104,7 @@
     }
     if (wants("growth") && c.grouping !== "byRoad") {
       heading("季度之間的變動");
-      var lines = describeGrowth(rows, c.digits);
+      var lines = describeGrowth(rows, c.digits, c.rowLevel);
       if (lines.length) Array.prototype.push.apply(out, lines);
       else out.push("　範圍內沒有任何一筆具備兩季以上的資料，未做季度比較。");
     }

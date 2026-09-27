@@ -9,7 +9,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import * as XLSX from "xlsx";
 
 const appSource = readFileSync(new URL("./app.js", import.meta.url), "utf8");
@@ -56,7 +56,113 @@ const state={limits:{},limitConfirmed:{},aliases:{},roadMeta:{},speedVersions:{}
 }
 
 const REAL = new URL("../realdata/", import.meta.url);
-const hasRealData = existsSync(new URL("batch2/14013TS601鳳北路平日.xlsx", REAL));
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  真實檔的尋找方式（A9，2026-09-23 重寫）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 舊版把路徑寫死成 `batch2/14013TS601鳳北路平日.xlsx`：只要使用者換一批
+ * 資料、或資料夾改個名字，下面兩支就**永遠 skip**——在有真實檔的機器上
+ * 也一樣。使用者 2026-09-21 的原話：
+ *   「我不是提供了一堆真實調查資料檔給你了嗎，這一點要修正什麼??」
+ * 要修的是測試程式，不是他的資料。
+ *
+ * 改成遞迴掃 `realdata/` 底下實際存在的試算表，再用檔名片段去找；
+ * 找不到那一份時 skip 的訊息要**說出找的是什麼**——
+ * 「沒有真實檔」與「有真實檔但不是這一份」是兩件不同的事。
+ */
+function walkReal(dir) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith("~$")) continue;
+    const child = new URL(entry.name + (entry.isDirectory() ? "/" : ""), dir);
+    if (entry.isDirectory()) out.push(...walkReal(child));
+    else if (/\.xlsx?$/i.test(entry.name)) out.push(child);
+  }
+  return out;
+}
+
+const REAL_FILES = walkReal(REAL);
+const hasRealData = REAL_FILES.length > 0;
+
+/**
+ * 依檔名片段找一份真實檔；找不到回 null。
+ *
+ * ⚠️ 比對前先把兩邊的**分隔符號全部去掉**（2026-09-26 補）。
+ *   使用者的檔名寫「11535TS15-01」，而測試裡的片段寫「11535TS1501」——
+ *   只差一個連字號，`includes()` 就永遠對不上，於是這幾支在**有真實檔的
+ *   機器上照樣 skip**，而 skip 的訊息看起來完全合理。
+ *   路口轉向踩過同一個坑（三支條件式測試全部因此從未跑過）。
+ *   去掉符號之後，`11535TS1501`／`11535TS15-01`／`11535 TS15_01` 都對得上。
+ */
+function realFile(fragment) {
+  const squash = (text) =>
+    String(text)
+      .replace(/[^0-9A-Za-z\u4e00-\u9fff]/g, "")
+      .toLowerCase();
+  const want = squash(fragment);
+  return (
+    REAL_FILES.find((url) =>
+      squash(decodeURIComponent(url.pathname)).includes(want),
+    ) ?? null
+  );
+}
+
+function whySkipped(fragment) {
+  return hasRealData
+    ? `這台機器上有 ${REAL_FILES.length} 份真實檔，但沒有檔名含「${fragment}」的那一份`
+    : "這台機器上沒有真實調查檔";
+}
+
+/*
+ * ⚠️ 這一支**對所有找得到的真實檔都跑**，不挑檔案。
+ *
+ * 下面兩支驗的是特定檔案的黃金值（換一批資料就沒得驗），
+ * 這一支驗的是**性質**：每一份真實檔都要讀得出路段名稱與調查日期，
+ * 而且名稱不可以是空的、也不可以整個檔名原樣照抄——那代表前綴沒剝掉，
+ * 下一季匯入同一條路會被當成新路段，歷季趨勢斷成兩截。
+ * 有真實檔就一定驗得到。
+ */
+test(
+  "⚠️ 所有真實檔：路段名稱剝得乾淨、調查日期讀得到",
+  { skip: hasRealData ? false : "這台機器上沒有真實調查檔" },
+  () => {
+    const F = loadAppFunctions([
+      "roadFromWorkbook",
+      "normalize",
+      "stripRoadSuffix",
+      "headerTextsOf",
+      "suspiciousRoadName",
+      "surveyDateFromWorkbook",
+    ]);
+    let checked = 0;
+    for (const url of REAL_FILES) {
+      const name = decodeURIComponent(url.pathname).split("/").pop();
+      const workbook = XLSX.read(readFileSync(url), { type: "buffer" });
+      const road = F.roadFromWorkbook(workbook);
+      if (!road) continue; /* 不是這支程式格式的檔（三支共用同一個資料夾） */
+      assert.ok(String(road).trim(), `「${name}」切出空白的路段名稱`);
+      assert.ok(
+        !String(road).includes(name.replace(/\.[^.]+$/, "")),
+        `「${name}」的路段名稱是整個檔名——前綴沒有剝掉，下一季會被當成新路段`,
+      );
+      checked += 1;
+    }
+    /* ⚠️ 一份都沒驗到卻變綠，是這一類測試最常見的假通過。 */
+    assert.ok(
+      checked > 0,
+      `找到 ${REAL_FILES.length} 份真實檔，但沒有一份讀得出路段名稱，這一支等於什麼都沒驗`,
+    );
+    console.log(`  ↳ 逐檔檢查了 ${checked} 份真實檔的路段名稱`);
+  },
+);
 
 /* ── M1：三支共用的非調查日期清單 ── */
 
@@ -116,24 +222,54 @@ test("路段名稱只差分隔符時要算出相同的簽章", () => {
   );
 });
 
-test("真實的平假日配對要算出相同簽章", { skip: !hasRealData }, () => {
+const PAIR_WEEKDAY = realFile("14013TS601鳳北路平日");
+const PAIR_HOLIDAY = realFile("14013TS601鳳北路假日");
+test(
+  "真實的平假日配對要算出相同簽章",
+  {
+    skip:
+      PAIR_WEEKDAY && PAIR_HOLIDAY ? false : whySkipped("14013TS601鳳北路"),
+  },
+  () => {
   const F = loadAppFunctions(["roadSignature", "roadFromWorkbook", "normalize",
                               "stripRoadSuffix", "headerTextsOf", "suspiciousRoadName"]);
-  const read = (name) =>
-    F.roadFromWorkbook(XLSX.read(readFileSync(new URL("batch2/" + name, REAL)), { type: "buffer" }));
-  const weekday = read("14013TS601鳳北路平日.xlsx");
-  const holiday = read("14013TS601鳳北路假日.xlsx");
+  const read = (url) =>
+    F.roadFromWorkbook(XLSX.read(readFileSync(url), { type: "buffer" }));
+  const weekday = read(PAIR_WEEKDAY);
+  const holiday = read(PAIR_HOLIDAY);
   assert.notEqual(weekday, holiday, "這兩份真實檔的站名本來就寫得不一樣");
   assert.equal(
     F.roadSignature(weekday),
     F.roadSignature(holiday),
     "同一站的平日與假日必須算出相同簽章，否則平假日比較整個不成立",
   );
-});
+  },
+);
 
 /* ── M3：同一份檔案的矛盾調查日期 ── */
 
-test("同一份檔案有兩個不同的調查日期時要指出來", { skip: !hasRealData }, () => {
+const CONFLICT_FILES = [
+  "11535TS1501",
+  "11535TS1502",
+  "11535TS1503",
+].map((fragment) => [fragment, realFile(fragment)]);
+const CLEAN_FILE = realFile("14013TS601鳳北路平日");
+test(
+  "同一份檔案有兩個不同的調查日期時要指出來",
+  {
+    skip:
+      CONFLICT_FILES.every(([, url]) => url) && CLEAN_FILE
+        ? false
+        : whySkipped(
+            [
+              ...CONFLICT_FILES.filter(([, url]) => !url).map(([name]) => name),
+              CLEAN_FILE ? null : "14013TS601鳳北路平日",
+            ]
+              .filter(Boolean)
+              .join("、"),
+          ),
+  },
+  () => {
   /*
    * 實測 11535TS1501／1502／1503 三份真實檔，上午尖峰的表頭寫 115Q1、
    * 下午尖峰卻還留著上一季的 114Q4（套模板時忘了改）。舊版只看第一個
@@ -141,14 +277,10 @@ test("同一份檔案有兩個不同的調查日期時要指出來", { skip: !ha
    * 矛盾的檔案發出無保留的通過。
    */
   const F = loadAppFunctions(["surveyDateFromWorkbook"]);
-  const check = (name) =>
-    F.surveyDateFromWorkbook(XLSX.read(readFileSync(new URL("batch2/" + name, REAL)), { type: "buffer" }));
-  for (const name of [
-    "11535TS1501左楠路加昌路世運大道平日.XLS",
-    "11535TS1502後昌路左楠路加昌路平日.xls",
-    "11535TS1503高楠公路楠陽路水管路假日.xls",
-  ]) {
-    const found = check(name);
+  const check = (url) =>
+    F.surveyDateFromWorkbook(XLSX.read(readFileSync(url), { type: "buffer" }));
+  for (const [name, url] of CONFLICT_FILES) {
+    const found = check(url);
     assert.ok(found, `${name} 應讀得到調查日期`);
     assert.ok(
       found.conflicts?.length,
@@ -156,10 +288,11 @@ test("同一份檔案有兩個不同的調查日期時要指出來", { skip: !ha
     );
   }
   /* 反面：只有一個日期的檔案不可以誤報 */
-  const clean = check("14013TS601鳳北路平日.xlsx");
+  const clean = check(CLEAN_FILE);
   assert.ok(clean, "應讀得到調查日期");
   assert.ok(!clean.conflicts, "只有一個日期時不可誤報衝突");
-});
+  },
+);
 
 test("矛盾日期要寫進預覽的提示文字", () => {
   assert.match(

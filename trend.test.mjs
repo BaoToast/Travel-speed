@@ -38,6 +38,15 @@ const {
   alignTrendSeriesForExcel,
 } = require("./trend.js");
 
+/*
+ * 圖說第 3、4 級的判定住在 chart-levels.js（三支共用、SHA-256 釘住），
+ * 它是掛在 globalThis 的 IIFE。describeTrendChart() 讀
+ * `globalThis.ChartLevels`，**沒有載入時整段 levels 會是 undefined**——
+ * 所以下面那幾支驗第 3 級文字的測試一定要先把它掛上去，
+ * 否則它們會因為「levels 是空的」而失敗，看起來像程式壞了。
+ */
+await import("./chart-levels.js");
+
 test("三段組成保留實際最差等級，不可用分界或 F 級反猜", () => {
   const series = buildBandSeries(
     [
@@ -439,3 +448,346 @@ test("斷季（某一季沒有資料）要講出來，不可以讓人以為是 0
  * 連帶改壞了也沒人發現。函式與測試一起移除。
  * 《加總與並列稽核_三支程式_20260916》第六節。
  */
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  第 3 級「代表什麼狀況」講的壅塞筆數，必須真的是壅塞筆數
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 2026-09-23 的獨立複查抓到：`describeTrendChart()` 呼叫
+ * `ChartLevels.losLevels(worst, congestedStart, congestedCount, total)` 時，
+ * 第三個參數傳的是 `worstCount`（**最差那一級**的筆數），
+ * 第二個參數在讀不到分界時拿 `worstLos` 頂替。
+ *
+ * 兩個錯都會直接寫進那一句要被抄進業主報告的話：
+ *   ・最差 D、實際壅塞 0 筆 → 寫成「有 2 筆落在壅塞段（E 級以下）」
+ *     （D 不可能落在 E 以下，而且真正的壅塞是 0 筆）
+ *   ・最差 F、實際壅塞 4 筆 → 只講 1 筆
+ *
+ * ⚠️ 這一支**不可以只驗「levels 不是空的」**——出事的那一版 levels 本來
+ *   就不是空的。要驗裡面那個數字。
+ * ⚠️ `losLevels` 住在三支共用、SHA-256 釘住的 chart-levels.js，
+ *   所以修的是呼叫端，不是它。
+ */
+test("⚠️ 第 3 級講的壅塞筆數＝congestedCount，不是最差那一級的筆數", () => {
+  /* 全部都在 A～D，沒有任何一筆壅塞（分界設在 E）。 */
+  const series = buildTrendSeries(
+    rowsFrom({ "115Q1": ["A", "B", "C", "D"], "115Q2": ["B", "C", "D", "D"] }),
+    { metric: "worstLos", congestedStart: "E" },
+  );
+  const last = series.points[series.points.length - 1];
+  assert.equal(last.worstLos, "D", "前置：最新一季最差應為 D");
+  assert.equal(last.congestedCount, 0, "前置：不該有任何一筆落在 E 級以下");
+  assert.ok(last.worstCount > 0, "前置：最差那一級本身要有筆數，這一條才驗得到東西");
+
+  const text = describeTrendChart(series, { scopeText: "全部路段" });
+  const state = text.levels?.state ?? "";
+  assert.ok(state, "worstLos 指標應該要有第 3 級文字");
+  assert.ok(
+    !/落在你設定的壅塞段/.test(state),
+    `一筆壅塞都沒有卻說有：${state}`,
+  );
+  assert.match(
+    state,
+    /都還沒有落入你設定的壅塞段/,
+    `應該走「還沒進壅塞段」那一句：${state}`,
+  );
+});
+
+test("⚠️ 真的有壅塞時，第 3 級要講出正確的筆數與分界", () => {
+  /* 分界設在 E：E、E、F 三筆壅塞，最差那一級（F）只有 1 筆。 */
+  const series = buildTrendSeries(
+    rowsFrom({
+      "115Q1": ["A", "B", "C"],
+      "115Q2": ["A", "B", "E", "E", "F"],
+    }),
+    { metric: "worstLos", congestedStart: "E" },
+  );
+  const last = series.points[series.points.length - 1];
+  assert.equal(last.worstLos, "F");
+  assert.equal(last.congestedCount, 3, "前置：E、E、F 三筆");
+  assert.equal(last.worstCount, 1, "前置：最差那一級（F）只有 1 筆");
+
+  const state = describeTrendChart(series, { scopeText: "全部路段" }).levels
+    ?.state;
+  assert.match(
+    state,
+    /有 3 筆/,
+    `要講 3 筆（congestedCount），不是 1 筆（worstCount）：${state}`,
+  );
+  assert.match(state, /E 級以下/, `分界要是使用者設的 E：${state}`);
+  assert.ok(
+    !/有 1 筆/.test(state),
+    `又把 worstCount 寫進去了：${state}`,
+  );
+});
+
+test("⚠️ 分界一律取自 series，不可以拿最差等級頂替", () => {
+  /*
+   * 不傳 congestedStart（buildTrendSeries 會落回預設的 "E"）。
+   * 文字裡的分界必須是 E，不可以變成最差等級 C。
+   */
+  const series = buildTrendSeries(
+    rowsFrom({ "115Q1": ["A", "B"], "115Q2": ["B", "C"] }),
+    { metric: "worstLos" },
+  );
+  const state = describeTrendChart(series, {}).levels?.state ?? "";
+  assert.equal(series.congestedStart, "E", "前置：沒給時應落回預設 E");
+  assert.match(state, /最差為 C 級/, state);
+  assert.match(state, /（E 級以下）/, `分界被最差等級頂替了：${state}`);
+  assert.ok(!/（C 級以下）/.test(state), `分界寫成最差等級了：${state}`);
+});
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  三段分法：圖例與柱子必須用同一把尺
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 2026-09-23 的獨立複查抓到：柱高與筆數走 `bandsOf(row)`（逐列覆寫），
+ * 圖例卻走 `bands`（計畫預設）。只要有任何一個「季別區間 × 路段」覆寫，
+ * 圖例就會說一套、柱子做另一套，而第 3 級文字還會寫出
+ *   「最差為 C 級 … 落在你設定的壅塞段（E 級以下）」
+ * 這種同一句自相矛盾的話——那一句是要抄進業主報告的。
+ *
+ * ⚠️ 只驗「legend 有東西」沒有意義：出事的那一版 legend 本來就有東西。
+ *   要驗它列出來的等級真的是柱子用的那一組。
+ */
+test("⚠️ 沒有覆寫時，圖例與計畫預設一致（升級當天一個像素都不變）", () => {
+  const series = buildBandSeries(
+    rowsFrom({ "115Q1": ["A", "C", "E"], "115Q2": ["B", "D", "F"] }),
+    { bands: { smoothEnd: "B", congestedStart: "E" } },
+  );
+  assert.equal(series.mixedRules, false);
+  assert.deepEqual(series.bands, { smoothEnd: "B", congestedStart: "E" });
+  const byKey = Object.fromEntries(
+    series.legend.map((item) => [item.key, item.grades.join("")]),
+  );
+  assert.deepEqual(byKey, { smooth: "AB", fair: "CD", congested: "EF" });
+});
+
+test("⚠️ 全部的列都用同一組覆寫時，圖例要跟著覆寫走，不是計畫預設", () => {
+  const series = buildBandSeries(
+    rowsFrom({ "115Q1": ["A", "C", "E"], "115Q2": ["B", "D", "F"] }),
+    {
+      bands: { smoothEnd: "B", congestedStart: "E" },
+      /* 整張圖都被覆寫成「壅塞從 C 起」。 */
+      bandsOf: () => ({ smoothEnd: "A", congestedStart: "C" }),
+    },
+  );
+  assert.equal(series.mixedRules, false);
+  assert.deepEqual(
+    series.bands,
+    { smoothEnd: "A", congestedStart: "C" },
+    "series.bands 仍是計畫預設——圖例會跟柱子說不同的話",
+  );
+  const byKey = Object.fromEntries(
+    series.legend.map((item) => [item.key, item.grades.join("")]),
+  );
+  assert.deepEqual(
+    byKey,
+    { smooth: "A", fair: "B", congested: "CDEF" },
+    "圖例用的是計畫預設的分界，不是柱子實際用的那一把",
+  );
+  /* 柱子本身也要真的照覆寫算：E、F 以外，C、D 也算壅塞。 */
+  const last = series.points[series.points.length - 1];
+  assert.equal(last.counts.congested, 2, "115Q2 的 D 與 F 都應算壅塞");
+});
+
+test("⚠️ 同一張圖裡不只一組分界時要標出來（圖說才講得出實情）", () => {
+  const series = buildBandSeries(
+    rowsFrom({ "115Q1": ["A", "C", "E"], "115Q2": ["B", "D", "F"] }),
+    {
+      bands: { smoothEnd: "B", congestedStart: "E" },
+      /* 115Q1 用覆寫、115Q2 用預設。 */
+      bandsOf: (row) =>
+        row.period === "115Q1"
+          ? { smoothEnd: "A", congestedStart: "C" }
+          : { smoothEnd: "B", congestedStart: "E" },
+    },
+  );
+  assert.equal(series.mixedRules, true, "不只一組分界卻沒有標出來");
+  assert.equal(series.ruleSets.length, 2);
+});
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  分界要逐列問（2026-09-24，F6 獨立複查抓到的最嚴重一項）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 病灶：三段分法自 2026-09-15 起可以依「季別區間 × 路段」覆寫，
+ * `buildBandSeries` 早就逐列問（`bandsOf` ＋ `mixedRules`），
+ * **`buildTrendSeries` 卻只吃一個純量 `congestedStart`**。
+ * 後果是同一頁上「三段分法圖」與「X 級以下路段佔比」對同一季
+ * 給出不同的壅塞條數，而圖說第 3 級還會指名一個不是該季實際套用的分界。
+ *
+ * ⚠️ 這三支測試**缺一不可**：
+ *   第一支 = 逐列判定（改回純量就紅）
+ *   第二支 = 不只一組時不得指名等級（名稱、圖說、第 3 級三處）
+ *   第三支 = **沒有過度修正**：沒給 congestedStartOf，或每一列都同一把尺時，
+ *            數字與文字必須與修正前逐字相同
+ */
+
+/** 甲＝計畫預設 E；乙＝該季被覆寫成 C。兩條路段同一季各一筆 D。 */
+const SCOPED_ROWS = [
+  { period: "115Q1", road: "甲", day: "平日", los: "D" },
+  { period: "115Q1", road: "乙", day: "平日", los: "D" },
+];
+const scopedStartOf = (row) => (row.road === "乙" ? "C" : "E");
+
+test("趨勢圖的壅塞佔比要逐列用各自的分界，不可以整張圖一把尺", () => {
+  /* 前置檢查：兩列真的拿到不同的尺，否則這一支會變成恆真 */
+  assert.equal(scopedStartOf(SCOPED_ROWS[0]), "E");
+  assert.equal(scopedStartOf(SCOPED_ROWS[1]), "C");
+
+  const series = buildTrendSeries(SCOPED_ROWS, {
+    metric: "congestedShare",
+    congestedStart: "E",
+    congestedStartOf: scopedStartOf,
+  });
+  const point = series.points[0];
+  /*
+   * D 在 E 之上（不壅塞）、在 C 之下（壅塞）。
+   * 舊版整張圖用 "E" → congestedCount 會是 0、佔比 0%。
+   */
+  assert.equal(point.congestedCount, 1, "乙路段那一季被覆寫成 C，它的 D 就是壅塞");
+  assert.equal(point.value, 50, "2 條裡有 1 條 → 50%");
+  assert.deepEqual(
+    point.rows.map((row) => row.road),
+    ["乙"],
+    "下鑽明細也要是乙那一筆，不可以是空的",
+  );
+});
+
+test("不只一組分界時，名稱與圖說都不可以指名任何一個等級", () => {
+  const series = buildTrendSeries(SCOPED_ROWS, {
+    metric: "congestedShare",
+    congestedStart: "E",
+    congestedStartOf: scopedStartOf,
+  });
+  assert.equal(series.mixedRules, true, "兩把尺就要標成 mixedRules");
+  assert.equal(series.label, "路段壅塞佔比（分界不只一組）");
+  assert.ok(
+    !/[A-F] 級以下/.test(series.label),
+    `名稱不可以指名單一等級，實際是「${series.label}」`,
+  );
+  assert.equal(
+    trendMetricLabel("congestedShare", { congestedStart: "E", mixedRules: true }),
+    "路段壅塞佔比（分界不只一組）",
+  );
+
+  const text = describeTrendChart(series, {
+    scopeText: "平日",
+    /* ⚠️ 刻意把呼叫端的單一分界文字傳進去：它必須被忽略 */
+    bandText: "E、F",
+    congestedStart: "E",
+    showPeriod: (period) => period,
+  });
+  assert.ok(
+    text.meaning.includes("不只一組壅塞分界"),
+    "第一級要講明這張圖套到不只一組分界",
+  );
+  assert.ok(
+    !text.meaning.includes("本圖的「壅塞」定義為 E、F"),
+    "不可以引用呼叫端那一把尺的文字",
+  );
+
+  /* 最差等級那個指標的第 3 級會寫「（Y 級以下）」——不只一組時整段不畫 */
+  const worst = buildTrendSeries(SCOPED_ROWS, {
+    metric: "worstLos",
+    congestedStart: "E",
+    congestedStartOf: scopedStartOf,
+  });
+  const worstText = describeTrendChart(worst, {
+    scopeText: "平日",
+    congestedStart: "E",
+    showPeriod: (period) => period,
+  });
+  assert.equal(
+    worstText.levels,
+    null,
+    "不只一組分界時第 3、4 級要整段不畫，不可以指名一個分界",
+  );
+});
+
+test("只有一把尺時，逐列問的結果與修正前逐字相同（沒有過度修正）", () => {
+  const plain = buildTrendSeries(rowsFrom(FOUR_SEASONS), {
+    metric: "congestedShare",
+    congestedStart: "E",
+  });
+  /* ① 完全不給 congestedStartOf：照舊吃純量 */
+  assert.equal(plain.mixedRules, false);
+  assert.equal(plain.label, "E 級以下路段佔比");
+  /* ② 給了，但每一列都回同一把尺：數字與名稱都不可以變 */
+  const uniform = buildTrendSeries(rowsFrom(FOUR_SEASONS), {
+    metric: "congestedShare",
+    congestedStart: "E",
+    congestedStartOf: () => "E",
+  });
+  assert.equal(uniform.mixedRules, false);
+  assert.equal(uniform.label, plain.label);
+  assert.deepEqual(
+    uniform.points.map((point) => [point.period, point.value, point.congestedCount]),
+    plain.points.map((point) => [point.period, point.value, point.congestedCount]),
+    "沒有覆寫時一個數字都不可以變",
+  );
+  /* ③ 第 3 級仍要畫得出來（不可以因為加了 mixedRules 就整批變 null） */
+  const worst = buildTrendSeries(rowsFrom(FOUR_SEASONS), {
+    metric: "worstLos",
+    congestedStart: "E",
+    congestedStartOf: () => "E",
+  });
+  const text = describeTrendChart(worst, {
+    scopeText: "平日",
+    congestedStart: "E",
+    showPeriod: (period) => period,
+  });
+  assert.ok(text.levels, "只有一把尺時第 3 級必須照舊畫得出來");
+});
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  覆寫「涵蓋全部列」時，文字也要跟著那一組（2026-09-25，F6 第三輪抓到）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * `mixedRules` 只有「同一張圖裡出現兩種以上分界」時才是 true。
+ * 所以它**擋不住**「全部列都套到同一組覆寫」這個情形：
+ *   `mixedRules` 是 false、`series.congestedStart` 已經是覆寫那一組（例如 C）、
+ *   標題與壅塞條數也都用 C——但呼叫端如果把「計畫預設」那一組的文字
+ *   （`bandLabels().congested`，例如「E、F」）當 `bandText` 傳進來，
+ *   圖說第一段就會寫「本圖的『壅塞』定義為 E、F」。
+ *
+ * 後果：同一頁上三段分法圖的圖例寫「壅塞 C、D、E、F」，趨勢圖的圖說寫「E、F」。
+ * 那正是本版要修的那一類（文字的分界由別的欄位反推），只是漏在這一處。
+ *
+ * ⚠️ 這一支守的是 `describeTrendChart` 這一端：**非 mixed 時寫出來的分界
+ *   必須是 series 自己那一組**。呼叫端（app.js）有沒有傳對，由
+ *   `los-rule-scope.test.mjs` 的 K49 守。
+ */
+test("覆寫涵蓋全部列時，圖說寫的分界必須是那一組，不是計畫預設", () => {
+  /* 兩列都被覆寫成 C：只有一組分界，所以 mixedRules 應該是 false。 */
+  const series = buildTrendSeries(SCOPED_ROWS, {
+    metric: "congestedShare",
+    congestedStart: "E",
+    congestedStartOf: () => "C",
+  });
+  assert.equal(series.mixedRules, false, "只有一組分界時不可以是 mixedRules");
+  assert.equal(series.congestedStart, "C", "series 要採用實際那一組（C），不是預設 E");
+  assert.equal(series.label, "C 級以下路段佔比");
+  /* D 在 C 以下 → 兩列都算壅塞 */
+  assert.equal(series.points[0].congestedCount, 2);
+
+  const text = describeTrendChart(series, {
+    scopeText: "平日",
+    /* 呼叫端已改成用 series.congestedStart 組文字，這裡照著給 */
+    bandText: "C、D、E、F",
+    showPeriod: (period) => period,
+  });
+  assert.ok(
+    text.meaning.includes("本圖的「壅塞」定義為 C、D、E、F"),
+    `圖說要寫出實際那一組，實際是：${text.meaning}`,
+  );
+  assert.ok(
+    !/定義為 E、F/.test(text.meaning),
+    "圖說不可以寫計畫預設那一組",
+  );
+});

@@ -41,8 +41,21 @@
 
   var GRADES = ["A", "B", "C", "D", "E", "F"];
 
+  /*
+   * 「有沒有數值」的唯一入口。
+   *
+   * ⚠️ 2026-09-25 修正：先擋型別再轉數字。舊寫法是
+   *   `value != null && value !== "" && Number.isFinite(Number(value))`，
+   *   而 `Number(" ")`、`Number("\t")`、`Number([])`、`Number(false)` 全是 0、
+   *   `Number(true)` 是 1，四種都通得過 isFinite → 缺值被當成「確實量到 0」，
+   *   圖說與樣本提示就會印出一個憑空的 0。
+   *   與 conclusion.js 的 isNum()、quality-extension.js 的 asNumber() 同一判準。
+   */
   function isNum(value) {
-    return value != null && value !== "" && Number.isFinite(Number(value));
+    var usable =
+      typeof value === "number" ||
+      (typeof value === "string" && value.trim() !== "");
+    return usable && Number.isFinite(Number(value));
   }
 
   /** 只給說明文字用的四捨五入；圖上的值一律用原始數字。 */
@@ -122,6 +135,13 @@
     if (!metric.dynamicLabel) return metric.label;
     var start = (options && options.congestedStart) || "E";
     var population = (options && options.populationLabel) || "路段";
+    /*
+     * ⚠️ 圖裡套到不只一組分界時**不可以寫出任何一個等級**。
+     *   寫了就是指名一把尺，而圖上的數字是逐列用各自的尺算的——
+     *   使用者拿「E 級以下」去驗算，驗不出圖上那個百分比。
+     *   規則與 buildBandSeries 的 mixedRules 相同。
+     */
+    if (options && options.mixedRules) return population + "壅塞佔比（分界不只一組）";
     return start + " 級以下" + population + "佔比";
   }
 
@@ -153,8 +173,46 @@
     var opts = options || {};
     var metricKey = opts.metric || "congestedShare";
     var metric = metricByKey(metricKey) || TREND_METRICS[0];
-    var congestedStart = opts.congestedStart || "E";
-    var congestedIndex = GRADES.indexOf(congestedStart);
+    var fallbackStart = opts.congestedStart || "E";
+    /*
+     * ══════════════════════════════════════════════════════════════════
+     *  分界要逐列問（2026-09-24，F6 獨立複查抓到）
+     * ══════════════════════════════════════════════════════════════════
+     *
+     * 三段分法自 2026-09-15 起可以依「季別區間 × 路段」覆寫，同一張圖裡
+     * 不同的列可能用不同的尺。`buildBandSeries` 早就有 `bandsOf` 逐列問 ＋
+     * `mixedRules`（不只一把尺就要求呼叫端整段不寫），**這一支沒有**。
+     *
+     * 後果（實際會發生）：計畫預設壅塞起 E、使用者把 114Q1 覆寫成 C，
+     * 114Q1 有一筆 D——三段分法圖算它是壅塞，這裡算它不是，
+     * **同一頁上兩張圖對同一季給出不同的壅塞條數**；而第 3 級圖說還會寫
+     * 「落在你設定的壅塞段（E 級以下）」，那個 E 不是該季實際套用的 C。
+     * 手冊／畫面／README／結論草稿原本更有五處保證「永遠只有一條分界線」，
+     * 那五處已於同一版一併更正（改成「永遠套用同一組分界」＋覆寫時的說法）。
+     *
+     * ⚠️ 沒有任何覆寫時每一列都會拿到同一把尺（＝計畫預設），
+     *   畫面與數字一個都不會變。
+     */
+    var startOf =
+      typeof opts.congestedStartOf === "function"
+        ? function (row) {
+            return opts.congestedStartOf(row) || fallbackStart;
+          }
+        : function () {
+            return fallbackStart;
+          };
+    var startSeen = {};
+    var startList = [];
+    (rows || []).forEach(function (row) {
+      var start = startOf(row);
+      if (!startSeen[start]) {
+        startSeen[start] = true;
+        startList.push(start);
+      }
+    });
+    var mixedRules = startList.length > 1;
+    /* 只有一把尺時就用那一把（沒有覆寫時它本來就等於計畫預設）。 */
+    var congestedStart = startList.length === 1 ? startList[0] : fallbackStart;
     var periods = [];
     var byPeriod = {};
 
@@ -194,7 +252,9 @@
       var graded = own.length - unknown;
       var congestedRows = own.filter(function (row) {
         var index = GRADES.indexOf(row.los);
-        return index >= 0 && index >= congestedIndex;
+        /* ⚠️ 逐列用**它自己那一季／那一條路**的分界，不是整張圖一把尺。 */
+        var start = GRADES.indexOf(startOf(row));
+        return index >= 0 && start >= 0 && index >= start;
       });
       /*
        * 佔比的分母是**判定得出等級的筆數**，不是全部筆數。
@@ -276,11 +336,17 @@
       digits: metric.digits,
       ordinal: Boolean(metric.ordinal),
       congestedStart: congestedStart,
+      /*
+       * 這張圖裡不只一組分界。呼叫端必須把這件事寫進圖說，
+       * 第 3 級也不可以宣稱單一分界（規則與 buildBandSeries 的 mixedRules 相同）。
+       */
+      mixedRules: mixedRules,
       populationLabel: opts.populationLabel || "路段",
       sampleLabel: opts.sampleLabel || "條",
       label: metricLabel(metricKey, {
         congestedStart: congestedStart,
         populationLabel: opts.populationLabel || "路段",
+        mixedRules: mixedRules,
       }),
       points: points,
     };
@@ -372,7 +438,14 @@
 
     /* ── 一、這張圖在看什麼 ── */
     var definition = metric.meaning;
-    if (series.metric === "congestedShare" && info.bandText)
+    /*
+     * ⚠️ 不只一組分界時**不可以引用呼叫端傳進來的 bandText**——
+     *   那一段是計畫預設那一把尺的文字，圖上的數字卻是逐列算的。
+     */
+    if (series.metric === "congestedShare" && series.mixedRules)
+      definition +=
+        "⚠️ 本圖涵蓋的季別套用了不只一組壅塞分界，每一列是用它自己那一季／那一條路段的分界判定的，所以這裡不寫單一分界。各季各路段實際套到哪一組，請看「判定標準」的覆寫清單。";
+    else if (series.metric === "congestedShare" && info.bandText)
       definition += "本圖的「壅塞」定義為 " + info.bandText + "。";
     out.meaning =
       "這張圖看的是「" +
@@ -612,12 +685,44 @@
        */
       var CL = typeof globalThis !== "undefined" && globalThis.ChartLevels;
       if (CL) {
-        if (series.metric === "worstLos" && last.worstLos) {
+        /*
+         * ⚠️ `&& !series.mixedRules`：losLevels 會寫出
+         *   「落在你設定的壅塞段（Y 級以下）」，不只一組分界時那個 Y
+         *   指不出來（與 app.js 的 losCardScript／K46 同一條規則）。
+         *   寫不出來就維持 null，第 3、4 級整段不畫。
+         */
+        if (series.metric === "worstLos" && last.worstLos && !series.mixedRules) {
+          /*
+           * ⚠️ 2026-09-23 修正：這四個參數原本錯了兩個。
+           *
+           * `CL.losLevels(worst, congestedStart, congestedCount, total)` 的
+           * 第三個參數是「**落在壅塞段**的筆數」，它會被寫成
+           *   「N 筆之中有 M 筆（X%）落在你設定的壅塞段（Y 級以下）」
+           * 而這句話是要被抄進業主報告的。
+           *
+           * ① 第三個參數原本傳的是 `worstCount`——那是「**最差那一級**的筆數」
+           *   （trend.js 的 `own.filter(row => GRADES.indexOf(row.los) === worstIndex)`），
+           *   與壅塞完全是兩件事。實際症狀：
+           *     ・worstLos=D、congestedCount=0、worstCount=2
+           *       → 寫成「有 2 筆落在壅塞段（E 級以下）」，但 D 不可能在 E 以下，
+           *         而且真正的壅塞筆數是 0。
+           *     ・worstLos=F、congestedCount=4、worstCount=1
+           *       → 壅塞 4 筆只講 1 筆。
+           *   同一個 point 上本來就有算好的 `congestedCount`，直接用它。
+           *
+           * ② 第二個參數原本是 `info.congestedStart || last.worstLos`——
+           *   讀不到分界時**拿最差等級頂替**，於是句子會變成
+           *   「最差為 C 級 … 落在你設定的壅塞段（C 級以下）」，
+           *   那個 C 根本不是使用者設的分界，是由別的欄位反推出來的。
+           *   改用 `series.congestedStart`：它是 buildTrendSeries 算
+           *   `congestedCount` 時用的**同一個**分界（沒給時預設 "E"），
+           *   所以文字裡的分界與數字一定出自同一套尺。
+           */
           out.levels = CL.losLevels(
             last.worstLos,
-            info.congestedStart || last.worstLos,
-            Number(last.worstCount) || 0,
-            Number(last.gradedSize) || Number(last.worstCount) || 0,
+            series.congestedStart,
+            Number(last.congestedCount) || 0,
+            Number(last.gradedSize) || 0,
           );
         } else if (
           !series.ordinal &&
@@ -805,6 +910,40 @@
       }
       byPeriod[period].rows.push(row);
     });
+    /*
+     * ══════════════════════════════════════════════════════════════════
+     *  ⚠️ 圖例與圖說的分界，要用**柱子實際用的那一把尺**
+     * ══════════════════════════════════════════════════════════════════
+     *
+     * 2026-09-23 的獨立複查抓到：柱高與筆數走 `bandsOf(row)`（逐列覆寫），
+     * 圖例卻走 `bands`（計畫預設）。只要有任何一個「季別區間 × 路段」的
+     * 覆寫，圖例與柱子就講不同的話；app.js 的第 3 級文字同樣讀
+     * `bandsFor()`（計畫預設），於是會寫出
+     *   「最差為 C 級 … 落在你設定的壅塞段（E 級以下）」
+     * 這種同一句自相矛盾的話——而那一句是要抄進業主報告的。
+     *
+     * 本專案自己的註解早就寫過同一件事（各路段 LOS 圖那邊的
+     * 「⚠️ 要用 bandHitFor…不是 bandsFor」、本檔上面的
+     * 「⚠️ 不可以只在圖例上換一組尺而內部還用舊的」），只是三段圖漏了。
+     *
+     * 規則：
+     *   ・全部的列都用同一把尺 → 圖例與圖說就用**那一把**。
+     *     沒有任何覆寫時那一把本來就等於計畫預設，畫面一個像素都不會變。
+     *   ・不只一把 → `mixedRules` 為 true，呼叫端必須把
+     *     「這張圖裡不只一組分界」寫進圖說，第 3 級也不可以宣稱單一分界。
+     */
+    var ruleSeen = {};
+    var ruleList = [];
+    (rows || []).forEach(function (row) {
+      var rule = bandsOf(row) || bands;
+      var key = String(rule.smoothEnd) + "|" + String(rule.congestedStart);
+      if (!ruleSeen[key]) {
+        ruleSeen[key] = true;
+        ruleList.push(rule);
+      }
+    });
+    var mixedRules = ruleList.length > 1;
+    var effectiveBands = ruleList.length === 1 ? ruleList[0] : bands;
     periods.sort(function (a, b) {
       return typeof opts.comparePeriod === "function"
         ? opts.comparePeriod(a, b)
@@ -848,9 +987,18 @@
           : null,
       };
     });
-    var gradesOf = bandGradeGroups(bands);
+    /* ⚠️ 用 effectiveBands，不是 bands——理由見上面那一大段。 */
+    var gradesOf = bandGradeGroups(effectiveBands);
     return {
-      bands: bands,
+      /*
+       * `bands` 現在是**柱子實際用的那一把尺**（全部的列一致時）。
+       * 不一致時退回呼叫端傳進來的計畫預設，並用 mixedRules 標出來。
+       */
+      bands: effectiveBands,
+      /** 這張圖裡出現過的所有分界（去重）。一致時只有一組。 */
+      ruleSets: ruleList.length ? ruleList : [bands],
+      /** true＝同一張圖裡不只一組分界，圖說必須講出來。 */
+      mixedRules: mixedRules,
       grades: gradesOf,
       /* 圖例要寫出「哪幾級算這一段」，看圖的人才知道尺是怎麼訂的。 */
       legend: [

@@ -23,6 +23,7 @@ import { dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { launchOptions } from "./chrome-path.mjs";
+import { validationFileName } from "./validation-file.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TYPES = {
@@ -158,6 +159,52 @@ ok(
   "⑤ 反面：新名字真的出現在畫面上（不是把整段刪掉就變綠）",
   renamedSomewhere && hasNewName,
 );
+
+/*
+ * ⑥ ⚠️ 「更新說明」裡寫的**側欄第 N 顆**必須與實際順序一致
+ *   （2026-09-25 第六輪抓到：文件寫第 12 顆，實測是第 15 顆）。
+ *   為什麼靜態掃不到：側欄最終順序不是 index.html 的靜態順序——
+ *   app.js／quality-extension.js 會插入四顆（匯入紀錄、路段管理、資料維護、
+ *   成果交付），而分區排序又會整批重排。**只有真的開起來數才算數**，
+ *   所以這一條放在 e2e，不放在文字守門裡。
+ *   反面也驗：文件裡寫的名字必須真的是側欄上的按鈕名，
+ *   否則把名字打錯就變成「找不到＝跳過＝綠」。
+ */
+const navNames = await page.$$eval("nav button[data-view]", (els) =>
+  els.map((e) => e.textContent.trim()),
+);
+const ordinalClaim = readFileSync(join(here, "【更新說明】請先讀我.txt"), "utf8").match(
+  /側欄第 (\d+) 顆按鈕寫的是「([^」]+)」/,
+);
+ok("⑥ 「更新說明」裡找得到「側欄第 N 顆按鈕寫的是「…」」這句", Boolean(ordinalClaim));
+if (ordinalClaim) {
+  const [, nth, name] = ordinalClaim;
+  const actual = navNames.indexOf(name) + 1;
+  ok(
+    `⑥ 反面：文件寫的「${name}」真的是側欄上的按鈕（否則名字打錯就會靜靜跳過）`,
+    actual > 0,
+    `側欄實際有：${navNames.join("／")}`,
+  );
+  ok(
+    `⑥ 側欄第 ${nth} 顆就是「${name}」`,
+    actual === Number(nth),
+    `實測是第 ${actual} 顆（側欄共 ${navNames.length} 顆）`,
+  );
+}
+/*
+ * ⑥-b 文件裡若寫了「側欄共 N 顆」，那個 N 也要對。
+ *   （2026-09-25 第六輪：這個數字是我自己寫進兩份文件的，
+ *   而它和序號一樣**只有真的開起來數才算數**。）
+ */
+for (const doc of ["【更新說明】請先讀我.txt", validationFileName(here)]) {
+  const text = readFileSync(join(here, doc), "utf8");
+  for (const m of text.matchAll(/側欄共\s*(\d+)\s*顆/g))
+    ok(
+      `⑥-b ${doc} 寫的「側欄共 ${m[1]} 顆」與實測相符`,
+      Number(m[1]) === navNames.length,
+      `實測 ${navNames.length} 顆`,
+    );
+}
 
 ok("整段沒有 JS 例外", errors.length === 0, errors.slice(0, 3).join(" | "));
 

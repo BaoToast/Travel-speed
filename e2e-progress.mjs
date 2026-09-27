@@ -124,6 +124,24 @@ const trace = await page.evaluate(async () => {
     )
       seen.push(entry);
   };
+  /*
+   * 計時器取樣在快取已熱、檔案很小時可能一次都排不到，造成產品已正確更新 DOM
+   * 卻整組假紅。MutationObserver 會在每次 DOM 變動後的微任務階段記錄；計時器
+   * 仍保留作為實際時間軸的第二條證據。
+   */
+  const observer = new MutationObserver(snap);
+  for (const target of [
+    document.getElementById("preview"),
+    document.getElementById("files"),
+    document.getElementById("fileInfo"),
+    document.getElementById("previewStatus"),
+  ])
+    observer.observe(target, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
   const timer = setInterval(snap, 10);
   snap();
   document.getElementById("preview").click();
@@ -134,6 +152,7 @@ const trace = await page.evaluate(async () => {
       break;
   }
   clearInterval(timer);
+  observer.disconnect();
   snap();
   return seen;
 });

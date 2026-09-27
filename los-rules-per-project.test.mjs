@@ -28,9 +28,17 @@ function sandbox(losRules, activeCode) {
     "state",
     [
       "const DEFAULT_LOS_RULE = { A: 0.8, B: 0.6, C: 0.5, D: 0.4, E: 0.2 };",
+      /*
+       * ⚠️ hasNumericValue 一定要跟著抽進來（2026-09-25）。
+       *   losOf 的缺值守衛改走它之後，少抽這一支會得到
+       *   「hasNumericValue is not defined」——那是真的紅，不是環境問題：
+       *   代表沙箱抽的片段與實際執行時的相依不一致。
+       *   日後 losOf 再多依賴一支共用函式，這裡也要一起加。
+       */
+      extractFunction("hasNumericValue", source),
       extractFunction("rulesFor", source),
       extractFunction("losOf", source),
-      "return { rulesFor, losOf };",
+      "return { rulesFor, losOf, hasNumericValue };",
     ].join("\n"),
   )({ losRules, activeCode });
 }

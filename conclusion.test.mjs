@@ -463,3 +463,280 @@ test("方向篩選用的是鍵值，取了顯示名稱也不受影響", () => {
     0,
   );
 });
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  A18：混合勾選的組合測試（測試盲區）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 2026-09-21 的盤點結果：三支的結論草稿都有測試，但「一次勾 3 項以上」
+ * 的組合極少（本支 2 項、路口轉向 1 項、全日交通量 0 項）。
+ * 姊妹專案路口轉向的三個真實缺陷全部躲在這個盲區裡：
+ * 每一項單獨勾都對，混在一起才出事。
+ *
+ * ⚠️ **只斷言「草稿不是空的」不算數**——出事的草稿本來就不是空的。
+ *   這裡逐一斷言每一個勾起來的項目都真的寫出來了。
+ */
+test("⚠️ 一次勾滿所有指標：每一個都要真的寫出來", () => {
+  const rows = [
+    row({ period: "114Q4", los: "C", travel: 28.4 }),
+    row({ period: "115Q1", los: "D", travel: 24.1 }),
+    row({ period: "115Q2", road: "中正路", los: "B", travel: 36.8 }),
+  ];
+  const keys = SPEED_CONCLUSION_METRICS.map((metric) => metric.key);
+  const text = buildSpeedConclusion(
+    rows,
+    cond({ scope: { kind: "project" }, metrics: keys, grouping: "overall" }),
+    META,
+  );
+  /* 前置：真的勾滿了，而且指標清單不是空的。 */
+  assert.ok(keys.length >= 10, `指標只有 ${keys.length} 項，清單可能被改壞`);
+  assert.ok(text.length > 200, "草稿短到不像勾了十幾項");
+  /*
+   * 逐項確認：每一個指標至少要在草稿裡留下自己的痕跡。
+   * 這裡比對的是該指標**特有**的字樣，不是「草稿有東西」。
+   */
+  for (const [key, mark] of [
+    ["los", /服務水準/],
+    ["travel", /旅行速率/],
+    ["running", /行駛速率/],
+    ["totalDelay", /總延滯/],
+    ["delayParts", /交叉口延滯/],
+    ["limit", /速限/],
+    ["directionText", /--->|→/],
+    ["growth", /變|增|減/],
+    ["worst", /最差/],
+    ["extremes", /最快|最慢/],
+    ["losCount", /筆/],
+    ["bandShare", /順暢|尚可|壅塞/],
+  ]) {
+    if (!keys.includes(key)) continue;
+    assert.match(text, mark, `勾了「${key}」，草稿裡卻找不到它的內容`);
+  }
+});
+
+test("⚠️ 混合勾選：跟尖峰有關的與跟尖峰無關的一起勾，兩邊都要在", () => {
+  /*
+   * 「速限」與「方向文字」是**不隨尖峰改變**的（見 conclusion.js 的
+   * INAPPLICABLE 說明），其餘是逐筆尖峰的數字。
+   * 兩類混在一起勾時，不可以因為其中一類就把另一類整個吃掉。
+   */
+  const text = buildSpeedConclusion(
+    [row()],
+    cond({
+      peaks: ["上午尖峰"],
+      metrics: ["limit", "directionText", "los", "travel", "totalDelay"],
+    }),
+    META,
+  );
+  assert.match(text, /速限/, "不隨尖峰改變的「速限」被吃掉了");
+  assert.match(text, /--->|→/, "不隨尖峰改變的「方向文字」被吃掉了");
+  assert.match(text, /服務水準/);
+  assert.match(text, /旅行速率/);
+  assert.match(text, /總延滯/);
+});
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  「代表紀錄」＋「季度之間的變動」：不可以整段消失，更不可以說謊
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 2026-09-23 的反向對帳（從表格／圖那一端回推草稿）抓到的，而且**踩在
+ * 預設動線上**：主工具列的尖峰預設是「代表尖峰」，套用到結論草稿時
+ * `rowLevel` 會變成 `"representative"`。
+ *
+ * `describeGrowth` 舊的分組鍵是 `[road, day, peak, direction]`，
+ * 而代表紀錄「最差的那一筆是哪個尖峰哪個方向」**逐季會不同**，
+ * 於是兩季被分進兩個群組、每組只剩 1 筆：
+ *   ・byRoad 分組 → **一行都不印，也沒有任何說明**
+ *   ・其他分組 → 印出「範圍內沒有任何一筆具備兩季以上的資料」
+ *     ——而範圍內就是兩季，同一份資料在歷季速率圖上畫得出下降線。
+ *
+ * ⚠️ 使用者原話：「不要讓使用者出了題卻無法抓出答案來，但明明表格中
+ *   卻能查到答案」。這一件比查不到更糟：它**給了一個錯的答案**。
+ *
+ * ⚠️ 這一支也守反方向：逐筆明細時分組鍵**不可以**跟著放寬——
+ *   那時候同一條路同一天真的有好幾筆，不分尖峰與方向會把不同的東西比在一起。
+ */
+function growthRow(over) {
+  return {
+    projectCode: "P1",
+    projectName: "測試計畫",
+    road: "A路",
+    day: "平日",
+    direction: "方向1",
+    directionText: "甲路口--->乙路口",
+    travel: 30,
+    running: 40,
+    roadDelay: 20,
+    junctionDelay: 10,
+    totalDelay: 30,
+    limit: 50,
+    ratio: 0.6,
+    los: "E",
+    ...over,
+  };
+}
+
+/** 114Q1 最差是上午·方向1（E），114Q2 最差是下午·方向2（F）。 */
+const GROWTH_ROWS = [
+  growthRow({ year: 114, quarter: 1, period: "114Q1", peak: "上午尖峰", direction: "方向1", los: "E", travel: 30 }),
+  growthRow({ year: 114, quarter: 1, period: "114Q1", peak: "下午尖峰", direction: "方向2", los: "C", travel: 45 }),
+  growthRow({ year: 114, quarter: 2, period: "114Q2", peak: "上午尖峰", direction: "方向1", los: "D", travel: 38 }),
+  growthRow({ year: 114, quarter: 2, period: "114Q2", peak: "下午尖峰", direction: "方向2", los: "F", travel: 25 }),
+];
+
+const GROWTH_META = {
+  projectName: "測試計畫",
+  systemVersion: "v0",
+  generatedAt: "2026-09-23 10:00",
+  bandsOf: () => ({ smoothEnd: "B", congestedStart: "E" }),
+  worstOf: (list) =>
+    list.reduce((worst, row) =>
+      "ABCDEF".indexOf(row.los) > "ABCDEF".indexOf(worst.los) ? row : worst,
+    ),
+};
+
+for (const grouping of ["byRoad", "byPeriod", "overall"])
+  test(`⚠️ 代表紀錄＋季度變動（分組 ${grouping}）：兩季有資料就要寫得出來`, () => {
+    const text = buildSpeedConclusion(
+      GROWTH_ROWS,
+      {
+        ...SPEED_DEFAULT_CONDITION,
+        scope: { kind: "project" },
+        metrics: ["growth"],
+        grouping,
+        rowLevel: "representative",
+      },
+      GROWTH_META,
+    );
+    assert.match(
+      text,
+      /由 114Q1 至 114Q2/,
+      `勾了「季度之間的變動幅度」卻寫不出那一句：\n${text}`,
+    );
+    /* 真的把兩季的值比出來，不是只印一個標題。 */
+    assert.match(text, /旅行速率由 30\.0 變為 25\.0 km\/h/, text);
+    assert.match(text, /服務水準 E → F/, text);
+    assert.ok(
+      !/沒有任何一筆具備兩季以上的資料/.test(text),
+      `資料有兩季，草稿卻說沒有——這比寫不出來更糟：\n${text}`,
+    );
+  });
+
+test("⚠️ 代表紀錄時，兩季的時段／方向不同要照實寫出來", () => {
+  const text = buildSpeedConclusion(
+    GROWTH_ROWS,
+    {
+      ...SPEED_DEFAULT_CONDITION,
+      scope: { kind: "project" },
+      metrics: ["growth"],
+      grouping: "overall",
+      rowLevel: "representative",
+    },
+    GROWTH_META,
+  );
+  /*
+   * ⚠️ 只寫第一季那一個的話，讀的人會以為兩季比的是同一個尖峰同一個方向。
+   *   代表紀錄本來就是「這條路這一天最差的那一筆」，換了時段是正常的，
+   *   但要講出來。
+   */
+  assert.match(text, /上午尖峰・方向1 → 下午尖峰・方向2/, text);
+  assert.match(text, /代表紀錄，兩季最差的時段／方向不同/, text);
+});
+
+test("⚠️ 兩季剛好是同一個時段方向時，不要畫蛇添足寫成「→」", () => {
+  const rows = [
+    growthRow({ year: 114, quarter: 1, period: "114Q1", peak: "上午尖峰", direction: "方向1", los: "E", travel: 30 }),
+    growthRow({ year: 114, quarter: 2, period: "114Q2", peak: "上午尖峰", direction: "方向1", los: "F", travel: 25 }),
+  ];
+  const text = buildSpeedConclusion(
+    rows,
+    {
+      ...SPEED_DEFAULT_CONDITION,
+      scope: { kind: "project" },
+      metrics: ["growth"],
+      grouping: "overall",
+      rowLevel: "representative",
+    },
+    GROWTH_META,
+  );
+  assert.match(text, /A路（平日）・上午尖峰・方向1：由 114Q1 至 114Q2/, text);
+  assert.ok(!/→ 上午尖峰/.test(text), `同一個時段方向不該寫成「→」：\n${text}`);
+});
+
+test("⚠️ 逐筆明細的分組鍵不可以跟著放寬（不同尖峰／方向不可以比在一起）", () => {
+  const text = buildSpeedConclusion(
+    GROWTH_ROWS,
+    {
+      ...SPEED_DEFAULT_CONDITION,
+      scope: { kind: "project" },
+      metrics: ["growth"],
+      grouping: "overall",
+      rowLevel: "detail",
+    },
+    GROWTH_META,
+  );
+  /* 逐筆時「上午·方向1」與「下午·方向2」各自成一組，各自兩季，寫出兩行。 */
+  assert.match(text, /上午尖峰・方向1：由 114Q1 至 114Q2/, text);
+  assert.match(text, /下午尖峰・方向2：由 114Q1 至 114Q2/, text);
+  assert.ok(
+    !/→ 下午尖峰/.test(text),
+    `逐筆明細不該把不同尖峰方向混成一組：\n${text}`,
+  );
+});
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  「C → D」要講出好壞方向與級數（使用者 2026-09-23 核准新增）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 舊版只寫「服務水準 C → D」。讀報告的人要自己記得 A 最好、F 最差才知道
+ * 那是變差了；而畫面上的歷季服務水準圖早就寫著「等級變差了」。
+ *
+ * ⚠️ 這一支特別要釘住**方向不可以寫反**：
+ *   app.js 用 losRank（A=6…F=1，越大越好），conclusion.js 用 LOS_ORDER
+ *   的索引（A=0…F=5，越小越好），兩者方向相反。只驗一個方向的話，
+ *   把大於小於寫反一樣會綠。所以 A→F 與 F→A 兩邊都驗。
+ */
+function losPair(before, after) {
+  return buildSpeedConclusion(
+    [
+      growthRow({ year: 114, quarter: 1, period: "114Q1", peak: "上午尖峰", los: before }),
+      growthRow({ year: 114, quarter: 2, period: "114Q2", peak: "上午尖峰", los: after }),
+    ],
+    {
+      ...SPEED_DEFAULT_CONDITION,
+      scope: { kind: "project" },
+      metrics: ["growth"],
+      grouping: "overall",
+      rowLevel: "detail",
+    },
+    GROWTH_META,
+  );
+}
+
+test("⚠️ 服務水準往 F 走要寫「變差」，往 A 走要寫「變好」（方向不可以寫反）", () => {
+  assert.match(losPair("C", "D"), /服務水準 C → D（等級變差 1 級）/);
+  assert.match(losPair("D", "C"), /服務水準 D → C（等級變好 1 級）/);
+  /* 反證：把大於小於寫反的話，上面兩條之中必有一條會紅。 */
+  assert.match(losPair("A", "F"), /服務水準 A → F（等級變差 5 級）/);
+  assert.match(losPair("F", "A"), /服務水準 F → A（等級變好 5 級）/);
+});
+
+test("⚠️ 等級相同時寫「沒有變化」，不寫「變好 0 級」", () => {
+  const text = losPair("D", "D");
+  assert.match(text, /服務水準 D → D（等級沒有變化）/);
+  assert.doesNotMatch(text, /變好 0 級|變差 0 級/);
+});
+
+test("⚠️ 任一季讀不出等級時不多寫一句（前面已經印了「?」）", () => {
+  for (const pair of [["?", "D"], ["C", "?"], ["?", "?"]]) {
+    const text = losPair(pair[0], pair[1]);
+    assert.doesNotMatch(
+      text,
+      /等級變好|等級變差|等級沒有變化/,
+      `${pair[0]} → ${pair[1]} 不該判定好壞方向：\n${text}`,
+    );
+  }
+});

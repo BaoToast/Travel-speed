@@ -57,7 +57,7 @@ const directionIssue = (texts) => ({
   resolution: { kind: "人工確認" },
 });
 
-const trendIssue = (los, travel) => ({
+const trendIssue = (los, travel, shownPeriod = "115Q2") => ({
   code: "trend-change",
   type: "異常變化",
   fromPeriod: "115Q2",
@@ -65,7 +65,8 @@ const trendIssue = (los, travel) => ({
   road: "台1(甲路～乙路)",
   day: "平日",
   item: "台1(甲路～乙路)／平日",
-  detail: `相較 115Q2：LOS D→${los}，旅行速率 30.0→${travel} km/h，請確認資料或現地變化。`,
+  fingerprintDetail: `LOS D→${los}，旅行速率 30.0→${travel} km/h`,
+  detail: `相較 ${shownPeriod}：LOS D→${los}，旅行速率 30.0→${travel} km/h，請確認資料或現地變化。`,
   resolution: { kind: "人工確認" },
 });
 
@@ -108,6 +109,15 @@ test("二、對照組：異常變化的數字變了，指紋就必須變（刻�
   );
 });
 
+test("二-b、只切換民國／西元年份顯示時，異常確認不可以失效", () => {
+  const fp = loadFingerprint();
+  assert.equal(
+    fp(trendIssue("E", "22.0", "115Q2")),
+    fp(trendIssue("E", "22.0", "2026Q2")),
+    "只改畫面年份寫法就讓指紋改變——顯示偏好不可以使已人工確認失效",
+  );
+});
+
 test("三、同一列資料上的兩種「數值異常」不可以撞成同一把鑰匙", () => {
   const fp = loadFingerprint();
   const base = {
@@ -124,18 +134,49 @@ test("三、同一列資料上的兩種「數值異常」不可以撞成同一�
   );
 });
 
+/*
+ * ⚠️ 2026-09-25 第六輪獨立複查：這一支原本只掃 `app.js`，
+ *   而 `quality-extension.js` **把 app.js 那一筆「異常變化」整類濾掉**，
+ *   實際送進畫面的是它自己 `extra.push` 的那一筆——那一筆當時沒有 `code`。
+ *   也就是「每一筆都要有 code」這條保證在**唯一真正會跑的那一條路徑上
+ *   沒有成立**，而守門是綠的。兩個檔案一起掃。
+ *
+ * ⚠️ 代碼刻意允許跨檔重複一次：`quality-extension.js` 覆寫掉 app.js 的
+ *   「異常變化」時，兩邊必須用**同一個** code（同一件事不可以有兩把鑰匙，
+ *   否則使用者按過的「已人工確認」會在兩者之間對不上）。所以重複檢查
+ *   改成「同一個檔案裡不可以重複」。
+ */
 test("四、每一個 issues.push 都帶著固定代碼（少一個就會與別人撞鑰匙）", () => {
-  const pushes = app.match(/issues\.push\(\{/g) || [];
-  const codes = app.match(/^\s+code: "[a-z-]+",$/gm) || [];
-  assert.ok(pushes.length >= 9, `只找到 ${pushes.length} 個 issues.push——正規表示式壞了`);
-  assert.equal(
-    codes.length,
-    pushes.length,
-    `有 ${pushes.length} 個 issues.push，但只有 ${codes.length} 個 code`,
+  const extension = readFileSync(
+    new URL("./quality-extension.js", import.meta.url),
+    "utf8",
   );
-  /* 代碼不可以重複——重複等於沒有代碼。 */
-  const unique = new Set(codes.map((c) => c.trim()));
-  assert.equal(unique.size, codes.length, "有重複的 code");
+  const check = (label, source, pushPattern, minimum) => {
+    const pushes = source.match(pushPattern) || [];
+    const codes = source.match(/^\s+code: "[a-z-]+",$/gm) || [];
+    assert.ok(
+      pushes.length >= minimum,
+      `${label}：只找到 ${pushes.length} 個 push——正規表示式壞了`,
+    );
+    assert.equal(
+      codes.length,
+      pushes.length,
+      `${label}：有 ${pushes.length} 個 push，但只有 ${codes.length} 個 code`,
+    );
+    const unique = new Set(codes.map((c) => c.trim()));
+    assert.equal(unique.size, codes.length, `${label}：同一個檔案裡有重複的 code`);
+    return codes.map((c) => c.trim());
+  };
+  check("app.js", app, /issues\.push\(\{/g, 9);
+  const extraCodes = check("quality-extension.js", extension, /extra\.push\(\{/g, 1);
+  /*
+   * 正面斷言：`quality-extension.js` 覆寫的那一筆，code 必須與 app.js
+   * 同一種異常用的那一個相同（否則「已人工確認」在兩邊對不上）。
+   */
+  assert.ok(
+    extraCodes.includes('code: "trend-change",'),
+    "quality-extension.js 覆寫的「異常變化」沒有沿用 app.js 的 code（trend-change）",
+  );
 });
 
 test("五、孤兒確認紀錄清得掉，而且只清孤兒", () => {

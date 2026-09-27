@@ -351,6 +351,43 @@ const quotedTravels = [...oneDirection.matchAll(/旅行速率\s([\d,.]+)\sk?m?\/
 const strayTravels = quotedTravels.filter(
   (value) => !direction1Travels.includes(Number(value).toFixed(1)),
 );
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  ⚠️ 草稿宣告「引用了速限與速限比」，就必須真的寫出來
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 2026-09-23 的反向對帳抓到：設了尖峰或日別時，草稿會加上那句
+ * 「…因此下列各行引用的速限與速限比不受這兩項影響」，
+ * 但下面每一行從頭到尾**沒有速限、也沒有速限比**。
+ * 看報告的人讀到那句話就去下面找，找不到——或更糟，直接相信「有引用」。
+ *
+ * 同一輪也補齊了同包 CSV 有、而這一份缺的欄位：行駛速率、延滯分項、方向起訖。
+ * 那份 CSV 與這份文字草稿**裝在同一個 ZIP 裡**交出去，兩邊說不同的話最難發現。
+ *
+ * ⚠️ 判定要用「數字＋單位」的形狀，不可以只找「速限」兩個字——
+ *   上面那句宣告本身就含「速限」，只找字的話這一條會恆真。
+ */
+ok(
+  "⚠️ 草稿每一行都要寫出速限（數字＋km/h），不是只在宣告裡提到",
+  /速限 [\d.]+ km\/h/.test(oneDirection),
+  (oneDirection.match(/速限 [^；。]{0,24}/) || ["（沒有寫）"])[0],
+);
+ok(
+  "⚠️ 速限比要寫成「比值（百分比）」——彙總表是 0.782、判定門檻是 ≧0.90，只寫百分比對不起來",
+  /速限比 [\d.]+（[\d.]+%）/.test(oneDirection),
+  (oneDirection.match(/速限比 [^；。]{0,24}/) || ["（沒有寫）"])[0],
+);
+ok(
+  "⚠️ 行駛速率要寫出來（同包 CSV 有這一欄，交付方會拿它算停等損失）",
+  /行駛速率 [\d.]+ km\/h/.test(oneDirection),
+  (oneDirection.match(/行駛速率 [^；。]{0,20}/) || ["（沒有寫）"])[0],
+);
+ok(
+  "⚠️ 延滯分項（路段／交叉口）要寫出來",
+  /路段延滯 [^；。]*交叉口延滯 [\d.]+ 秒/.test(oneDirection),
+  (oneDirection.match(/路段延滯 [^；。]{0,40}/) || ["（沒有寫）"])[0],
+);
+
 ok(
   "前置：草稿裡引用得到旅行速率（0 個的話下一條恆真）",
   quotedTravels.length > 0,
@@ -390,6 +427,193 @@ ok(
     pctDigits(twoDigits).every((n) => n === 2),
   `變動幅度的小數位：${pctDigits(twoDigits).join("／") || "（這批資料沒有可比較的前期）"}`,
 );
+
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  ⚠️ ⑥ 存過草稿之後只改小數位數、**不按「重新產生」**（2026-09-25 新增）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 上面 ④ 在改位數之後按了 #generateDraft，所以走的是「明確要求重新產生」那條路，
+ * 永遠踩不到真正的缺陷：
+ *
+ *   loadDraft() 是 `value = saved || narrative()`，而 digits **不在 draftKey() 裡**。
+ *   只要使用者按過一次「儲存修改」，saved 就存在，之後改位數一律貼回
+ *   **舊位數算出來的那一份**——而「下載季度成果包 ZIP」裡的
+ *   *_報告文字草稿.txt 寫的正是文字框內容。
+ *   方向與尖峰之所以正常，是因為它們會改變 draftKey()。
+ *
+ * 所以這一段刻意**不按重新產生**，只動位數，看文字框自己會不會跟著變。
+ */
+await page.selectOption("#deliveryDigits", "1");
+await page.waitForTimeout(500);
+await page.click("#generateDraft");
+await page.waitForTimeout(900);
+await page.click("#saveDraft");            /* ← 關鍵：先存起來，讓 saved 存在 */
+await page.waitForTimeout(700);
+const savedOneDigit = await reportText();
+ok(
+  "前置：1 位的草稿存得起來，而且真的是 1 位（0 個的話下一條恆真）",
+  travelDigits(savedOneDigit).length > 0 &&
+    travelDigits(savedOneDigit).every((n) => n === 1),
+  `旅行速率的小數位：${travelDigits(savedOneDigit).join("／") || "（量不到）"}`,
+);
+await page.selectOption("#deliveryDigits", "2");
+await page.waitForTimeout(900);            /* 不按「重新產生」 */
+const afterDigitsOnly = await reportText();
+ok(
+  "⚠️ ⑥ 存過草稿之後只改小數位數（沒按重新產生），文字框要跟著變成 2 位",
+  travelDigits(afterDigitsOnly).length > 0 &&
+    travelDigits(afterDigitsOnly).every((n) => n === 2),
+  `旅行速率的小數位：${travelDigits(afterDigitsOnly).join("／") || "（量不到）"}` +
+    `｜與 1 位那一份是否相同：${afterDigitsOnly === savedOneDigit ? "相同（＝沒重算）" : "不同"}`,
+);
+ok(
+  "⚠️ ⑥ 而且內容真的換過了，不是同一份文字",
+  afterDigitsOnly !== savedOneDigit,
+  afterDigitsOnly === savedOneDigit ? "兩份完全相同＝位數沒有作用" : "已重算",
+);
+
+/* ══ 五、報告文字草稿：每一個交付條件都要真的生效 ═══════════════ */
+/*
+ * 使用者 2026-09-23：
+ *   「只要程式查的到的數值，結論草稿產生器應該都能讓使用者勾選對應條件後，
+ *     產出正確的數值」「報表草稿產生器，功能正常運作等同於數值正確性一樣重要」
+ *
+ * ⚠️ 為什麼這一段走 E2E 而不是抽成純函式做覆蓋盤點：
+ *   `narrative()` 直接讀 DOM（`q("deliveryRoad").value` 這一類），
+ *   把它抽成純函式是一次會動到報告文字產生邏輯的重構——**風險大於收益**，
+ *   而且 bug 最可能出現的地方正是「DOM 值有沒有被讀進來」，
+ *   抽出來反而測不到那一段。所以改成**從真正的畫面**掃每一個條件。
+ *
+ * ⚠️ 每一個維度都驗三件事，缺一不可：
+ *   ① 設了之後草稿**真的變了**（只加下拉不接資料是假功能）
+ *   ② 條件本身**寫進草稿**（那段文字會被貼進報告，報告上看不到畫面）
+ *   ③ 草稿引用的數字**只來自符合條件的那幾筆**（最重要的一條）
+ */
+console.log("\n══ 五、報告文字草稿：逐一掃過每一個交付條件 ══");
+await goto("delivery");
+
+/** 把所有交付條件清成「全部」，取得基準草稿。 */
+async function resetDelivery() {
+  for (const [id, value] of [
+    ["deliveryRoad", ""],
+    ["deliveryDay", ""],
+    ["deliveryDirection", ""],
+    ["deliveryPeak", ""],
+  ])
+    await page.selectOption(`#${id}`, value).catch(() => {});
+  await page.waitForTimeout(400);
+  await page.click("#generateDraft");
+  await page.waitForTimeout(800);
+  return reportText();
+}
+
+const baseDraft = await resetDelivery();
+ok(
+  "前置：基準草稿產得出來（產不出來的話下面全部恆真）",
+  baseDraft.length > 80,
+  `${baseDraft.length} 字`,
+);
+
+/** 這個下拉的第一個「不是全部」的選項值。 */
+const firstRealOption = (id) =>
+  page.evaluate((elementId) => {
+    const select = document.getElementById(elementId);
+    if (!select) return null;
+    for (const option of select.options)
+      if (option.value) return option.value;
+    return null;
+  }, id);
+
+for (const [id, label, rowField] of [
+  ["deliveryRoad", "路段", "road"],
+  ["deliveryDay", "日別", "day"],
+  ["deliveryDirection", "方向", "direction"],
+  ["deliveryPeak", "尖峰", "peak"],
+]) {
+  const value = await firstRealOption(id);
+  ok(`前置：「${label}」下拉有可以選的值`, Boolean(value), String(value));
+  if (!value) continue;
+  await resetDelivery();
+  await page.selectOption(`#${id}`, value);
+  await page.waitForTimeout(400);
+  await page.click("#generateDraft");
+  await page.waitForTimeout(800);
+  const filtered = await reportText();
+  ok(
+    `⚠️ 設了「${label}＝${value}」之後，草稿內容真的變了`,
+    filtered.length > 0 && filtered !== baseDraft,
+    filtered === baseDraft ? "兩份一模一樣——條件沒有接上資料" : "內容有變",
+  );
+  ok(
+    `⚠️ 草稿的「統計條件：」那一行寫出了「${value}」`,
+    /統計條件：/.test(filtered) && filtered.includes(value),
+    (filtered.match(/統計條件：.{0,100}/) || ["（沒有寫）"])[0],
+  );
+  /*
+   * ③ 最重要的一條：草稿引用的旅行速率必須**只來自符合這個條件的那幾筆**。
+   *   舊版曾經「畫面上寫著方向1、數字卻可能是方向2 的」——
+   *   那份文字會被複製進正式報告。
+   */
+  const allowed = await page.evaluate(
+    ({ field, wanted }) => {
+      const rows = state.details.filter(
+        (row) => row.projectCode === state.activeCode && row[field] === wanted,
+      );
+      return [...new Set(rows.map((row) => Number(row.travel).toFixed(1)))];
+    },
+    { field: rowField, wanted: value },
+  );
+  const quoted = [...filtered.matchAll(/旅行速率\s([\d,.]+)\s?k?m?\/?h?/g)]
+    .map((match) => match[1].replace(/,/g, ""))
+    .filter((text) => /\d/.test(text));
+  const stray = quoted.filter(
+    (text) => !allowed.includes(Number(text).toFixed(1)),
+  );
+  ok(
+    `前置：「${label}」的草稿裡引用得到旅行速率（0 個的話下一條恆真）`,
+    quoted.length > 0,
+    `${quoted.length} 個`,
+  );
+  ok(
+    `⚠️ 設了「${label}＝${value}」之後，草稿引用的旅行速率全部來自符合條件的資料`,
+    quoted.length > 0 && stray.length === 0,
+    stray.slice(0, 4).join("、") || "全部對得上",
+  );
+}
+
+/* 季度區間：起訖各設一次，內容要跟著變。 */
+const periods = await page.evaluate(() =>
+  [...(document.getElementById("deliveryPeriodStart")?.options || [])].map(
+    (option) => option.value,
+  ),
+);
+if (periods.length > 1) {
+  await resetDelivery();
+  await page.selectOption("#deliveryPeriodStart", periods[0]);
+  await page.selectOption("#deliveryPeriodEnd", periods[0]);
+  await page.waitForTimeout(400);
+  await page.click("#generateDraft");
+  await page.waitForTimeout(800);
+  const single = await reportText();
+  await page.selectOption("#deliveryPeriodStart", periods[0]);
+  await page.selectOption("#deliveryPeriodEnd", periods.at(-1));
+  await page.waitForTimeout(400);
+  await page.click("#generateDraft");
+  await page.waitForTimeout(800);
+  const ranged = await reportText();
+  ok(
+    "⚠️ 季度區間真的生效（單季與整段寫出來的字不一樣）",
+    single !== ranged,
+    single === ranged ? "兩份一模一樣" : "內容有變",
+  );
+} else {
+  ok(
+    "季度區間：這批測資只有一個季度，無法驗（不是通過，是沒得驗）",
+    true,
+    `季度數 ${periods.length}`,
+  );
+}
 
 ok("整段沒有 JS 例外", errors.length === 0, errors.slice(0, 3).join(" | "));
 

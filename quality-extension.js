@@ -121,13 +121,21 @@
     deliveryButton.dataset.view = "delivery";
     deliveryButton.textContent = "成果交付";
     document.querySelector('nav button[data-view="maintenance"]').after(deliveryButton);
-    deliveryButton.onclick = () => go("delivery");
+    /*
+     * ⚠️ 一定要走 `gotoView()`，不可以只呼叫 `go()`（2026-09-25 第六輪抓到）。
+     *   `gotoView()` 多做一件事：`setCollapsed(id, false)`——
+     *   「點大分頁＝要看那一頁，所以它底下的小分頁一定要展開」
+     *   （使用者 2026-09-14 指名要的行為，見 app.js 的 gotoView 註解）。
+     *   這是全站唯一一顆繞過它的側欄按鈕，而 e2e-nav-collapse 只驗
+     *   `speed` 一頁，所以剛好落在守備範圍外。
+     */
+    deliveryButton.onclick = () => gotoView("delivery");
     titles.delivery = "成果交付";
     const delivery = document.createElement("section");
     delivery.id = "delivery";
     delivery.className = "view";
     delivery.innerHTML =
-      '<div class="title"><div><span class="eyebrow">DELIVERY CENTER</span><h2>季度成果交付</h2><p>選擇季度與範圍，下載可追溯、可編輯的成果資料包。</p></div></div><div class="two"><article class="panel form"><h3>成果範圍</h3><p class="muted">可以只交付單一季度，也可以選擇一段期間（例如 114Q1～114Q4）一次交付。</p><div class="row"><label>起始季度<select id="deliveryPeriodStart"></select></label><label>結束季度<select id="deliveryPeriodEnd"></select></label></div><div class="note" id="deliveryRangeNote">尚無資料</div><label>路段<select id="deliveryRoad"><option value="">全部路段</option></select></label><label>日別<select id="deliveryDay"><option value="">平日與假日</option><option>平日</option><option>假日</option></select></label><label>方向<select id="deliveryDirection"><option value="">全部方向</option></select></label><label>尖峰<select id="deliveryPeak"><option value="">代表尖峰（同一組取最差）</option><option value="上午尖峰">上午尖峰</option><option value="下午尖峰">下午尖峰</option></select></label><label>小數位數<select id="deliveryDigits"><option value="0">0 位</option><option value="1" selected>1 位</option><option value="2">2 位</option></select></label><label>Excel 圖表內容<select id="deliveryMetric"><option value="travel">旅行速率（km/h）</option><option value="los">服務水準（A～F）</option></select></label><div class="check-grid"><label><input type="checkbox" id="packDetail" checked>尖峰明細</label><label><input type="checkbox" id="packSummary" checked>尖峰彙總</label><label><input type="checkbox" id="packQuality" checked>品質檢查</label><label><input type="checkbox" id="packNarrative" checked>分析文字草稿</label></div><button class="outline full" id="deliveryApplyMain" data-testid="delivery-apply-main">套用主工具列目前的條件<small>成果交付刻意與主工具列獨立（報告常要出一段和畫面不同的範圍）；要一鍵對齊就按這一顆。</small></button><button class="primary full" id="downloadQuarterPack">下載季度成果包 ZIP</button><button class="outline full" id="downloadFilteredCharts">匯出篩選後可編輯 Excel 圖表</button></article><article class="panel form"><h3>報告文字草稿</h3><p class="muted"><b>這一份是「這次交付的說明文字」</b>：依「成果範圍」設定的季度與路段，逐筆代表紀錄各寫一行，會隨 ZIP 成果包一起交出去。要自己挑條件（只寫某一季、某幾條路段、只寫服務水準…）請改用<b>「結論草稿」</b>。兩者的數字來源完全相同，都必須由使用者確認後再放入正式報告。</p><textarea id="reportDraft" rows="18"></textarea><div class="note" id="draftRecoverNote" hidden></div><div class="row"><button class="outline" id="generateDraft">重新產生</button><button class="primary" id="saveDraft">儲存修改</button></div></article></div>';
+      '<div class="title"><div><span class="eyebrow">DELIVERY CENTER</span><h2>成果交付</h2><p>選擇季度與範圍，下載可追溯、可編輯的成果資料包。</p></div></div><div class="two"><article class="panel form"><h3>成果範圍</h3><p class="muted">可以只交付單一季度，也可以選擇一段期間（例如 114Q1～114Q4）一次交付。</p><div class="row"><label>起始季度<select id="deliveryPeriodStart"></select></label><label>結束季度<select id="deliveryPeriodEnd"></select></label></div><div class="note" id="deliveryRangeNote">尚無資料</div><label>路段<select id="deliveryRoad"><option value="">全部路段</option></select></label><label>日別<select id="deliveryDay"><option value="">平日與假日</option><option>平日</option><option>假日</option></select></label><label>方向<select id="deliveryDirection"><option value="">全部方向</option></select></label><label>尖峰<select id="deliveryPeak"><option value="">代表尖峰（同一組取最差）</option><option value="上午尖峰">上午尖峰</option><option value="下午尖峰">下午尖峰</option></select></label><label>小數位數<select id="deliveryDigits"><option value="0">0 位</option><option value="1" selected>1 位</option><option value="2">2 位</option></select></label><label>Excel 圖表內容<select id="deliveryMetric"><option value="travel">旅行速率（km/h）</option><option value="los">服務水準（A～F）</option></select></label><div class="check-grid"><label><input type="checkbox" id="packDetail" checked>尖峰明細</label><label><input type="checkbox" id="packSummary" checked>尖峰彙總</label><label><input type="checkbox" id="packQuality" checked>品質檢查</label><label><input type="checkbox" id="packNarrative" checked>分析文字草稿</label></div><button class="outline full" id="deliveryApplyMain" data-testid="delivery-apply-main">套用主工具列目前的條件<small>成果交付刻意與主工具列獨立（報告常要出一段和畫面不同的範圍）；要一鍵對齊就按這一顆。</small></button><button class="primary full" id="downloadQuarterPack">下載季度成果包 ZIP</button><button class="outline full" id="downloadFilteredCharts">匯出篩選後可編輯 Excel 圖表</button></article><article class="panel form"><h3>報告文字草稿</h3><p class="muted"><b>這一份是「這次交付的說明文字」</b>：依「成果範圍」設定的季度與路段，逐筆代表紀錄各寫一行，會隨 ZIP 成果包一起交出去。要自己挑條件（只寫某一季、某幾條路段、只寫服務水準…）請改用<b>「結論草稿」</b>。兩者的數字來源完全相同，都必須由使用者確認後再放入正式報告。</p><textarea id="reportDraft" rows="18"></textarea><div class="note" id="draftRecoverNote" hidden></div><div class="row"><button class="outline" id="generateDraft">重新產生</button><button class="primary" id="saveDraft">儲存修改</button></div></article></div>';
     q("backup").before(delivery);
 
     /*
@@ -686,6 +694,21 @@
       anomalyRule: clone(state.anomalyRules?.[code] || null),
       conclusionTemplates: clone(state.conclusionTemplates?.[code] || null),
       /*
+       * ⚠️ 2026-09-23 補：照上面那條判準（「備份帶得走的，快照就要留得住」）
+       *   逐項比對 projectPackage() 之後，還少了這幾樣：
+       *     ・losRuleScopes／bandRuleScopes：判定門檻與三段分法的
+       *       「季別區間 × 路段」覆寫
+       *     ・surveyDateOverrides：使用者指定的調查日期
+       *     ・ackedIssues：按過的「已人工確認」
+       *   症狀就是上面那段註解自己描述的那一種：復原之後它們停在操作後的值，
+       *   其他東西回到操作前——「看起來像復原成功了，實際上是一個兩邊
+       *   拼起來、從來沒有存在過的狀態」。
+       */
+      losRuleScopes: clone(state.losRuleScopes?.[code] || null),
+      bandRuleScopes: clone(state.bandRuleScopes?.[code] || null),
+      surveyDateOverrides: clone(state.surveyDateOverrides?.[code] || null),
+      ackedIssues: clone(state.ackedIssues?.[code] || null),
+      /*
        * 匯入批次紀錄也要一起存。
        * 匯入前留的還原點若不含 imports，復原之後資料回到匯入前、
        * 但「匯入紀錄」那一頁仍然列著那一批——使用者會以為匯入還在。
@@ -773,6 +796,23 @@
       state.imports = (state.imports || [])
         .filter((x) => x.projectCode !== code)
         .concat(s.imports || []);
+    }
+    /*
+     * ⚠️ 2026-09-23 補的四樣，處理方式與上面完全一致：
+     *   用 `in` 判斷「這一版的快照有沒有存這個欄位」，
+     *   有值就寫、沒值就刪（不可以只寫不刪，否則「操作前沒有、操作中新增」
+     *   那一種復原不掉），舊快照沒有這個欄位時一個字都不動。
+     */
+    for (const [key, bag] of [
+      ["losRuleScopes", "losRuleScopes"],
+      ["bandRuleScopes", "bandRuleScopes"],
+      ["surveyDateOverrides", "surveyDateOverrides"],
+      ["ackedIssues", "ackedIssues"],
+    ]) {
+      if (!(key in s)) continue;
+      state[bag] = state[bag] || {};
+      if (s[key]) state[bag][code] = s[key];
+      else delete state[bag][code];
     }
     op.status = "已復原";
     rebuild();
@@ -1399,8 +1439,79 @@
           "，" +
           pctText(prev.totalDelay, x.totalDelay, "總延滯");
       }
+      /*
+       * ══════════════════════════════════════════════════════════════
+       *  ⚠️ 上面那句「下列各行引用的速限與速限比」必須真的有引用
+       * ══════════════════════════════════════════════════════════════
+       *
+       * 2026-09-23 的反向對帳抓到：設了尖峰或日別時，草稿會加上
+       * 「…因此**下列各行引用的速限與速限比**不受這兩項影響」，
+       * 但下面每一行從頭到尾**沒有速限、也沒有速限比**。
+       * 看報告的人讀到那句話就去下面找，找不到——或更糟，直接相信
+       * 「有引用」而沒去核對。草稿講了一個它自己不產生的數值。
+       *
+       * 同時補齊同包 CSV 有、而這一份缺的幾個欄位：
+       * **行駛速率、速限、速限比、方向起訖、延滯分項**。
+       * 那份 CSV 與這份文字草稿**裝在同一個 ZIP 裡**交出去，
+       * 交付方問「停等損失多少」時，CSV 查得到、說明文字一個字都沒提。
+       *
+       * ⚠️ 速限比寫成「比值（百分比）」，與結論草稿同一套——
+       *   彙總表是 `0.782`、判定門檻是 `≧0.90`，只寫百分比會對不起來。
+       * ⚠️ 速限位數跟著值走（整數不寫小數），與尖峰明細表同一套；
+       *   寫死 0 位會把 47.5 印成 48，而速限比是拿 47.5 算的。
+       * ⚠️ 讀不到的欄位一律寫「—」，不可以留白或寫 0——
+       *   0 在這裡會被讀成「延滯是 0 秒」。
+       */
+      /*
+       * ══════════════════════════════════════════════════════════════
+       *  ⚠️ 本版修正（GPT 獨立複查 2026-09-24 抓到）：先擋型別再轉數字，順序不可以反
+       * ══════════════════════════════════════════════════════════════
+       *
+       * 第一版寫的是 `Number.isFinite(Number(value))`，而 JavaScript 的
+       * Number() 對好幾種「不是數字」的東西都給得出 0：
+       *
+       *     Number(null)  === 0      Number("")   === 0
+       *     Number(" ")   === 0      Number([])   === 0
+       *     Number(true)  === 1
+       *
+       * 於是**讀不到的行駛速率或延滯分項會被寫成「0」**——
+       * 而上面那段註解自己寫著「讀不到的欄位一律寫『—』，不可以留白或寫 0
+       * ——0 在這裡會被讀成『延滯是 0 秒』」。程式與註解相反。
+       *
+       * 這一支程式在 safeConclusionDigits() 那裡踩過同一個雷，修法相同：
+       * **只接受「數字」與「非空白的字串」這兩種型別**，其餘一律回「—」。
+       * 真正的 0（現場確實量到 0）是 typeof number，照樣印得出來。
+       */
+      const asNumber = (value) => {
+        const acceptable =
+          typeof value === "number" ||
+          (typeof value === "string" && value.trim() !== "");
+        if (!acceptable) return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+      const numOr = (value, places) => {
+        const parsed = asNumber(value);
+        return parsed === null ? "—" : fmt(parsed, places);
+      };
+      const ratioValue = asNumber(x.ratio);
+      const ratioText =
+        ratioValue === null
+          ? "—"
+          : `${ratioValue.toFixed(3)}（${(ratioValue * 100).toFixed(digits)}%）`;
+      const limitValue = asNumber(x.limit);
+      const limitText =
+        limitValue === null
+          ? "—"
+          : numOr(limitValue, Number.isInteger(limitValue) ? 0 : 1);
+      const directionText = x.directionText ? `（${x.directionText}）` : "";
       lines.push(
-        `${showQuarter(x.period)} ${x.road}（${x.day}）服務水準為 ${x.los}，代表紀錄為${x.peak}${rowDirectionName(x)}，旅行速率 ${fmt(x.travel, digits)} km/h、總延滯 ${fmt(x.totalDelay, digits)} 秒；${change}。`,
+        `${showQuarter(x.period)} ${x.road}（${x.day}）服務水準為 ${x.los}，` +
+          `代表紀錄為${x.peak}${rowDirectionName(x)}${directionText}，` +
+          `旅行速率 ${numOr(x.travel, digits)} km/h、行駛速率 ${numOr(x.running, digits)} km/h、` +
+          `總延滯 ${numOr(x.totalDelay, digits)} 秒` +
+          `（路段延滯 ${numOr(x.roadDelay, digits)} 秒、交叉口延滯 ${numOr(x.junctionDelay, digits)} 秒）、` +
+          `速限 ${limitText} km/h、速限比 ${ratioText}；${change}。`,
       );
     }
     lines.push("本段文字由系統依彙總資料自動產生，正式引用前應核對原始檔、速限設定及現地情況。");
@@ -1416,12 +1527,58 @@
      */
     const direction = q("deliveryDirection")?.value || "";
     const peak = q("deliveryPeak")?.value || "";
+    /*
+     * ⚠️ 2026-09-23 補上路段與日別。
+     *
+     *   舊鍵值只有「計畫｜季度區間［｜方向｜尖峰］」，路段與日別沒進去。
+     *   後果（實際走得到）：
+     *     使用者用「全部路段」產生草稿並按「儲存修改」→ 把路段改成 A 路
+     *     → 鍵值沒變 → `loadDraft()` 把**剛才存的那一份**貼回文字框，
+     *     裡面的數字與「統計條件」那一行還是全部路段的，畫面上沒有任何提示
+     *     → 按「下載季度成果包 ZIP」→ 包裡的 CSV 是 A 路段的、
+     *       報告文字草稿是全部路段的。**兩份交出去的東西說不同的話。**
+     *
+     * ⚠️ 與方向／尖峰同一套處理：只有**確實設了**才進鍵值。
+     *   無條件加進去會讓鍵值格式變掉，使用者先前存過的草稿全部找不到
+     *  （畫面上看起來像草稿不見了）。全部是預設值時維持舊格式。
+     * ⚠️ 順序固定 `方向|尖峰|路段|日別`，不可以改——改了等於換一組鍵，
+     *   舊草稿一樣讀不回來。
+     */
+    const road = q("deliveryRoad")?.value || "";
+    const day = q("deliveryDay")?.value || "";
     const base = `${state.activeCode}|${deliveryRange().label}`;
-    return direction || peak ? `${base}|${direction}|${peak}` : base;
+    /*
+     * ══════════════════════════════════════════════════════════════════
+     *  ⚠️ 本版修正（GPT 獨立複查 2026-09-24 抓到）：向下相容原本只在「四個條件全空」時成立
+     * ══════════════════════════════════════════════════════════════════
+     *
+     * 上面那段註解宣稱「全部是預設值時維持舊格式，舊草稿照樣讀得回來」——
+     * 但第一版寫成
+     *
+     *     direction || peak || road || day
+     *       ? `${base}|${direction}|${peak}|${road}|${day}`
+     *       : base
+     *
+     * 於是**只設方向（或只設尖峰）時鍵值也變了**：
+     *   上一版存的是 `base|東向|`，這一版去找的是 `base|東向|||`
+     *   → 找不到 → 畫面上看起來像「我存過的草稿不見了」。
+     * 註解說有相容、程式其實沒有，這比沒有相容更糟。
+     *
+     * 現在分三段：
+     *   ・四個都空            → `base`（最舊的格式）
+     *   ・只有方向／尖峰      → `base|方向|尖峰`（上一版的格式，**讀得回來**）
+     *   ・有路段或日別        → `base|方向|尖峰|路段|日別`（本版新增的格式）
+     *
+     * ⚠️ 順序固定 `方向|尖峰|路段|日別`，不可以改——改了等於換一組鍵。
+     * ⚠️ 中間那一段**不可以拿掉**，拿掉就又把舊草稿弄不見了。
+     */
+    if (road || day) return `${base}|${direction}|${peak}|${road}|${day}`;
+    if (direction || peak) return `${base}|${direction}|${peak}`;
+    return base;
   }
   let draftDirty = false;
   let lastDraftKey = null;
-  function loadDraft(force = false) {
+  function loadDraft(force = false, regenerate = false) {
     if (!q("reportDraft")) return;
     const key = draftKey();
     // 只有換了範圍、或明確要求重新產生時才覆寫文字框。
@@ -1431,7 +1588,29 @@
     lastDraftKey = key;
     draftDirty = false;
     const saved = state.reportDrafts[key];
-    q("reportDraft").value = saved || narrative();
+    /*
+     * ══════════════════════════════════════════════════════════════
+     *  ⚠️ 2026-09-25 修正：小數位數改了，已存過的草稿也要重算
+     * ══════════════════════════════════════════════════════════════
+     *
+     * 舊寫法是 `q("reportDraft").value = saved || narrative();`——
+     * 只要使用者按過一次「儲存修改」，`saved` 就存在，之後改小數位數
+     * 一律貼回**舊位數算出來的那一份**。
+     *
+     * 方向與尖峰之所以正常，是因為它們會改變 draftKey()；
+     * **小數位數是唯一不進 key 的條件**，所以只有它壞。
+     * 後果：畫面選 2 位，而「下載季度成果包 ZIP」裡的
+     * `*_報告文字草稿.txt` 寫的是文字框內容，還是 1 位。
+     *
+     * ⚠️ 為什麼不把 digits 併進 draftKey()：那會再開一次向下相容的口，
+     *   使用者**先前存過的草稿全部找不到**（畫面上看起來像草稿不見了）。
+     *   改成「位數變了就當成要重新產生」，key 格式一個字都不動。
+     *
+     * ⚠️ 代價要說清楚：位數變了會覆蓋文字框裡的內容。所以只有
+     *   「使用者自己動了小數位數」才走這條（regenerate=true），
+     *   其他呼叫端（切換計畫、存檔、換範圍…）行為完全不變。
+     */
+    q("reportDraft").value = regenerate ? narrative() : saved || narrative();
     // 草稿是以「計畫｜交付範圍」為鍵存的。切換計畫再切回來時，交付範圍常常
     // 會回到預設值，鍵值跟著不一樣，於是文字框顯示的是重新產生的草稿，使用
     // 者以為自己寫的內容被弄丟了——其實還在，只是掛在別的範圍底下。
@@ -1478,14 +1657,26 @@
   q("deliveryRoad").onchange = () => loadDraft();
   q("deliveryDay").onchange = () => loadDraft();
   /*
+   * ⚠️ 上面兩個刻意**不帶 force**（理由見那一段註解：帶 force 會把使用者
+   *   剛打好的正式分析文字無聲蓋掉）。真正解決「改了路段數字沒跟著變」的
+   *   是 draftKey() 現在把路段與日別算進鍵值——換了條件就是換一份草稿，
+   *   舊的那一份還留著，切回去就看得到。
+   */
+  /*
    * ⚠️ 新增的三個條件也要重載草稿。
    *   少接一個的話，使用者改了方向、畫面上的草稿卻停在舊條件算出來的數字——
    *   而那份文字會被複製進正式報告。
    *   小數位數改了也一樣要重算（位數是呈現，但呈現錯了照樣是錯的數字）。
+   *
+   * ⚠️ 2026-09-25：小數位數這一顆要傳第二個參數 `regenerate = true`。
+   *   方向與尖峰會改變 draftKey()，所以 `saved` 自然查不到、會走 narrative()；
+   *   **小數位數不進 key**，只傳 force 的話 `saved || narrative()` 仍然
+   *   貼回舊位數那一份，位數等於完全沒有作用（實測過）。
    */
   if (q("deliveryDirection")) q("deliveryDirection").onchange = () => loadDraft(true);
   if (q("deliveryPeak")) q("deliveryPeak").onchange = () => loadDraft(true);
-  if (q("deliveryDigits")) q("deliveryDigits").onchange = () => loadDraft(true);
+  if (q("deliveryDigits"))
+    q("deliveryDigits").onchange = () => loadDraft(true, true);
   /*
    * ⚠️ 使用者 2026-09-14 裁示：成果交付與結論草稿**維持獨立**，
    *   不自動跟著主工具列跑，另加這一顆一鍵對齊。
@@ -1761,6 +1952,20 @@
           if (reasons.length)
             extra.push({
               type: "異常變化",
+              /*
+               * ⚠️ `code` **一定要帶**（2026-09-25 第六輪獨立複查抓到）。
+               *
+               *   `issueFingerprint()` 的第一格是 `issue.code || issue.type`，
+               *   而這一支把 app.js 那一筆「異常變化」**整類濾掉**，
+               *   實際送進畫面的是這裡 push 的這一筆——它原本沒有 `code`，
+               *   於是指紋退回用 `type`。守門
+               *   `issue-ack-stability.test.mjs` 只掃 `app.js` 的
+               *   `issues.push({`，所以「每一筆都要有 code」這條保證
+               *   在**唯一真正會跑的那一條路徑上沒有成立**，而守門是綠的。
+               *   值與 app.js 那一筆刻意相同：同一件事不可以有兩把鑰匙，
+               *   否則使用者按過的「已人工確認」會在兩者之間對不上。
+               */
+              code: "trend-change",
               // 這幾個結構化欄位是「品質總覽」的篩選在用的。
               // 這支覆寫掉了 app.js 的「異常變化」判定（改用可自訂門檻），
               // 少帶任何一個欄位，篩選就會把整類異常變化默默濾掉——而且
@@ -1770,6 +1975,8 @@
               road,
               day,
               item: `${road}／${day}`,
+              /* 指紋不含年份顯示文字；reasons 仍含數值，數值改變仍會重新提醒。 */
+              fingerprintDetail: reasons.join("；"),
               detail: `相較 ${showQuarter(prev.period)}：${reasons.join("；")}，請確認原始資料或現地變化。`,
               /*
                * ⚠️ resolution **一定要帶**。

@@ -208,13 +208,45 @@ ok(
     ? `快照內含 ${(firstOp.snapshot?.details || []).length} 筆`
     : "沒有還原點可檢查",
 );
+/*
+ * ⚠️ 2026-09-23 改寫。
+ *
+ * 這一條的標題寫的是「**備份帶得走的東西都**留住」，但原本比對的是一份
+ * **寫死的 5 個鍵**（bandRule／anomalyRule／reportDrafts／
+ * conclusionTemplates／imports）。於是 `losRuleScopes`、`bandRuleScopes`、
+ * `surveyDateOverrides`、`ackedIssues` 沒有進快照這件事，這條永遠不會轉紅——
+ * 標題與實際守的範圍不是同一件事，正是「假的綠」。
+ *
+ * 現在改成從 `operationSnapshot()` 註解自己寫下的判準去驗：
+ *   **備份（projectPackage）帶得走的，快照就要留得住。**
+ * 清單一樣要寫出來（e2e 讀不到原始碼），但每一個都附上「不留住會怎樣」，
+ * 而且 backup-completeness.test.mjs 那一支已經改成從 emptyState() 反推，
+ * 兩邊一起守：那邊守「有沒有進備份」，這邊守「有沒有進快照」。
+ */
+const SNAPSHOT_MUST_KEEP = [
+  ["bandRule", "三段分法的計畫預設"],
+  ["bandRuleScopes", "三段分法的季別區間 × 路段覆寫"],
+  ["losRule", "服務水準判定門檻的計畫預設"],
+  ["losRuleScopes", "判定門檻的季別 × 路段覆寫"],
+  ["anomalyRule", "異常檢查門檻"],
+  ["reportDrafts", "報告草稿"],
+  ["conclusionTemplates", "結論草稿的條件範本"],
+  ["surveyDateOverrides", "使用者指定的調查日期"],
+  ["ackedIssues", "按過的「已人工確認」"],
+  ["imports", "匯入批次紀錄"],
+];
+const snapshotMissing = firstOp
+  ? SNAPSHOT_MUST_KEEP.filter(([key]) => !(key in (firstOp.snapshot || {})))
+  : SNAPSHOT_MUST_KEEP;
 ok(
-  "③ 快照有把備份帶得走的東西都留住（分段規則、異常門檻、報告草稿、結論範本、匯入紀錄）",
-  firstOp &&
-    ["bandRule", "anomalyRule", "reportDrafts", "conclusionTemplates", "imports"].every(
-      (key) => key in (firstOp.snapshot || {}),
-    ),
-  firstOp ? Object.keys(firstOp.snapshot || {}).join("、") : "—",
+  "⚠️ ③ 快照留得住「備份帶得走的東西」（少一樣，復原出來就是一個從來沒有存在過的狀態）",
+  firstOp && snapshotMissing.length === 0,
+  firstOp
+    ? snapshotMissing.length
+      ? "快照少了：" +
+        snapshotMissing.map(([key, why]) => `${key}（${why}）`).join("、")
+      : Object.keys(firstOp.snapshot || {}).join("、")
+    : "—",
 );
 
 /* ── ② 第二次匯入 → 還原 → 逐欄相同 ── */
