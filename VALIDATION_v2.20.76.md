@@ -17,7 +17,7 @@
 | 5 | 全套 E2E 首跑在 `e2e-progress.mjs` 出現 5 項失敗，單支立即重跑全綠；10ms 計時取樣會在快取已熱時完全錯過短暫 DOM 狀態 | MutationObserver 與原計時器雙軌取樣；連續兩次單支重跑均抓到 19 種進度狀態，之後再跑完整串行 E2E |
 | 6 | 追加回報與獨立重現均證實：`load()` 尚未讀完時畫面已可操作，`save()` 只擋 `loadError`；冷啟動期間可把 `emptyState()` 寫回 IndexedDB，永久覆蓋原計畫 | 新增 `loadPhase` 資料閘門與讀取中畫面閘門；建立計畫、批次匯入、還原／清除入口在 ready 前停用。`e2e-load-pending.mjs` 以真實 IndexedDB 加 1.5 秒讀取延遲驗證；拆掉存檔閘門會覆蓋原計畫並轉紅，拆掉畫面閘門有 4 項轉紅，正常快讀不會卡住 |
 
-### 封關前已完成的獨立驗證
+### 正式發布已完成的獨立驗證
 
 - 本版手冊：**30 頁 / 21,627 字元**（pdfplumber 逐頁抽字、NFKC 正規化後含空白）；SHA-256 `2e79e88e49e9681d4b8d489f192fa4b29c9dd6f498e494fc25ac6a49b12cdcbb`。30 頁全部轉成 PNG，以 4 張聯絡表逐頁目視，並另開第 29、30 頁原尺寸確認；未見裁切、重疊、缺字或異常空白頁。
 - 指定版面：以 6 份匿名 fixtures 寫入資料後，逐一開啟 18 個分頁；`1536×864` 與 `1366×768` 共 36 張全頁截圖都已人工目視。另逐頁量測 document 溢出、按鈕文字裁切、表格越界與 JavaScript 例外，兩種尺寸全部為 0；未見文字重疊、圖表溢出或表格被截掉。
@@ -25,10 +25,12 @@
 - 完整序列 E2E：59 支依 package script 原順序執行，退出碼 0；過程未並行，額度中斷後只續收同一場測試，沒有重跑已確認腳本。
 - 完整 `test` script：glyph guard、Node 契約／回歸與 `check-version.mjs` 整串退出碼 0；Node test 共 **388 項，385 通過、0 失敗、3 項明確略過**。三項皆因本機沒有真實調查檔（所有真實檔路名／日期、真實平假日配對、同檔雙日期），不得列為通過。
 
-### 證據界線
+### 發布證據與證據界線
 
 - 真實 14013／11535TS 調查檔不在交付包，本機也沒有，因此相關條件式測試照規則明確略過，不列為通過。
-- 線上 GitHub Pages、Actions、遠端 main 與舊資產 404 只在正式 push 後驗證；未發布前不先寫成通過。
+- 正式功能 commit：`d33a4db965230b8eb54991698cb6d205cd2e002d`；GitHub 遠端 `main` 已核對為同一 commit。
+- GitHub Actions：建置與測試 run [`36336273918`](https://github.com/BaoToast/Travel-speed/actions/runs/36336273918) 成功；Pages run [`36336273304`](https://github.com/BaoToast/Travel-speed/actions/runs/36336273304) 成功，兩者均對應 `d33a4db...`。
+- GitHub Pages：首頁顯示 v2.20.76；線上 `index.html`、`app.js`、`quality-extension.js`、`trend.js`、`trend-excel.js`、`period-date.js`、`direction-pair.js`、`chart-levels.js` 與 v2.20.76 PDF 手冊 SHA-256 均逐檔等於 Repository。新版手冊 HTTP 200，舊 v2.20.68 手冊 URL 為 404。
 - production build／TypeScript／lint 不適用：本專案是純靜態網站，package scripts 沒有這三項；不可把不適用寫成通過。
 
 ## v2.20.75（2026-09-26）季度改名的第二種撞鍵 ＋ 兩支守門補上真實畫面流程：四件

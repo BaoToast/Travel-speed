@@ -4,9 +4,9 @@
 
 ## 0. 文件狀態與事實來源
 
-- 本文件建立日期：2026-09-13；最近更新：2026-09-27（Asia/Taipei）。
-- 最新功能正式版基準 commit：`4700d23d50ed71774f5aff021234a2337481a1ce`，訊息為 `Release v2.20.68 after risk-based review`。
-- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `4700d23...` 作為程式功能基準。
+- 本文件建立日期：2026-09-13；最近更新：2026-09-28（Asia/Taipei）。
+- 最新功能正式版基準 commit：`d33a4db965230b8eb54991698cb6d205cd2e002d`，訊息為 `Release v2.20.76`。
+- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `d33a4db...` 作為程式功能基準。
 - 事實優先順序：目前可重現的 Repository／程式碼／Git／測試結果，高於舊聊天、舊交接文字、README 或其他說明。若彼此衝突，必須指出差異；無法驗證者標示「待確認」，不得猜測。
 
 ## 1. 正確程式與 Repository 身分
@@ -25,8 +25,8 @@
 | Git origin（fetch／push） | `https://github.com/BaoToast/Travel-speed.git` |
 | 正式 GitHub Pages | `https://baotoast.github.io/Travel-speed/` |
 | branch | `main` |
-| 功能正式版基準 commit | `4700d23d50ed71774f5aff021234a2337481a1ce` |
-| 目前程式／正式發布版本 | GPT 已發布 `v2.20.68`；**本工作樹是 `v2.20.76` 發布候選**（v2.20.69～.75 七個候選都未發布；v2.20.76 為 GPT 對 v2.20.75 做高風險全專案複查後的修正版）（版號的唯一來源是 `app.js` 的版本字串，`check-version.mjs` 會把它與 package metadata、README／更新說明／驗證報告／手冊釘在一起） |
+| 功能正式版基準 commit | `d33a4db965230b8eb54991698cb6d205cd2e002d` |
+| 目前程式／正式發布版本 | GPT 已發布 `v2.20.76`（v2.20.69～.75 七個候選都未發布；v2.20.76 為 GPT 對 v2.20.75 做高風險全專案複查後的修正版）（版號的唯一來源是 `app.js` 的版本字串，`check-version.mjs` 會把它與 package metadata、README／更新說明／驗證報告／手冊釘在一起） |
 | 版本唯一來源 | `app.js` 裡**寫入 `.brand small` 的那一行字面字串**（目前 `app.js:1034`，格式 `正式版 vX.Y.Z`）。⚠️ **沒有 `APP_VERSION` 這個常數**——這一行原本這樣寫，但全專案搜不到那個識別字（2026-09-25 更正）；去新增一個常數會踩到 `check-version.mjs` 第 1 條「全站只有一個地方寫入版本字樣」當年出事的那個雷。`check-version.mjs` 用 `/正式版\s*v(\d+\.\d+(?:\.\d+)?)/` 抓它，再把 HTML 的 16 個 `?v=`、靜態字樣、手冊 PDF 檔名與實體檔、`manuals/` 無殘留、手冊封面戳記、README 首節、驗證報告檔名與標題全部釘在一起 |
 
 本機資料夾名 `repo` 很通用，不能只靠名稱判斷；每次接手都必須同時核對完整路徑、`.git`、origin、branch、`app.js` 版本與 GitHub Repository。三個交通系統不得混用資料夾或規則。
@@ -334,7 +334,7 @@ node check-version.mjs
 
 ### 12.3 最後一次已實際完成的正式驗證
 
-目前待發布的 `v2.20.76` 候選已完成下列封關前驗證（正式 commit、Actions、Pages 與線上逐檔雜湊須在 push 後補記）：
+正式發布的 `v2.20.76` 已完成下列驗證：
 
 - 風險：高風險；跨季度改名、異常確認指紋、IndexedDB 冷啟動資料安全、讀取中 UI 閘門與測試基礎設施，採全專案複查。
 - 完整 `test` script：退出碼 0；Node test 共 388 項，385 通過、0 失敗、3 項因缺少真實調查檔明確略過；glyph guard 與 `check-version.mjs` 同一串全綠。
@@ -344,6 +344,9 @@ node check-version.mjs
 - 手冊：v2.20.76 PDF 共 30 頁、NFKC 後 21,627 字元，SHA-256 `2e79e88e49e9681d4b8d489f192fa4b29c9dd6f498e494fc25ac6a49b12cdcbb`；30 頁全部渲染並目視，另以原尺寸確認末兩頁，未見裁切、重疊、缺字或異常空白頁。
 - 本輪沒有使用者真實 14013／11535TS 調查檔；相關條件式測試的略過必須與通過分開列示，`verify-against-summary.mjs <檔案>` 未執行。
 - production build／TypeScript／lint：不適用，因專案是純靜態且沒有這些 scripts；單檔試用版由 `build-tryout.mjs` 產生。
+- 正式功能 commit：`d33a4db965230b8eb54991698cb6d205cd2e002d`；GitHub 遠端 `main` 已核對為同一 commit。
+- GitHub Actions：建置與測試 run `36336273918` 成功；Pages run `36336273304` 成功，兩者均對應 `d33a4db...`。
+- GitHub Pages：首頁顯示 v2.20.76；線上 `index.html`、`app.js`、`quality-extension.js`、`trend.js`、`trend-excel.js`、`period-date.js`、`direction-pair.js`、`chart-levels.js` 與 v2.20.76 PDF 手冊 SHA-256 均逐檔等於 Repository。新版手冊 HTTP 200，舊 v2.20.68 手冊 URL 為 404。
 
 對應版本 `v2.20.68`，功能正式版基準 commit `4700d23d50ed71774f5aff021234a2337481a1ce`：
 
@@ -482,7 +485,7 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 - 已保存 Parser、資料結構、Project、方向名稱、速限版本、規則作用域與匯出契約。
 - 已列出高風險歷史 Bug、Root cause 類型與 regression 防線。
 - 已完整保存 Claude/GPT 分工與風險導向複查規則，而非只寫一句名稱。
-- 已區分 v2.20.68 實際通過證據、前版歷史證據與尚未驗證事項。
+- 已區分 v2.20.76 實際通過證據、前版歷史證據與尚未驗證事項。
 - 已保存 GitHub Pages 單一路徑、無 hosting.json、無 GPT Site、交付與備份規則。
 - 已保存 AI 換代驗收及「新 GPT 未獲確認不得動工」規則。
 
@@ -491,7 +494,7 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 1. 使用本文件第 1 節的完整路徑打開 Repository。
 2. 執行只讀核對：`git status`、`git remote -v`、`git branch --show-current`、`git log -1`、版本檢查。
 3. 完整讀取本文件與**根目錄那一份** `VALIDATION_v*.md`（只會有一份，就是本版），抽查 `app.js` 核心規則和 `.github/workflows/ci.yml`。
-4. 查 GitHub Actions、Pages 與線上 `https://baotoast.github.io/Travel-speed/` 是否仍對應 v2.20.68。
+4. 查 GitHub Actions、Pages 與線上 `https://baotoast.github.io/Travel-speed/` 是否仍對應 v2.20.76。
 5. 向使用者回報交接驗收；等待使用者明確回覆「交接確認完成」。
 6. 確認後才處理下一份 Claude 候選包或新需求，依第 14 節決定風險並執行。
 
