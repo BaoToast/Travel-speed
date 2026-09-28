@@ -298,9 +298,30 @@ let loadPhase = "loading";
  * 狀態會先記住，讀取完成後照原狀恢復，再由 renderAll() 套用實際資料狀態。
  */
 function setLoadUi(loading) {
+  /*
+   * ══════════════════════════════════════════════════════════════════
+   *  讀取期間要停用的是「所有會改到資料的控制項」，不是其中幾個
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * ⚠️ 2026-09-27 複查抓到：原本只列 `#setup .form`、`#import`、
+   *   `#backup-restore input`、`#clearAll` 四塊，而 `save()` 有 31 個呼叫點，
+   *   其中 23 個在 `await save()` 之後**緊接著就報成功**，而且**沒有一個**
+   *   檢查 `save()` 的回傳值。
+   *
+   *   實際會發生的事（以「套用並重算 LOS」為例，它在 `#speed`，沒被停用）：
+   *     使用者在讀取中按下去
+   *       → save() 因為 loadPhase 不是 ready 而回 false，並提示「資料還在讀取」
+   *       → 緊接著的 `toast("…已重新計算")` **蓋掉那句提示**
+   *       → load() 完成時 state 被整個換掉，剛才那一步**安靜地消失**
+   *   資料不會被覆蓋（存檔閘門是有效的），但使用者會以為做完了。
+   *
+   * ⚠️ 修法刻意用「整個 .view 裡的控制項」而不是再列一次清單：
+   *   列清單就是這次出問題的原因——新增一個區塊就會漏掉一個。
+   *   導覽（aside/nav）與頁面切換**不停用**：讀取中還是可以四處看，
+   *   只是不能改資料。
+   */
   const controls = document.querySelectorAll(
-    "#setup .form input, #setup .form select, #setup .form button, " +
-      "#import input, #import select, #import button, #backup-restore input, #clearAll",
+    "main .view button, main .view input, main .view select, main .view textarea",
   );
   document.body.setAttribute("aria-busy", loading ? "true" : "false");
   for (const control of controls) {
@@ -1071,7 +1092,7 @@ document
   .querySelectorAll("[data-go]")
   .forEach((b) => (b.onclick = () => gotoView(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.76";
+document.querySelector(".brand small").textContent = "正式版 v2.20.77";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 /*
  * ⚠️ 這裡原本有一顆「列印／另存 PDF」，使用者 2026-09-16 指名移除：
@@ -1107,7 +1128,7 @@ manualLinks.innerHTML =
    *   那種網址裡沒有檔名，使用者拿到的檔案就叫「下載」。
    *   （使用者 2026-09-14 實際回報過，三支都中。）
    */
-  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.76.pdf" download="交通服務水準程式手冊_v2.20.76.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
+  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.77.pdf" download="交通服務水準程式手冊_v2.20.77.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";

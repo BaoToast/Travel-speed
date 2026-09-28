@@ -336,11 +336,25 @@ for (const name of [...scripts, "index.html"]) {
  *   「當時有三個候選」）是對的，不可以被連坐——歷史敘述講的是當時的狀態。
  */
 {
-  const LAST_RELEASED = 68;
+  /*
+   * ⚠️ 2026-09-27：**基準線動了**。GPT 已經把 v2.20.76 正式發布上線，
+   *   所以「最後一個正式發布版是 v2.20.68」這個前提不再成立。
+   *
+   *   這裡要分成兩個常數，不可以只改一個：
+   *     RANGE_BASE    ——「v2.20.69～.N 共 M 個」這種**歷史句子**的算術基準。
+   *                      那句話講的是「.69 到 .N 有幾個版本」，與現在發布到哪一版無關，
+   *                      所以它永遠是 68。把它一起改掉，會讓所有正確的歷史句子變紅。
+   *     LAST_RELEASED ——**現在**最後一個真的發布出去的版本。現況敘述靠它。
+   *
+   *   當「本版的前一版」就是正式發布版時，根本沒有未發布候選區間，
+   *   這時要求的就不是區間句，而是**寫明前一正式版是哪一版**。
+   */
+  const RANGE_BASE = 68;
+  const LAST_RELEASED = 76;
   const CJK = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
   const patch = Number(String(shown).split(".")[2]);
   const wantTo = patch - 1;
-  const wantCount = wantTo - LAST_RELEASED;
+  const wantCount = wantTo - RANGE_BASE;
   let seen = 0;
   const current = new Set();
   for (const name of [
@@ -357,7 +371,7 @@ for (const name of [...scripts, "index.html"]) {
       const to = Number(m[1]);
       const count = CJK[m[2]] ?? Number(m[2]);
       /* 歷史段落：區間結束在更早的版本，數量要與那個區間相符就好。 */
-      const expect = to - LAST_RELEASED;
+      const expect = to - RANGE_BASE;
       seen += 1;
       ok(
         `${name} 的「v2.20.69～.${to} ${m[2]}個候選」數量與區間相符`,
@@ -379,6 +393,24 @@ for (const name of [...scripts, "index.html"]) {
    * 寫到本版前一版（.${wantTo}）。README 與更新說明裡停在更早版本的句子
    * 是歷史紀錄，照樣允許——只要同一份文件裡另外有一句是最新的。
    */
+  if (LAST_RELEASED >= wantTo) {
+    /*
+     * 前一版就是正式發布版 → 沒有未發布候選區間。
+     * ⚠️ 一定要印出來，安靜跳過就等於把這一條悄悄關掉。
+     */
+    console.log(
+      `  ℹ️ v2.20.${LAST_RELEASED} 已正式發布，本版直接建在它之上，` +
+        "沒有「未發布候選區間」可寫——改成要求三份現況文件寫明前一正式版是哪一版。",
+    );
+    for (const name of ["README.md", `VALIDATION_v${shown}.md`, "PROJECT_HANDOFF.md"]) {
+      if (!existsSync(join(here, name))) continue;
+      ok(
+        `${name} 要寫明前一正式版是 v2.20.${LAST_RELEASED}`,
+        new RegExp(`前一正式版[：:]\\s*\`?v2\\.20\\.${LAST_RELEASED}\`?`).test(read(name)),
+        "現況文件要講清楚這一包是建在哪一個已發布版本之上",
+      );
+    }
+  } else
   for (const name of ["README.md", `VALIDATION_v${shown}.md`, "PROJECT_HANDOFF.md"]) {
     if (!existsSync(join(here, name))) continue;
     ok(
@@ -488,10 +520,32 @@ for (const name of [...scripts, "index.html"]) {
   const validation = existsSync(join(here, `VALIDATION_v${shown}.md`))
     ? read(`VALIDATION_v${shown}.md`)
     : "";
-  const claim = validation.match(
+  /*
+   * ⚠️ 只看**本版那一節**（2026-09-27 加）。
+   *   VALIDATION 是逐版累積的；本版那一節一旦沒寫「N 頁 / M 字元」，
+   *   原本的整檔 match 會往下抓到**歷史版本**那一列，拿舊數字去比對新 PDF。
+   *   姊妹系統全日交通量當天就是這樣紅的（抓到上一版的 33 頁去比 34 頁的 PDF），
+   *   紅得對，但訊息把人帶往「PDF 錯了」。
+   */
+  const sectionStart = validation.search(
+    new RegExp(`^##\\s*v${shown.replace(/\./g, "\\.")}(?![\\d.])`, "m"),
+  );
+  const sectionText =
+    sectionStart >= 0
+      ? (() => {
+          const rest = validation.slice(sectionStart + 3);
+          const next = rest.search(/^##\s+v[\d.]/m);
+          return next >= 0 ? rest.slice(0, next) : rest;
+        })()
+      : "";
+  const claim = sectionText.match(
     /\*\*(\d+) 頁 \/ ([\d,]+) 字元\*\*/,
   );
-  ok("驗證報告寫得出手冊的頁數與字元數", Boolean(claim), claim ? claim[0] : "找不到那一句");
+  ok(
+    `驗證報告的「## v${shown}」那一節寫得出手冊的頁數與字元數`,
+    Boolean(claim),
+    claim ? claim[0] : "本版那一節裡找不到「**N 頁 / M 字元**」",
+  );
   const pdfDir = join(here, "manuals");
   const pdf = existsSync(pdfDir)
     ? readdirSync(pdfDir).find((n) => n.endsWith(".pdf"))
@@ -509,7 +563,14 @@ for (const name of [...scripts, "index.html"]) {
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
       });
-      chars = [...text.normalize("NFKC")].length;
+      /*
+       * ⚠️ 先把換行統一成 LF 再數（2026-09-27 加）。
+       *   Windows 的 poppler 輸出 CRLF，同一份 PDF 會多出「行數」那麼多個字元
+       *  （實測本版手冊：不正規化 26,330 vs 28,186，差值剛好等於行數）。
+       *   不統一換行，這個數字換一台機器就對不上，而每一次對不上都會有人
+       *   把數字改成自己那一台的值——這一條守門就是為了擋那件事。
+       */
+      chars = [...text.replace(/\r\n?/g, "\n").normalize("NFKC")].length;
     } catch {
       tools = false;
     }
@@ -523,7 +584,7 @@ for (const name of [...scripts, "index.html"]) {
       ok(
         `驗證報告寫的手冊字元數（${claim[2]}）與 PDF 相符`,
         chars === Number(claim[2].replace(/,/g, "")),
-        `實際 ${chars}（NFKC 後、含空白，算法見驗證報告裡的指令）`,
+        `實際 ${chars}（換行統一為 LF、NFKC 後、含空白）`,
       );
     }
   }

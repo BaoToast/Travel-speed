@@ -83,6 +83,24 @@ const pendingUi = await page.evaluate(() => ({
   importFile: document.getElementById("files")?.disabled,
   preview: document.getElementById("preview")?.disabled,
   restore: document.getElementById("restoreFile")?.disabled,
+  /*
+   * ⚠️ 2026-09-27 加：閘門原本只列四塊，而 save() 有 31 個呼叫點、
+   *   其中 23 個在 await save() 之後緊接著就報成功，且沒有一個檢查回傳值。
+   *   於是「套用並重算 LOS」「判定標準／套用並重新計算」這類沒被列到的按鈕，
+   *   在讀取期間按下去會看到成功訊息，而那一步其實沒有寫入、
+   *   還會在 load() 完成時被整個換掉。所以這裡逐一釘住，
+   *   並且另外數一次「還有幾個可用的控制項」——列清單一定會漏，數量不會。
+   */
+  applySpeed: document.getElementById("applySpeed")?.disabled,
+  applyLosRules: document.getElementById("applyLosRules")?.disabled,
+  viewControls: document.querySelectorAll(
+    "main .view button, main .view input, main .view select, main .view textarea",
+  ).length,
+  enabledViewControls: [
+    ...document.querySelectorAll(
+      "main .view button, main .view input, main .view select, main .view textarea",
+    ),
+  ].filter((el) => !el.disabled).length,
 }));
 ok("讀取期間要明講正在讀取，不可斷定尚未建立計畫",
   pendingUi.head.includes("正在讀取") && !pendingUi.head.includes("尚未建立計畫"), pendingUi.head);
@@ -90,6 +108,15 @@ ok("讀取期間要標示頁面忙碌中", pendingUi.busy === "true", `aria-busy
 ok("讀取期間要停用建立、批次匯入與還原入口",
   pendingUi.saveProject && pendingUi.importFile && pendingUi.preview && pendingUi.restore,
   JSON.stringify(pendingUi));
+ok("讀取期間要停用「套用並重算 LOS」與判定標準的套用鈕",
+  pendingUi.applySpeed === true && pendingUi.applyLosRules === true,
+  `applySpeed=${pendingUi.applySpeed} applyLosRules=${pendingUi.applyLosRules}`);
+/* 前置檢查：真的掃到控制項，否則選擇器一改這一條就恆真。 */
+ok("前置：掃得到畫面上的控制項", pendingUi.viewControls > 30,
+  `掃到 ${pendingUi.viewControls} 個`);
+ok("讀取期間不可以還有任何會改資料的控制項是可用的",
+  pendingUi.enabledViewControls === 0,
+  `還有 ${pendingUi.enabledViewControls} 個可用`);
 const blocked = await page.evaluate(() => save());
 ok("讀取期間的 save() 必須明確拒絕寫入", blocked === false, `回傳 ${String(blocked)}`);
 const during = await readDb();
