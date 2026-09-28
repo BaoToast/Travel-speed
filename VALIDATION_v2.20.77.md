@@ -17,7 +17,9 @@
 - 反證二：把本報告手冊字數刻意從 22,159 改成 22,158，`check-version.mjs` exit code 1 並精確指出差異；還原後 exit code 0。
 - 手冊以正式產生器重建；30 頁全部轉成 PNG 並逐頁目視，另放大第 29、30 頁，未見裁切、重疊、缺字或異常空白頁。
 - 發布前發現並修正一項文件一致性問題：候選把 v2.20.77 日期寫成 2026-09-27，但正式規則要求使用 release commit 的 Git 日期；已校正為 2026-09-28，重建 PDF 並同步字數與 SHA-256。此修正不影響程式或交通計算，因此版號維持 v2.20.77。
-- 發布後另驗證 GitHub Actions、GitHub Pages、線上版本／資產雜湊及舊版手冊 404；結果記錄於本次正式交接更新。
+- 正式功能 commit：`bffcae22d49001b0cc1dd869fa158e938150eeec`（`Release v2.20.77`）。
+- GitHub Actions：建置與測試 run `36386707445` 成功；Pages run `36386706598` 成功，兩者都對應上述功能 commit。
+- GitHub Pages：線上 `index.html`、`app.js`、v2.20.77 PDF 手冊與本驗證報告均 HTTP 200，SHA-256 逐檔等於 Repository；舊 v2.20.76 手冊 URL 為 404。
 
 ## v2.20.77（2026-09-28）Claude 對已發布 v2.20.76 的第二次獨立複查：兩件
 
