@@ -37,6 +37,16 @@ const server = createServer((req, res) => {
       instrumented = instrumented
         .replace("function setLoadUi(loading) {", "function setLoadUi(loading) { return;")
         .replaceAll('loadPhase === "loading"', "false");
+    /*
+     * 只供複查反證：拆掉整頁遮罩（但保留控制項停用），
+     * 下面「讀取期間不可以看到 0 與『尚未建立計畫』」那幾條必須轉紅。
+     * 拆不掉的話就是恆真，那比沒有守門更糟。
+     */
+    if (process.env.NEGATIVE_CURTAIN_PROOF === "1")
+      instrumented = instrumented.replace(
+        "function setLoadCurtain(loading) {",
+        "function setLoadCurtain(loading) { return;",
+      );
     body = Buffer.from(instrumented);
   }
   res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream" });
@@ -101,7 +111,72 @@ const pendingUi = await page.evaluate(() => ({
       "main .view button, main .view input, main .view select, main .view textarea",
     ),
   ].filter((el) => !el.disabled).length,
+  /*
+   * ⚠️ 2026-09-29 加（使用者裁示：比照路口轉向整頁擋掉）。
+   *   停用控制項只擋得住「按下去」，擋不住「看下去」：實測讀取那幾秒，
+   *   計畫下拉寫「尚未建立計畫」、首頁四張卡全是 0、下一步寫
+   *   「建立第一個計畫」——而那台電腦裡其實有資料。使用者看到這個畫面
+   *   會去還原舊備份或重新匯入，那是存檔閘門擋不住的。
+   *   所以這裡不是問「有沒有遮罩」，而是問「使用者到底看不看得到那些數字」。
+   */
+  curtain: (() => {
+    const el = document.getElementById("loadCurtain");
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return {
+      covers: rect.width >= window.innerWidth && rect.height >= window.innerHeight,
+      fixed: style.position === "fixed",
+      z: Number(style.zIndex) || 0,
+      text: el.innerText,
+    };
+  })(),
+  /*
+   * 「使用者到底看不看得到」要用**命中測試**，不是看 display／visibility：
+   * 被蓋住的元素照樣是 display:block。這裡對每一個含有誤導字樣的元素取中心點，
+   * 問 document.elementFromPoint() 那個點上最上層的是誰——是過場就代表被蓋住了。
+   */
+  misleadingVisible: (() => {
+    const words = ["尚未建立計畫", "建立第一個計畫", "尚無資料"];
+    const curtainEl = document.getElementById("loadCurtain");
+    const seen = [];
+    for (const el of document.querySelectorAll("body *")) {
+      if (el.children.length) continue;
+      const text = el.textContent.trim();
+      const word = words.find((w) => text.includes(w));
+      if (!word) continue;
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      const rect = el.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      const x = Math.min(Math.max(rect.left + rect.width / 2, 1), window.innerWidth - 1);
+      const y = Math.min(Math.max(rect.top + rect.height / 2, 1), window.innerHeight - 1);
+      const top = document.elementFromPoint(x, y);
+      const coveredByCurtain = Boolean(curtainEl && top && curtainEl.contains(top));
+      if (!coveredByCurtain && top && (top === el || el.contains(top) || top.contains(el)))
+        seen.push(word);
+    }
+    return [...new Set(seen)];
+  })(),
 }));
+ok("讀取期間要有一張蓋滿整個視窗的過場（position:fixed、蓋滿、疊在最上層）",
+  Boolean(pendingUi.curtain) && pendingUi.curtain.covers && pendingUi.curtain.fixed
+    && pendingUi.curtain.z >= 1000,
+  JSON.stringify(pendingUi.curtain && {
+    covers: pendingUi.curtain.covers, fixed: pendingUi.curtain.fixed, z: pendingUi.curtain.z,
+  }));
+ok("過場上要寫明正在讀取，而且要講「不會顯示空白的主畫面」",
+  Boolean(pendingUi.curtain) && pendingUi.curtain.text.includes("正在讀取這台電腦上的資料")
+    && pendingUi.curtain.text.includes("不會顯示空白的主畫面"),
+  pendingUi.curtain ? pendingUi.curtain.text.replace(/\s+/g, " ").slice(0, 60) : "沒有過場");
+/*
+ * ⚠️ 這一條才是真正要守的東西：不是「有沒有遮罩」，是「使用者看不看得到
+ *   那些會被誤讀成『資料不見了』的字」。用可見文字量，而不是列元素清單——
+ *   列清單一定會漏，這一組系統已經為了同一個理由改過一次。
+ */
+ok("讀取期間使用者看不到「資料不見了」那一類字樣（命中測試，不是看 display）",
+  pendingUi.misleadingVisible.length === 0,
+  `看得到的：${pendingUi.misleadingVisible.join("、") || "（無）"}`);
 ok("讀取期間要明講正在讀取，不可斷定尚未建立計畫",
   pendingUi.head.includes("正在讀取") && !pendingUi.head.includes("尚未建立計畫"), pendingUi.head);
 ok("讀取期間要標示頁面忙碌中", pendingUi.busy === "true", `aria-busy ${pendingUi.busy}`);
@@ -130,7 +205,10 @@ const readyUi = await page.evaluate(() => ({
   importFile: document.getElementById("files")?.disabled,
   preview: document.getElementById("preview")?.disabled,
   restore: document.getElementById("restoreFile")?.disabled,
+  /* 讀完之後過場一定要收掉，否則就是把使用者永遠關在外面。 */
+  curtain: Boolean(document.getElementById("loadCurtain")),
 }));
+ok("讀取完成後過場要收掉", readyUi.curtain === false, `還在：${readyUi.curtain}`);
 ok("正常讀取完成後不可卡在載入畫面",
   readyUi.head.includes("KEEP") && readyUi.busy === "false" &&
     !readyUi.saveProject && !readyUi.importFile && !readyUi.preview && !readyUi.restore,

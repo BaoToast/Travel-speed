@@ -79,9 +79,17 @@ test("⚠️ 報告文字草稿：先擋型別再轉數字，null／空字串不
    * 對照斷言：numOr／ratioText／limitText 三處都必須走 asNumber，
    * 不可以有任何一處還留著直接 Number.isFinite(Number(...)) 的舊寫法。
    */
+  /*
+   * ⚠️ 2026-09-30（#33）：結尾原本是拿**畫面文案**定位的
+   *  （`indexOf("本段文字由系統依彙總資料自動產生")`）。改一個字這一條就紅，
+   *   而程式沒有問題——那種紅只會讓下一個人把字串改成新文案，
+   *   於是這一條變成文案的複本，永遠測不到它本來要測的事。
+   *   改成釘結構：下一個函式宣告（`function draftKey()`）就是這一段的結尾。
+   */
   const narrativeStart = source.indexOf("const asNumber = (value)");
-  const narrativeEnd = source.indexOf("本段文字由系統依彙總資料自動產生", narrativeStart);
-  assert.ok(narrativeEnd > narrativeStart, "找不到 narrative() 的結尾");
+  assert.notEqual(narrativeStart, -1, "找不到 asNumber()");
+  const narrativeEnd = source.indexOf("function draftKey()", narrativeStart);
+  assert.ok(narrativeEnd > narrativeStart, "找不到 narrative() 的結尾（draftKey 不見了？）");
   const narrative = source
     .slice(narrativeStart, narrativeEnd)
     .replace(/\/\*[\s\S]*?\*\//g, "");

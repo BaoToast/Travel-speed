@@ -22,6 +22,33 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
+  /*
+   * 方向顯示名稱的比對鍵，來自三支共用的 direction-pair。
+   *
+   * ⚠️ 兩種載入方式都要接：瀏覽器是 index.html 先載 direction-pair.js
+   *   （掛在 globalThis），node 下這支是被 require() 單獨載入的，
+   *   要自己 require 一次。**刻意不在這裡再抄一份正規化**——
+   *   同一件事兩份實作就是漂移的起點（這一輪修的正是那一類）。
+   *
+   * ⚠️ 兩邊都拿不到時**直接丟例外**，不可以退回「比原字串」。
+   *   悄悄退回去的話，這一支的假分裂會在某些環境下復活而沒有人發現。
+   */
+  var directionKeyCache = null;
+  function directionTextKey(value) {
+    if (!directionKeyCache) {
+      if (typeof globalThis !== "undefined" && globalThis.DirectionPair)
+        directionKeyCache = globalThis.DirectionPair.directionTextKey;
+      else if (typeof require === "function")
+        directionKeyCache = require("./direction-pair.js").directionTextKey;
+      if (typeof directionKeyCache !== "function")
+        throw new Error(
+          "conclusion.js 的方向文字比對需要 direction-pair.js 的 directionTextKey()，" +
+            "但這個環境裡拿不到它（瀏覽器要先載入 direction-pair.js）。",
+        );
+    }
+    return directionKeyCache(value);
+  }
+
   var CONCLUSION_METRICS = [
     { key: "los", label: "服務水準（A～F）" },
     { key: "travel", label: "旅行速率（km/h）" },
@@ -361,8 +388,19 @@
        * 沒有命名時，方向的顯示名稱本來就會退回報告上的起訖文字，
        * 這時候再括號補一次，會寫成「甲路口--->乙路口（甲路口--->乙路口）」。
        * 只有兩者真的不同才補。
+       *
+       * ⚠️ 2026-09-29：比對改走 DirectionPair.directionTextKey()，不比原字串。
+       *   原本用 `!==` 比原字串：使用者命名時多打一個空白、或全形換半形，
+       *   兩者就被判成「不同」，於是草稿寫成
+       *   「甲路口→乙路口（甲路口 → 乙路口）」——同一個名稱印兩次，
+       *   而那一段是要貼進正式報告的。
+       *   這與姊妹系統路口轉向修過的「假分裂」是同一類：
+       *   **空格與全半形是排版雜訊，不是內容**。
+       *   ⚠️ 大小寫刻意不吸收，所以真的不同的名稱照樣會補括號。
        */
-      (wants("directionText") && row.directionText && row.directionText !== dirLabel(row)
+      (wants("directionText") &&
+      row.directionText &&
+      directionTextKey(row.directionText) !== directionTextKey(dirLabel(row))
         ? "（" + row.directionText + "）"
         : "") +
       "：";

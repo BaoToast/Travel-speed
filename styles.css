@@ -13,7 +13,7 @@
  *  （與使用者先前回報的「標題文字消失」是同一個症狀）。
  *   寫死新數字也一樣錯：收合狀態會留一大段空白，展開狀態又會被切掉。
  */
-:root{--topbar-h:72px;--main-toolbar-h:0px;--sticky-top:calc(var(--topbar-h) + var(--main-toolbar-h) + 12px);--navy:#17354d;--blue:#1977b5;--blue2:#e9f4fa;--ink:#1d2a34;--muted:#697985;--line:#dce5ea;--bg:#f4f7f8;--green:#168466;--orange:#df7b31;--red:#bd463d;--white:#fff;--shadow:0 8px 26px rgba(25,50,69,.07)}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif}.shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}aside{position:fixed;inset:0 auto 0 0;width:248px;background:var(--navy);color:#fff;padding:26px 18px;z-index:35}.brand{display:flex;align-items:center;gap:12px;padding:0 8px 27px}.brand>b{display:grid;place-items:center;width:48px;height:48px;border-radius:12px;background:#fff;color:var(--navy)}.brand span, .brand small{display:block}.brand span{font-weight:800}.brand small{font-size:11px;font-weight:400;opacity:.65;margin-top:4px}nav button{width:100%;border:0;background:none;color:#d8e5ec;text-align:left;padding:12px 15px;border-radius:7px;margin:2px 0;font:inherit;cursor:pointer}nav button:hover, nav button.active{background:rgba(255,255,255,.12);color:#fff}nav button.active{box-shadow:inset 3px 0 #62b8e8}.local{position:absolute;bottom:24px;left:28px;font-size:12px;color:#cbdce5}.local i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#47d29a;margin-right:7px}main{grid-column:2;min-width:0}header{height:var(--topbar-h);background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 38px;position:sticky;top:0;z-index:10}header strong, header small{display:block}header small{color:var(--muted);margin-top:3px;font-size:11px}.blank-badge{margin-left:auto;background:#e9f6f1;color:var(--green);padding:7px 11px;border-radius:20px;font-size:11px;font-weight:700}#menu{display:none}.view{display:none;max-width:1500px;margin:auto;padding:38px}.view.active{display:block}.hero{background:linear-gradient(125deg,#15344c,#1a5c7b);color:#fff;border-radius:17px;padding:44px 48px;display:grid;grid-template-columns:1.25fr .75fr;gap:45px}.eyebrow{font-size:11px;letter-spacing:.14em;font-weight:900;color:#1a6b9c}.hero .eyebrow{color:#8dd2f5}.hero h1{font-size:40px;line-height:1.3;margin:14px 0}.hero h1 em{font-style:normal;color:#8dd2f5}.hero p{color:#d7e6ee;line-height:1.8;max-width:650px}.primary, .ghost, .outline, .success, .danger button{border:0;border-radius:7px;padding:11px 17px;font:inherit;font-weight:800;cursor:pointer}.primary{background:var(--blue);color:#fff}.ghost{background:#fff;color:var(--navy);margin-left:8px}.outline{background:#fff;color:var(--navy);border:1px solid var(--line)}.success{background:var(--green);color:#fff}.success:disabled{background:#bdccca;cursor:not-allowed}.full{width:100%}.rule-card{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.17);border-radius:13px;padding:23px;align-self:center}.rule-card>strong{display:block;margin-bottom:15px}.rule-card>div{display:flex;align-items:center;gap:10px;margin:11px 0;font-size:13px}.rule-card div b{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#82caef;color:#15344c}.rule-card small{display:block;color:#bcd4e1;margin-top:15px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:19px 0}.metrics article, .panel{background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow)}.metrics article{padding:19px 21px}.metrics span, .metrics small{display:block;color:var(--muted);font-size:11px}.metrics b{display:block;color:var(--navy);font-size:28px;margin:7px 0}.next{display:flex;justify-content:space-between;align-items:center;padding:22px 26px}.next h2{font-size:19px;margin:4px 0}.next p{margin:0;color:var(--muted);font-size:13px}.step{font-size:10px;color:var(--blue);font-weight:900;letter-spacing:.1em}.title{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:25px}.title h2{font-size:30px;margin:6px 0}.title p{margin:0;color:var(--muted)}.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}.panel{padding:23px}.form label{display:block;font-size:13px;font-weight:700;margin-bottom:17px}.form input, .form select, .filters input{width:100%;margin-top:7px;padding:11px;border:1px solid #cbd7dd;border-radius:6px;font:inherit;background:#fff}.tips h3{margin-top:0}.tips p{color:var(--muted);line-height:1.7}.example{display:grid;grid-template-columns:120px 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:18px 0}.example>*{padding:11px;border-bottom:1px solid var(--line)}.example span{background:#f1f5f7;color:var(--muted)}.note{font-size:12px;background:#fff7e9;padding:13px;border-radius:7px}.safe{font-size:11px;background:#e9f6f1;color:var(--green);padding:7px 11px;border-radius:20px}.import-grid{display:grid;grid-template-columns:.75fr 1.25fr;gap:20px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}/*
+:root{--topbar-h:72px;--main-toolbar-h:0px;--sticky-top:calc(var(--topbar-h) + var(--main-toolbar-h) + 12px);--navy:#17354d;--blue:#1977b5;--blue2:#e9f4fa;--ink:#1d2a34;--muted:#697985;--line:#dce5ea;--bg:#f4f7f8;--green:#168466;--orange:#df7b31;--red:#bd463d;--white:#fff;--shadow:0 8px 26px rgba(25,50,69,.07)}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif}.shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}aside{position:fixed;inset:0 auto 0 0;width:248px;background:var(--navy);color:#fff;padding:26px 18px;z-index:35;overflow-y:auto;overscroll-behavior:contain}.brand{display:flex;align-items:center;gap:12px;padding:0 8px 27px}.brand>b{display:grid;place-items:center;width:48px;height:48px;border-radius:12px;background:#fff;color:var(--navy)}.brand span, .brand small{display:block}.brand span{font-weight:800}.brand small{font-size:11px;font-weight:400;opacity:.72;margin-top:4px}nav button{width:100%;border:0;background:none;color:#d8e5ec;text-align:left;padding:12px 15px;border-radius:7px;margin:2px 0;font:inherit;cursor:pointer;white-space:normal;overflow-wrap:anywhere;line-break:anywhere}nav button:hover, nav button.active{background:rgba(255,255,255,.12);color:#fff}nav button.active{box-shadow:inset 3px 0 #62b8e8}.local{position:absolute;bottom:24px;left:28px;font-size:12px;color:#cbdce5}.local i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#47d29a;margin-right:7px}main{grid-column:2;min-width:0}header{height:var(--topbar-h);background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 38px;position:sticky;top:0;z-index:10}header strong, header small{display:block}header small{color:var(--muted);margin-top:3px;font-size:11px}.blank-badge{margin-left:auto;background:#e9f6f1;color:#12735a;padding:7px 11px;border-radius:20px;font-size:11px;font-weight:700}#menu{display:none}.view{display:none;max-width:1500px;margin:auto;padding:38px}.view.active{display:block}.hero{background:linear-gradient(125deg,#15344c,#1a5c7b);color:#fff;border-radius:17px;padding:44px 48px;display:grid;grid-template-columns:1.25fr .75fr;gap:45px}.eyebrow{font-size:11px;letter-spacing:.14em;font-weight:900;color:#1a6b9c}.hero .eyebrow{color:#9edaf7}.hero h1{font-size:40px;line-height:1.3;margin:14px 0}.hero h1 em{font-style:normal;color:#9edaf7}.hero p{color:#d7e6ee;line-height:1.8;max-width:650px}.primary, .ghost, .outline, .success, .danger button{border:0;border-radius:7px;padding:11px 17px;font:inherit;font-weight:800;cursor:pointer}.primary{background:var(--blue);color:#fff}.ghost{background:#fff;color:var(--navy);margin-left:8px}.outline{background:#fff;color:var(--navy);border:1px solid var(--line)}.success{background:var(--green);color:#fff}.success:disabled{background:#bdccca;cursor:not-allowed}.full{width:100%}.rule-card{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.17);border-radius:13px;padding:23px;align-self:center}.rule-card>strong{display:block;margin-bottom:15px}.rule-card>div{display:flex;align-items:center;gap:10px;margin:11px 0;font-size:13px}.rule-card div b{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#82caef;color:#15344c}.rule-card small{display:block;color:#bcd4e1;margin-top:15px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:19px 0}.metrics article, .panel{background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow)}.metrics article{padding:19px 21px}.metrics span, .metrics small{display:block;color:var(--muted);font-size:11px}.metrics b{display:block;color:var(--navy);font-size:28px;margin:7px 0}.next{display:flex;justify-content:space-between;align-items:center;padding:22px 26px}.next h2{font-size:19px;margin:4px 0}.next p{margin:0;color:var(--muted);font-size:13px}.step{font-size:10px;color:var(--blue);font-weight:900;letter-spacing:.1em}.title{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:25px}.title h2{font-size:30px;margin:6px 0}.title p{margin:0;color:var(--muted)}.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}.panel{padding:23px}.form label{display:block;font-size:13px;font-weight:700;margin-bottom:17px}.form input, .form select, .filters input{width:100%;margin-top:7px;padding:11px;border:1px solid #cbd7dd;border-radius:6px;font:inherit;background:#fff}.tips h3{margin-top:0}.tips p{color:var(--muted);line-height:1.7}.example{display:grid;grid-template-columns:120px 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:18px 0}.example>*{padding:11px;border-bottom:1px solid var(--line)}.example span{background:#f1f5f7;color:var(--muted)}.note{font-size:12px;background:#fff7e9;padding:13px;border-radius:7px}.safe{font-size:11px;background:#e9f6f1;color:#12735a;padding:7px 11px;border-radius:20px}.import-grid{display:grid;grid-template-columns:.75fr 1.25fr;gap:20px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}/*
  * ── 拖曳匯入區（使用者 2026-09-14，三支同步）──────────────────────
  *   「可拖曳匯入的區域，也是可以再大一點，方便拖曳檔案進入匯入區」
  *   拖曳是「抓著檔案在空中瞄準」，目標越小越容易掉在視窗外，
@@ -21,7 +21,7 @@
  *   原本 padding 32px（實高約 130px），加到最小 220px。
  */
 .drop{border:2px dashed #b9ccd7!important;border-radius:9px;text-align:center;padding:36px 18px;min-height:220px;display:grid;place-content:center;gap:10px;background:#f7fbfd;cursor:pointer}.drop:hover{border-color:var(--blue)!important}/* 拖曳中的放置區：邊框、底色與外光暈一起變，隔著螢幕也看得出來丟得中 */
-.drag-active{border-color:var(--blue)!important;background:#e8f2fb!important;box-shadow:0 0 0 4px rgba(43,108,176,.16)}label.upload.drag-active{outline:2px dashed var(--blue);outline-offset:3px}.drop input{display:none}.drop b, .drop span{display:block}.drop span{font-weight:400;color:var(--muted);font-size:11px;margin-top:7px}.file-info{font-size:12px;color:var(--muted);margin:-4px 0 14px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px}.panel-head h3{margin:0}.panel-head small{color:var(--muted)}#errorBadge{font-size:11px;background:#e9f6f1;color:var(--green);padding:6px 10px;border-radius:18px}.table-wrap{overflow:auto;max-height:65vh}.table-wrap.tall{height:350px}table{border-collapse:collapse;width:100%;font-size:12px}th{position:sticky;top:0;background:#eef3f5;color:#566775;text-align:left;padding:11px;white-space:nowrap;z-index:1}td{padding:11px;border-bottom:1px solid var(--line);white-space:nowrap}.empty{text-align:center!important;color:var(--muted);padding:55px!important}.filters{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.filters input{max-width:360px;margin:0}.filters span{font-size:12px;color:var(--muted)}.los{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:6px;font-weight:900}.los-a{background:#69c57b}.los-b{background:#a9d873}.los-c{background:#f7dc6d}.los-d{background:#f5ad65}.los-e{background:#ec7860}.los-f{background:#ce4d4b;color:#fff}.speed-input{width:90px;padding:7px;border:1px solid #cbd7dd;border-radius:5px}.chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:17px}.chart-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px;box-shadow:var(--shadow)}.chart-card h3{font-size:14px;margin:0 0 18px}.bars{height:219px;display:flex;gap:8px;align-items:end;border-bottom:1px solid #bccbd3;padding:0 10px}.bar-group{flex:1;height:100%;display:flex;align-items:end;gap:3px;position:relative}.bar{flex:1;min-width:7px;border-radius:3px 3px 0 0}.bar.weekday{background:#247db4}.bar.holiday{background:#e88943}.bar-group small{position:absolute;bottom:-24px;left:50%;transform:translateX(-50%);font-size:8px;white-space:nowrap;color:var(--muted)}.chart-legend{text-align:center;margin-top:34px;color:var(--muted);font-size:11px}.chart-legend i{display:inline-block;width:12px;height:5px;margin:0 4px 0 12px}.empty-block{text-align:center;color:var(--muted);padding:60px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.action-card b{font-size:17px}.action-card p{color:var(--muted);line-height:1.7;min-height:67px}.upload{display:inline-block;cursor:pointer}.upload input{display:none}.danger{border-color:#efc5c2;background:#fffafa}.danger button{background:var(--red);color:#fff}.guide{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}.guide article{background:#fff;border:1px solid var(--line);border-radius:9px;padding:19px;display:flex;gap:16px}.guide article>b{font-size:25px;color:#2f7ba8}.guide h3{margin:1px 0 6px;font-size:15px}.guide p{margin:0;color:var(--muted);font-size:12px;line-height:1.7}.warning{margin-top:18px;background:#fff6e8;border-left:4px solid var(--orange);padding:17px 20px;border-radius:7px}.warning p{margin:5px 0;color:#755c46;line-height:1.7;font-size:13px}.road-batch-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding:11px 14px;border:1px solid #cbd7dd;border-left:4px solid var(--blue);border-radius:8px;background:#f7fbfd;font-size:12px}.road-batch-bar .pick-all{display:flex;align-items:center;gap:6px;font-weight:800;color:var(--navy);white-space:nowrap;cursor:pointer}.road-batch-bar .pick-count{color:var(--muted)}.road-batch-bar .pick-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}.road-batch-bar select{padding:7px 9px;border:1px solid #cbd7dd;border-radius:6px;font:inherit;background:#fff;max-width:220px}.road-batch-bar button{padding:8px 13px;font-size:12px}.road-batch-bar button:disabled{opacity:.45;cursor:not-allowed}.road-pick{display:inline-flex;align-items:center;gap:6px;cursor:pointer}@media(max-width:900px){.road-batch-bar .pick-actions{margin-left:0;width:100%}}.preview-actions{display:grid;grid-template-columns:1fr 1.6fr;gap:10px;margin-top:4px}.preview-actions button{width:100%}@media(max-width:620px){.preview-actions{grid-template-columns:1fr}}.link-button{border:0;background:none;color:var(--blue);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0}#toast{position:fixed;right:22px;bottom:22px;background:#18384f;color:#fff;padding:13px 17px;border-radius:8px;opacity:0;transform:translateY(10px);transition:.2s;pointer-events:none;z-index:99}#toast.show{opacity:1;transform:none}
+.drag-active{border-color:var(--blue)!important;background:#e8f2fb!important;box-shadow:0 0 0 4px rgba(43,108,176,.16)}label.upload.drag-active{outline:2px dashed var(--blue);outline-offset:3px}.drop input{display:none}.drop b, .drop span{display:block}.drop span{font-weight:400;color:var(--muted);font-size:11px;margin-top:7px}.file-info{font-size:12px;color:var(--muted);margin:-4px 0 14px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px}.panel-head h3{margin:0}.panel-head small{color:var(--muted)}#errorBadge{font-size:11px;background:#e9f6f1;color:#12735a;padding:6px 10px;border-radius:18px}.table-wrap{overflow:auto;max-height:65vh}.table-wrap.tall{height:350px}table{border-collapse:collapse;width:100%;font-size:12px}th{position:sticky;top:0;background:#eef3f5;color:#3d4e5c;text-align:left;padding:11px;white-space:nowrap;z-index:1;font-size:12.5px;font-weight:800}td{padding:11px;border-bottom:1px solid var(--line);white-space:nowrap}.empty{text-align:center!important;color:var(--muted);padding:55px!important}.filters{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.filters input{max-width:360px;margin:0}.filters span{font-size:12px;color:var(--muted)}.los{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:6px;font-weight:900}.los-a{background:#69c57b}.los-b{background:#a9d873}.los-c{background:#f7dc6d}.los-d{background:#f5ad65}.los-e{background:#ec7860}.los-f{background:#ce4d4b;color:#fff}.speed-input{width:90px;padding:7px;border:1px solid #cbd7dd;border-radius:5px}.chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:17px}.chart-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px;box-shadow:var(--shadow)}.chart-card h3{font-size:14px;margin:0 0 18px}.bars{height:219px;display:flex;gap:8px;align-items:end;border-bottom:1px solid #bccbd3;padding:0 10px}.bar-group{flex:1;height:100%;display:flex;align-items:end;gap:3px;position:relative}.bar{flex:1;min-width:7px;border-radius:3px 3px 0 0}.bar.weekday{background:#247db4}.bar.holiday{background:#e88943}.bar-group small{position:absolute;bottom:-24px;left:50%;transform:translateX(-50%);font-size:8px;white-space:nowrap;color:var(--muted)}.chart-legend{text-align:center;margin-top:34px;color:var(--muted);font-size:11px}.chart-legend i{display:inline-block;width:12px;height:5px;margin:0 4px 0 12px}.empty-block{text-align:center;color:var(--muted);padding:60px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.action-card b{font-size:17px}.action-card p{color:var(--muted);line-height:1.7;min-height:67px}.upload{display:inline-block;cursor:pointer}.upload input{display:none}.danger{border-color:#efc5c2;background:#fffafa}.danger button{background:var(--red);color:#fff}.guide{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}.guide article{background:#fff;border:1px solid var(--line);border-radius:9px;padding:19px;display:flex;gap:16px}.guide article>b{font-size:25px;color:#2f7ba8}.guide h3{margin:1px 0 6px;font-size:15px}.guide p{margin:0;color:var(--muted);font-size:12px;line-height:1.7}.warning{margin-top:18px;background:#fff6e8;border-left:4px solid var(--orange);padding:17px 20px;border-radius:7px}.warning p{margin:5px 0;color:#755c46;line-height:1.7;font-size:13px}.road-batch-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding:11px 14px;border:1px solid #cbd7dd;border-left:4px solid var(--blue);border-radius:8px;background:#f7fbfd;font-size:12px}.road-batch-bar .pick-all{display:flex;align-items:center;gap:6px;font-weight:800;color:var(--navy);white-space:nowrap;cursor:pointer}.road-batch-bar .pick-count{color:var(--muted)}.road-batch-bar .pick-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}.road-batch-bar select{padding:7px 9px;border:1px solid #cbd7dd;border-radius:6px;font:inherit;background:#fff;max-width:220px}.road-batch-bar button{padding:8px 13px;font-size:12px}.road-batch-bar button:disabled{opacity:.45;cursor:not-allowed}.road-pick{display:inline-flex;align-items:center;gap:6px;cursor:pointer}@media(max-width:900px){.road-batch-bar .pick-actions{margin-left:0;width:100%}}.preview-actions{display:grid;grid-template-columns:1fr 1.6fr;gap:10px;margin-top:4px}.preview-actions button{width:100%}@media(max-width:620px){.preview-actions{grid-template-columns:1fr}}.link-button{border:0;background:none;color:var(--blue);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0}#toast{position:fixed;right:22px;bottom:22px;background:#18384f;color:#fff;padding:13px 17px;border-radius:8px;opacity:0;transform:translateY(10px);transition:.2s;pointer-events:none;z-index:99}#toast.show{opacity:1;transform:none}
 @media(max-width:1050px){.shell{grid-template-columns:1fr}aside{transform:translateX(-100%);transition:.2s}aside.open{transform:none}main{grid-column:1}#menu{display:block;border:0;background:none;font-size:21px;margin-right:12px}.hero{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.two, .import-grid{grid-template-columns:1fr}.view{padding:27px}.chart-grid{grid-template-columns:1fr}}@media(max-width:650px){header{padding:0 17px}.blank-badge{display:none}.view{padding:20px 12px}.hero{padding:29px 23px}.hero h1{font-size:29px}.rule-card{display:none}.metrics, .cards, .guide{grid-template-columns:1fr}.title{align-items:flex-start;flex-direction:column;gap:12px}.row{grid-template-columns:1fr}.next{align-items:flex-start;gap:15px;flex-direction:column}.ghost{margin:8px 0 0}.table-wrap{max-height:58vh}}/* Data maintenance */
 .muted{color:var(--muted);font-size:13px;line-height:1.7}.danger-button{border:0;border-radius:7px;padding:11px 17px;font:inherit;font-weight:800;cursor:pointer;background:var(--red);color:#fff;margin-top:15px}.danger-button:disabled{background:#c9d0d4;cursor:not-allowed}.metrics.compact{grid-template-columns:repeat(3,1fr);margin:14px 0}.metrics.compact article{box-shadow:none;padding:14px}.metrics.compact b{font-size:22px}.health-panel{margin-top:20px}.health-panel td:nth-child(4){white-space:normal;min-width:300px}aside{display:flex;flex-direction:column}.brand{flex:none}aside nav{flex:1;min-height:0;overflow-y:auto;padding-bottom:8px}.local{position:static;flex:none;margin:14px 10px 0}.manual{margin-top:28px}.manual-intro{margin-bottom:16px}.manual-intro h2{margin:8px 0}.manual-intro p, .manual-grid p, .manual-grid li{color:var(--muted);font-size:13px;line-height:1.8}.manual-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.manual-grid h3{margin-top:0;color:var(--navy)}.manual-grid ol, .manual-grid ul{padding-left:22px;margin-bottom:0}
 @media(max-width:750px){.manual-grid{grid-template-columns:1fr}}
@@ -95,7 +95,7 @@
 }
 .rule-scope-grid label{
   flex:1 1 92px;min-width:0;
-  display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:#65798a;
+  display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:#5a6e7e;
 }
 /* 季別（起）／季別（迄）／路段這三個下拉裝的是長字串，要寬一點。 */
 .rule-scope-grid label:nth-of-type(-n+3){flex:1.6 1 132px}
@@ -106,13 +106,64 @@
   flex:0 0 auto;white-space:nowrap;font-size:14px;padding-left:14px;padding-right:14px;
 }
 @media(max-width:1000px){.rule-scope-grid label{flex:1 1 132px}.rule-scope-grid button{flex:1 1 100%}}
-.los-rule-panel{margin-bottom:22px}.los-rule-panel .panel-head{align-items:flex-start}.los-rule-panel .panel-head p{margin:7px 0 0;color:#65798a;line-height:1.65}.los-rule-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.los-rule-grid{display:grid;grid-template-columns:repeat(5,minmax(105px,1fr));gap:12px;margin:22px 0 16px}.los-rule-grid label{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:4px 9px;padding:14px;border:1px solid #dce5ea;border-radius:10px;background:#f8fbfc}.los-rule-grid label b{grid-row:1/3;font-size:24px;color:#173b59}.los-rule-grid label span{font-size:12px;color:#718493}.los-rule-grid input{width:100%;min-width:0;padding:8px 9px;border:1px solid #bdccd5;border-radius:6px;background:#fff}.los-rule-explanation{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:8px}.los-rule-explanation span{padding:10px 12px;border-radius:8px;background:#edf5f8;color:#24465d;font-size:13px}.rule-note{display:block;margin-top:12px;color:#65798a}@media(max-width:850px){.los-rule-grid{grid-template-columns:repeat(2,1fr)}.los-rule-explanation{grid-template-columns:1fr}.los-rule-actions{justify-content:flex-start}}.road-admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:18px}.road-admin-grid .panel{margin:0}.road-metrics{margin-bottom:18px}.impact-panel{display:flex;align-items:center;justify-content:space-between;gap:24px;border-left:5px solid #e88943;margin-bottom:18px}.impact-panel p{margin:6px 0;color:#587084}.impact-panel ul{margin:10px 0 0;padding-left:20px;color:#405a6c}.impact-panel small{display:block;margin-top:10px;color:#5b7285}.impact-panel .danger-button{white-space:nowrap}.road-admin-grid h3{margin:0 0 12px}.road-admin-grid .row{align-items:end}@media(max-width:900px){.road-admin-grid{grid-template-columns:1fr}.impact-panel{align-items:flex-start;flex-direction:column}.impact-panel .danger-button{width:100%}}.match-badge{display:inline-block;border-radius:999px;padding:3px 9px;margin-bottom:5px;font-size:12px;font-weight:800}.match-exact{background:#e4f4ed;color:#167050}.match-alias{background:#e5effa;color:#246a9b}.match-possible{background:#fff1d8;color:#9a6300}.match-new{background:#fbe7e4;color:#a53e35}.quality-metrics{grid-template-columns:repeat(4,1fr)!important}.status-ok{color:#168466;font-weight:700}.status-warn{color:#a36b08;font-weight:700}.quality-panel{margin:20px 0}@media(max-width:800px){.quality-metrics{grid-template-columns:repeat(2,1fr)!important}}.extension-panel{margin-top:22px}.extension-panel h4{margin:20px 0 8px}.diff-grid, .version-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.diff-grid>div{padding:12px;border:1px solid #dbe6ec;border-radius:10px;background:#f8fbfc}.diff-grid b, .diff-grid span{display:block}.diff-grid span{margin-top:5px;color:#4d6878}.version-grid{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:14px}.version-grid label, .four label{display:flex;flex-direction:column;gap:6px}.status-neutral, .status-ok, .status-warn{display:inline-block;padding:5px 9px;border-radius:999px;font-size:13px}.status-neutral{background:#edf3f6;color:#526d7b}.status-ok{background:#e7f6ef;color:#157557}.status-warn{background:#fff3dc;color:#9a5c00}.check-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 16px}.check-grid label{display:flex;flex-direction:row;align-items:center;gap:8px}.check-grid input{width:auto}#reportDraft{width:100%;resize:vertical;border:1px solid #cbd7dd;border-radius:8px;padding:12px;font:inherit;line-height:1.65}.extension-panel small{overflow-wrap:anywhere}@media(max-width:900px){.version-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.diff-grid, .version-grid{grid-template-columns:1fr}.check-grid{grid-template-columns:1fr}}/* 新手說明頁的手冊下載連結 */
+.los-rule-panel{margin-bottom:22px}.los-rule-panel .panel-head{align-items:flex-start}.los-rule-panel .panel-head p{margin:7px 0 0;color:#5a6e7e;line-height:1.65}.los-rule-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.los-rule-grid{display:grid;grid-template-columns:repeat(5,minmax(105px,1fr));gap:12px;margin:22px 0 16px}.los-rule-grid label{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:4px 9px;padding:14px;border:1px solid #dce5ea;border-radius:10px;background:#f8fbfc}.los-rule-grid label b{grid-row:1/3;font-size:24px;color:#173b59}.los-rule-grid label span{font-size:12px;color:#5a6e7e}.los-rule-grid input{width:100%;min-width:0;padding:8px 9px;border:1px solid #bdccd5;border-radius:6px;background:#fff}.los-rule-explanation{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:8px}.los-rule-explanation span{padding:10px 12px;border-radius:8px;background:#edf5f8;color:#24465d;font-size:13px}.rule-note{display:block;margin-top:12px;color:#5a6e7e}@media(max-width:850px){.los-rule-grid{grid-template-columns:repeat(2,1fr)}.los-rule-explanation{grid-template-columns:1fr}.los-rule-actions{justify-content:flex-start}}.road-admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:18px}.road-admin-grid .panel{margin:0}.road-metrics{margin-bottom:18px}.impact-panel{display:flex;align-items:center;justify-content:space-between;gap:24px;border-left:5px solid #e88943;margin-bottom:18px}.impact-panel p{margin:6px 0;color:#587084}.impact-panel ul{margin:10px 0 0;padding-left:20px;color:#405a6c}.impact-panel small{display:block;margin-top:10px;color:#5b7285}.impact-panel .danger-button{white-space:nowrap}.road-admin-grid h3{margin:0 0 12px}.road-admin-grid .row{align-items:end}@media(max-width:900px){.road-admin-grid{grid-template-columns:1fr}.impact-panel{align-items:flex-start;flex-direction:column}.impact-panel .danger-button{width:100%}}.match-badge{display:inline-block;border-radius:999px;padding:3px 9px;margin-bottom:5px;font-size:12px;font-weight:800}.match-exact{background:#e4f4ed;color:#167050}.match-alias{background:#e5effa;color:#246a9b}.match-possible{background:#fff1d8;color:#9a6300}.match-new{background:#fbe7e4;color:#a53e35}.quality-metrics{grid-template-columns:repeat(4,1fr)!important}.status-ok{color:#168466;font-weight:700}.status-warn{color:#a36b08;font-weight:700}.quality-panel{margin:20px 0}@media(max-width:800px){.quality-metrics{grid-template-columns:repeat(2,1fr)!important}}.extension-panel{margin-top:22px}.extension-panel h4{margin:20px 0 8px}.diff-grid, .version-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.diff-grid>div{padding:12px;border:1px solid #dbe6ec;border-radius:10px;background:#f8fbfc}.diff-grid b, .diff-grid span{display:block}.diff-grid span{margin-top:5px;color:#4d6878}.version-grid{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:14px}.version-grid label, .four label{display:flex;flex-direction:column;gap:6px}.status-neutral, .status-ok, .status-warn{display:inline-block;padding:5px 9px;border-radius:999px;font-size:13px}.status-neutral{background:#edf3f6;color:#526d7b}.status-ok{background:#e7f6ef;color:#157557}.status-warn{background:#fff3dc;color:#9a5c00}.check-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 16px}.check-grid label{display:flex;flex-direction:row;align-items:center;gap:8px}.check-grid input{width:auto}#reportDraft{width:100%;resize:vertical;border:1px solid #cbd7dd;border-radius:8px;padding:12px;font:inherit;line-height:1.65}.extension-panel small{overflow-wrap:anywhere}@media(max-width:900px){.version-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.diff-grid, .version-grid{grid-template-columns:1fr}.check-grid{grid-template-columns:1fr}}/* 新手說明頁的手冊下載連結 */
 .manual-download{ display: flex; gap: 8px; align-items: center; margin-left: 8px; }.manual-download a{
   display: inline-block; padding: 9px 14px; border-radius: 7px;
   font: inherit; font-weight: 600; text-decoration: none; white-space: nowrap;
 }.manual-download a.primary{ background: #17354d; color: #fff; }.manual-download a.outline{ border: 1px solid #cbd7dd; color: #17354d; background: #fff; }/* 品質總覽的異常篩選：季度區間、類型（可複選）、路段、日別、尖峰。
    季度一累積這張表會長到上百列，沒有篩選就等於看不到重點。 */
-.quality-shown{font-size:12px;color:var(--muted);white-space:nowrap;align-self:center}.quality-shown.stale{color:#9a5c00;font-weight:700}#healthCount.stale{color:#9a5c00;font-weight:700}.anomaly-filters{margin:4px 0 16px;padding:14px 16px;border:1px solid var(--line);border-radius:9px;background:#f7fafb}.anomaly-filter-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.anomaly-filter-row label{display:block;font-size:12px;font-weight:700;color:var(--navy)}.anomaly-filter-row select{width:100%;margin-top:6px;padding:8px 9px;border:1px solid #cbd7dd;border-radius:6px;font:inherit;background:#fff}.anomaly-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.anomaly-chip{border:1px solid #cbd7dd;background:#fff;color:#415662;border-radius:999px;padding:6px 12px;font:inherit;font-size:12px;cursor:pointer}.anomaly-chip:hover{border-color:var(--blue)}.anomaly-chip.on{border-color:var(--blue);background:var(--blue2);color:var(--navy);font-weight:800}.anomaly-chip.clear{color:var(--muted)}.anomaly-hint{margin:11px 0 0;font-size:11.5px;color:var(--muted);line-height:1.75}.limit-version-note{margin-top:6px;font-size:11.5px;line-height:1.65;color:#8a5312;background:#fff6e8;border-left:3px solid var(--orange);padding:7px 9px;border-radius:6px;max-width:420px}/* ══════════ 版面修正（全面稽核） ══════════════════════════════════
+.quality-shown{font-size:12px;color:var(--muted);white-space:nowrap;align-self:center}.quality-shown.stale{color:#9a5c00;font-weight:700}#healthCount.stale{color:#9a5c00;font-weight:700}.anomaly-filters{margin:4px 0 16px;padding:14px 16px;border:1px solid var(--line);border-radius:9px;background:#f7fafb}.anomaly-filter-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.anomaly-filter-row label{display:block;font-size:12px;font-weight:700;color:var(--navy)}.anomaly-filter-row select{width:100%;margin-top:6px;padding:8px 9px;border:1px solid #cbd7dd;border-radius:6px;font:inherit;background:#fff}.anomaly-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.anomaly-chip{border:1px solid #cbd7dd;background:#fff;color:#415662;border-radius:999px;padding:6px 12px;font:inherit;font-size:12px;cursor:pointer}.anomaly-chip:hover{border-color:var(--blue)}.anomaly-chip.on{border-color:var(--blue);background:var(--blue2);color:var(--navy);font-weight:800}.anomaly-chip.clear{color:var(--muted)}.anomaly-hint{margin:11px 0 0;font-size:11.5px;color:var(--muted);line-height:1.75}/*
+ * #66 使用者：版本速限的註記在窄畫面會擠成一條。
+ *
+ * 舊版寫 `max-width:420px` ＋ 滿底色 ＋ padding：欄寬本來就比 420px 窄的時候，
+ * max-width 完全不起作用，而滿底色會把「擠成一條」放大成一塊很顯眼的色帶。
+ * 改成：不限寬（跟著儲存格走）、去掉底色只留左邊線、允許換行。
+ * 顏色 #8a5312 在白底上是 6.35:1，拿掉底色之後對比只會變好。
+ */
+/*
+ * #48 指路：每一頁最下面的「更細的在這幾頁」。
+ * ⚠️ 顏色要在白底上過 AA：#4d6272 是 6.90:1、連結色 #186ea8 是 5.31:1。
+ * ⚠️ 允許換行（窄畫面三個目標排不下），不可以 nowrap。
+ */
+/*
+ * ⚠️ 側欄一定要能**上下捲動**。
+ *
+ * 2026-09-29：把分頁名稱改成可以換行（white-space:normal）之後，
+ * 長名稱變成兩行、整條側欄變高——在 900px 寬那一級的視窗上，
+ * 最下面幾顆按鈕被推出畫面，而 `aside` 是 position:fixed 又沒有捲動，
+ * **那幾顆就完全按不到了**（e2e-narrow-nav-clickable 實測「判定標準」點不到）。
+ *
+ * 「文字不被裁掉」與「按鈕按得到」是兩件事，修了前者會壓到後者——
+ * 這一條就是那個壓力的出口。18 顆按鈕在矮螢幕上本來就有這個風險，
+ * 只是換行之後才真的踩到。
+ *
+ * ⚠️ overscroll-behavior:contain：捲到底時不要把捲動傳給主畫面，
+ *   否則使用者在側欄裡滑一下，後面的內容跟著跑。
+ */
+/* #60：「本系統沒有定稿鎖」的說明。顏色 #8a5312 在 #fff6e8 上是 5.61:1。 */
+.no-final-lock{margin:10px 0 0;padding:11px 13px;border-left:3px solid var(--orange);background:#fff6e8;border-radius:7px;color:#8a5312;font-size:12.5px;line-height:1.8;max-width:none;overflow-wrap:anywhere}
+.no-final-lock b{color:#6b3f0d}
+/*
+ * ⚠️ 匯入預覽「疑似新路段」那一格的下拉，2026-09-30 之前**完全沒有樣式**。
+ *
+ * `.road-choice` 在 app.js 用了兩處（`renderPreview` 的兩條分支），
+ * 但 styles.css 裡一條規則都沒有——於是它用瀏覽器預設樣式呈現，
+ * 和同一頁其他下拉（`.form select`、`.filters select`）長得不一樣。
+ *
+ * ⚠️ 為什麼一直沒被抓到：這一支還沒有 **class 覆蓋掃描**（清單 #37，
+ *   另外兩支有 `e2e-class-coverage.mjs`）。「用了但沒有樣式」這一整類
+ *   目前沒有任何守門在看——#37 沒做，這一件就是它漏掉的第一個實例。
+ *
+ * 樣式與 `.form select` 對齊，只多一個 max-width（它長在表格儲存格裡，
+ * 不限寬會把那一欄撐開）。
+ */
+.road-choice{width:100%;max-width:260px;margin-top:6px;padding:8px 9px;border:1px solid #cbd7dd;border-radius:6px;font:inherit;font-size:12px;background:#fff;color:var(--ink)}
+.road-choice:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.page-pointer{margin:26px 0 0;padding:13px 15px;border-top:1px solid var(--line);color:#4d6272;font-size:12px;line-height:1.9;overflow-wrap:anywhere}
+.page-pointer>b{color:#1d2a34;margin-right:6px}
+.page-pointer .link-button{color:#186ea8}
+.page-pointer small{color:#4d6272;margin-left:2px}
+.export-scope-note{display:block;margin-top:6px;max-width:520px;color:#4d6272;font-size:11.5px;line-height:1.7;white-space:normal;overflow-wrap:anywhere}.export-scope-note b{color:#1d2a34}.limit-version-note{margin-top:6px;font-size:11.5px;line-height:1.65;color:#8a5312;border-left:3px solid var(--orange);padding:2px 0 2px 8px;white-space:normal;overflow-wrap:anywhere}/* ══════════ 版面修正（全面稽核） ══════════════════════════════════
    稽核在多個寬度實測到：預覽表的 min-content 把整頁撐開、圖表卡片
    有不可壓縮的最小寬度、按鈕被擠成一行一個字、以及列印永遠印出手冊。 */
 
@@ -343,11 +394,17 @@ th.has-col-filter{
   border: 1px solid transparent;
   background: none;
   /*
-   * ⚠️ 表頭漏斗是**文字**（▼），不是圖片，白底上一樣要過 AA 4.5:1。
+   * ⚠️ 表頭漏斗是**文字**（▼），不是圖片，一樣要過 AA 4.5:1。
    *   舊值 #90a2ad 只有 2.64:1——使用者要「看得出哪一欄可以篩」，
-   *   而它淡到幾乎看不見。#5b7285 是 5.01:1。
+   *   而它淡到幾乎看不見。
+   *
+   * ⚠️⚠️ 接下來 #5b7285 那一版是**拿白底算的**（白底 5.01:1），可是這顆按鈕
+   *   長在 `th` 裡面，th 的底色是 #eef3f5——實際只有 **4.48:1，不過**。
+   *   「算對了比值、底色拿錯」是這一類修正最容易犯的錯，全頁對比掃描
+   *   （scripts/e2e-layout.mjs 的 fullPageProbe）就是為了抓這種事。
+   *   現值 #4d6272 在 th 底色上是 5.68:1、在白底上是 6.90:1，兩邊都過。
    */
-  color: #5b7285;
+  color: #4d6272;
   font: inherit;
   font-size: 10px;
   line-height: 1;
@@ -542,13 +599,13 @@ th.has-col-filter{
  * 刻意做成 LOS 門檻底下的一個附屬區塊而不是獨立面板——它是「怎麼把 A～F
  * 收成三段」，離不開上面那組門檻，兩者放在一起使用者才不會分開設定後對不上。
  */
-.band-rule{margin-top:20px;padding-top:18px;border-top:1px dashed #cddae2}.band-rule-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.band-rule-head h4{margin:0;font-size:15px;color:#173b59}.band-rule-head p{margin:6px 0 0;max-width:620px;color:#65798a;line-height:1.65}.band-rule-grid{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0 14px}.band-rule-grid label{display:flex;gap:8px;align-items:center;padding:9px 13px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc;font-size:13px;color:#24465d}.band-rule-grid select{padding:6px 8px;border:1px solid #bdccd5;border-radius:6px;background:#fff;font:inherit}.band-rule-mid{font-size:12px;color:#5b7285}
+.band-rule{margin-top:20px;padding-top:18px;border-top:1px dashed #cddae2}.band-rule-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.band-rule-head h4{margin:0;font-size:15px;color:#173b59}.band-rule-head p{margin:6px 0 0;max-width:620px;color:#5a6e7e;line-height:1.65}.band-rule-grid{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0 14px}.band-rule-grid label{display:flex;gap:8px;align-items:center;padding:9px 13px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc;font-size:13px;color:#24465d}.band-rule-grid select{padding:6px 8px;border:1px solid #bdccd5;border-radius:6px;background:#fff;font:inherit}.band-rule-mid{font-size:12px;color:#5b7285}
 @media(max-width:850px){.band-rule-grid{align-items:stretch;flex-direction:column}.band-rule-grid label{justify-content:space-between}}/*
  * 歷季趨勢圖（可勾選指標）。
  * 勾一個＝一張大圖；勾多個＝小倍數圖，橫軸對齊方便比較。
  * 版面靠 .trend-small 這個類切換，不做另一套 DOM。
  */
-.trend-panel{margin-bottom:18px}.trend-panel .panel-head{align-items:flex-start;gap:16px;flex-wrap:wrap}.trend-panel .panel-head p{margin:7px 0 0;max-width:640px;color:#65798a;line-height:1.65}.trend-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:stretch}.trend-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.3}/*
+.trend-panel{margin-bottom:18px}.trend-panel .panel-head{align-items:flex-start;gap:16px;flex-wrap:wrap}.trend-panel .panel-head p{margin:7px 0 0;max-width:640px;color:#5a6e7e;line-height:1.65}.trend-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:stretch}.trend-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.3}/*
  * ⚠️ 按鈕裡的補充說明一定要 color:inherit。
  *
  * 使用者實際回報：「下載可編輯趨勢圖按鍵的說明文字被按鈕本身的深藍色
@@ -563,7 +620,7 @@ th.has-col-filter{
  * color:inherit 讓說明文字跟著按鈕自己的文字色走：深藍底就是白字、
  * 白底就是深藍字，日後再加任何配色的按鈕都不會再出這個問題。
  */
-.trend-actions button small{font-size:10px;opacity:.85;font-weight:400;color:inherit}.trend-controls{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin:18px 0 14px}.trend-controls>label{display:flex;gap:8px;align-items:center;padding:9px 13px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc;font-size:13px;color:#24465d}.trend-controls select{padding:6px 8px;border:1px solid #bdccd5;border-radius:6px;background:#fff;font:inherit}.trend-metrics{flex:1 1 340px;min-width:0;margin:0;padding:10px 13px 12px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc}.trend-metrics legend{padding:0 6px;font-size:12px;color:#65798a}.trend-metrics>div{display:flex;gap:8px 16px;flex-wrap:wrap}.trend-metrics label{display:flex;gap:6px;align-items:center;font-size:13px;color:#24465d}.trend-charts{display:grid;gap:14px}.trend-charts.trend-small{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}.trend-figure{margin:0;padding:12px 14px 14px;border:1px solid #dce5ea;border-radius:10px;background:#fff}.trend-figure figcaption{margin-bottom:6px;font-size:13px;font-weight:700;color:#173b59}.trend-figure svg{display:block;width:100%;height:auto}.trend-mini-note{margin:8px 0 0;font-size:11.5px;line-height:1.6;color:#65798a}/*
+.trend-actions button small{font-size:10px;opacity:.85;font-weight:400;color:inherit}.trend-controls{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin:18px 0 14px}.trend-controls>label{display:flex;gap:8px;align-items:center;padding:9px 13px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc;font-size:13px;color:#24465d}.trend-controls select{padding:6px 8px;border:1px solid #bdccd5;border-radius:6px;background:#fff;font:inherit}.trend-metrics{flex:1 1 340px;min-width:0;margin:0;padding:10px 13px 12px;border:1px solid #dce5ea;border-radius:9px;background:#f8fbfc}.trend-metrics legend{padding:0 6px;font-size:12px;color:#5a6e7e}.trend-metrics>div{display:flex;gap:8px 16px;flex-wrap:wrap}.trend-metrics label{display:flex;gap:6px;align-items:center;font-size:13px;color:#24465d}.trend-charts{display:grid;gap:14px}.trend-charts.trend-small{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}.trend-figure{margin:0;padding:12px 14px 14px;border:1px solid #dce5ea;border-radius:10px;background:#fff}.trend-figure figcaption{margin-bottom:6px;font-size:13px;font-weight:700;color:#173b59}.trend-figure svg{display:block;width:100%;height:auto}.trend-mini-note{margin:8px 0 0;font-size:11.5px;line-height:1.6;color:#5a6e7e}/*
  * ⚠️ 圖表本身的外觀（格線、軸、刻度字、折線、資料點、軸名稱）**不在這裡**。
  *
  * 原因是 PNG 匯出：downloadSvgAsPng 會把 SVG 序列化成
@@ -623,7 +680,29 @@ th.has-col-filter{
    * ⚠️ `nav button{font:inherit}` 會讓大分頁跟著 body 的 16px 走，
    *   所以這裡要明確寫 font-size，不可以只調分類標題（把分類標題再放大
    *   會讓側欄整條變胖，而使用者要的是「避免版面佔用過大」）。
-   * ⚠️ 小分頁 .nav-section 自己寫 12px（class 選擇器，特異性比這裡高），
+   * ⚠️⚠️ 側欄按鈕要能換行，第一件事是 `white-space:normal`。
+ *
+ *   「三段分法（順暢／尚可／壅塞）」在 248px 側欄裡超出 4px。
+ *
+ *   ⚠️ 真正的原因是 **`<button>` 的瀏覽器預設樣式本來就不換行**
+ *     （實測 computed style 是 `white-space: nowrap`，而 styles.css 裡
+ *     **沒有任何一條規則**設它——是瀏覽器給的）。
+ *     在 `white-space:nowrap` 之下，`overflow-wrap` 與 `line-break`
+ *     **完全不起作用**，所以先補了那兩個、卻一點效果都沒有。
+ *     這是一個「改了、但改的東西根本沒被套用」的典型：
+ *     看樣式表看不出來，要去量 computed style 才知道。
+ *
+ *   三個一起寫，各自負責一件事：
+ *     `white-space:normal`   → 先允許換行（沒有它，下面兩個都是死的）
+ *     `line-break:anywhere`  → 允許在全形右括號「）」之前斷
+ *                              （CSS 預設禁止在那裡斷；不用
+ *                               `word-break:break-all`，後者對全形標點
+ *                               各家處理不一致）
+ *     `overflow-wrap:anywhere` → 後援：整行真的沒有斷點時強制斷
+ *
+ *   ⚠️ 分頁名稱是使用者逐字指定的（X-62），**不可以為了排版改短**，
+ *     所以只能從斷行這一邊解。
+ * ⚠️ 小分頁 .nav-section 自己寫 12px（class 選擇器，特異性比這裡高），
    *   不受這一行影響——三層量過是 16 / 14 / 12。
    */
   font-size:14px}/* 尖峰彙總留下的捷徑列：設定搬走了，但「現在是怎麼判的」不能藏起來。 */
@@ -1195,7 +1274,7 @@ aside nav::-webkit-scrollbar{width:6px}aside nav::-webkit-scrollbar-thumb{backgr
   display: block;
   margin-top: 3px;
   font-weight: 400;
-  color: #65798a;
+  color: #5a6e7e;
 }
 .chart-card > .card-note .figure-note-body p {
   margin: 8px 0 0;
@@ -1941,8 +2020,8 @@ nav .nav-collapse[aria-expanded="false"] {
   background:#fff;border-radius:7px;padding:4px 10px;font:inherit;font-size:12px;
   font-weight:700;color:#3d5563;cursor:pointer}
 .resolution-ack:hover{border-color:var(--blue);color:var(--blue)}
-.resolution-ack.on{background:#eef4f2;border-color:#9dbfb4;color:#2f7d69}
-tr.issue-acked{background:#f7f9fa;color:#6b7780}
+.resolution-ack.on{background:#eef4f2;border-color:#9dbfb4;color:#12735a}
+tr.issue-acked{--row-bg:#eceff1;color:#57646f}
 tr.issue-acked td:first-child{box-shadow:inset 3px 0 0 #2f7d69}
 .anomaly-chip.ack-toggle{border-style:dashed}
 
@@ -2046,3 +2125,93 @@ select[id*="roject"] {
 .figure-note-level p:last-child{margin-bottom:0}
 .figure-note-body p,.figure-note-level p,.figure-note-level h5{
   overflow-wrap:anywhere;word-break:normal}
+
+/*
+ * 讀取期間的整頁遮罩（2026-09-29）。與搶救畫面共用 .load-error-card 的外觀，
+ * 但顏色改成中性——這不是錯誤，只是還沒讀完。
+ * ⚠️ 一定要 position:fixed + inset:0：只用 min-height:100vh 的話，
+ *   它會被排在主畫面「下面」而不是蓋在上面，使用者照樣看得到 0。
+ */
+.load-curtain{
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #f4f6f7;
+}.load-curtain-card{
+  border: 1px solid #c9d4d9;
+  border-top: 4px solid #2f6f8f;
+}.load-curtain-card h1{
+  color: #2f6f8f;
+}
+
+/* ── T15：表格隔列底色（使用者 2026-09-29 同意）────────────────────
+ *
+ * 長表格看久了會跳行，隔列給一層極淺的底色就解決了。
+ *
+ * ⚠️ 兩條規則都包在 `:where()` 裡，**這是刻意的**，不是寫法潔癖。
+ *   `:where()` 的權重是 0，所以：
+ *     ・第一條的有效權重＝`td`（0,0,1）
+ *     ・第二條的有效權重＝0
+ *   於是任何一條「整列自己要有底色」的規則（例如 tr.issue-acked，0,1,1）
+ *   **一定贏**，而且**與它寫在樣式表的哪一行無關**。
+ *
+ *   不這樣寫會出事：`tbody tr:nth-of-type(even)` 的權重是 (0,1,2)，
+ *   壓過 `tr.issue-acked` 的 (0,1,1)，於是**偶數列的已確認樣式會消失**——
+ *   而那條色帶與淡底是使用者用來看「這一項我確認過了」的唯一線索。
+ *   權重相同時又變成「看誰寫在後面」，隔列規則放在檔案結尾就又贏回來。
+ *
+ * ⚠️ 也因此**不需要**在隔列規則裡列一份 `:not(.issue-acked, .xxx)` 清單。
+ *   列清單一定會漏：日後新增一個整列上色的 class 就會少掉一個。
+ *   新的列規則只要設 `--row-bg` 就自動生效。
+ *
+ * ⚠️ 顏色是量過的，不是挑好看的。`#f6f9fa` 這一階之下：
+ *     --ink #1d2a34 → 13.85:1、--muted #5d6c78 → 5.11:1、
+ *     --blue #1977b5 → 4.57:1。AA 4.5 的下限就在 --blue 這裡，
+ *     再深一階 `#f4f7f8` 會掉到 4.49 而不足。
+ *   **不可以再加深**；要加深就得同時把 --blue 改深。
+ *
+ * ⚠️ 底色畫在 `td` 上而不是 `tr` 上：`tr` 的背景會被 `td` 的背景蓋掉，
+ *   兩邊都畫的話日後很難看出哪一層在生效。
+ *
+ * ⚠️ 只套 tbody。th 有自己的底色（#eef3f5），一起套會讓表頭與隔列同色，
+ *   表頭就分不出來了。
+ *
+ * ⚠️ 用 nth-of-type 而不是 nth-child：tbody 裡出現非 tr 的節點時
+ *   nth-child 會把計數錯開，隔列變成連續兩列同色。
+ */
+:where(tbody tr) td{background:var(--row-bg,transparent)}
+:where(tbody tr:nth-of-type(even)){--row-bg:#f8fafb}
+/* ── 滑鼠移上去那一列（定案文案指名 #eef5f6）─────────────────────────
+ *
+ * ⚠️ 這一條刻意用 `tbody tr:hover td`（權重 0,1,2）**直接畫在 td 上**，
+ *   不走 `--row-bg`。走 token 的話它會被「整列自己上色」的 class（0,1,1）
+ *   壓過去，於是已確認那幾列**滑過去沒有反應**——而那是使用者用來確認
+ *   「我現在指到哪一列」的唯一線索。hover 是暫態，它應該蓋掉列的底色。
+ *
+ * ⚠️ hover 的亮度差（距白 9.86%）**刻意超過**「斑馬底色 ≤ 5%」那一條。
+ *   那條驗收線寫的是「**斑馬底色**與白底的亮度差 ≤ 5%」——
+ *   它要擋的是「整張表看起來有顏色」。hover 是滑到才出現的暫態，
+ *   要的就是「一眼看得出指到哪一列」，套同一條線會讓 hover 等於沒有。
+ */
+tbody tr:hover td{background:#eef5f6}
+/* ── 表格裡的連結色要在**斑馬底與 hover 底**上都過 AA ──────────────
+ *
+ * ⚠️ `--blue #1977b5` 在白底 4.83:1、斑馬底 4.61:1 都過，
+ *   但在 hover 底（#eef5f6）只有 **4.38:1**，不足 AA 4.5。
+ * ⚠️ 解法刻意**只改表格內的連結**，不動全站的 --blue：
+ *   動主色會牽連按鈕、標題、圖表，範圍遠大於這一件要修的事。
+ *   `#186ea8` 在 hover 底上是 4.96:1，在白底上 5.48:1。
+ */
+:where(tbody tr) td .link-button,
+:where(tbody tr) td a{color:#186ea8}
+
+/* ── #16 的另一半：表格數字改成等寬數字（2026-09-29）──────────────
+ *
+ * 另外兩支早就做了，只有這一支沒有。長表格裡數字不對齊時，
+ * 同一欄的位數看起來忽寬忽窄，很難橫向掃過去比大小。
+ *
+ * ⚠️ 只套 td，不套 th：表頭是文字標題，等寬數字對它沒有意義，
+ *   而且 `1` 變寬之後標題的排版會跟著鬆掉。
+ * ⚠️ `tabular-nums` 只改**數字的字寬**，不改字型、不改字級、不改任何數值。
+ */
+td{font-variant-numeric:tabular-nums}

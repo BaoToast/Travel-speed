@@ -433,6 +433,250 @@ ok(
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ *  #3：執行期**全頁**對比掃描（2026-09-29 補，使用者裁示的第一類）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 原本只有兩種對比檢查，兩種都不夠：
+ *   ・`text-contrast.test.mjs`：**靜態**掃樣式表的字面色，一律假設白底。
+ *     `color: var(--x)` 與「同一條規則自己也改了底色」那兩類是 2026-09-29
+ *     才補上的，但它終究看不到「實際疊在什麼底色上」。
+ *   ・上面那一段：只掃 `button small, button b, button span`。
+ *
+ * 這一段改成**逐頁走過、量每一個真的畫出來的文字節點**，底色是**往上找到
+ * 第一個不透明背景**——也就是使用者眼睛實際看到的那一組。
+ *
+ * ⚠️ 側欄（`aside`）也要掃，它是深底白字，一起量才抓得到「深底上用了深字」。
+ * ⚠️ 只量**真的有文字**而且**真的畫出來**的節點；沒畫出來的（收起來的分頁）
+ *   一律跳過，否則整支恆紅。
+ * ⚠️ 只量**葉節點**的文字：容器的 `textContent` 會把子孫的字一起算進來，
+ *   於是同一段字被量好幾次，而底色取的是容器的——那會產生一堆假的紅。
+ * ⚠️ 停用中的控制項一律豁免（WCAG 1.4.3 明文排除，改亮反而讓人以為按得下去）。
+ * ⚠️ 大字（≥ 24px 或 ≥ 19px 且粗體）的門檻是 AA 的 3:1，不是 4.5:1。
+ */
+const fullPageProbe = () => {
+  const lum = (rgb) => {
+    const parts = (rgb.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).map(Number);
+    const chan = parts.map((v) => {
+      const x = v / 255;
+      return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * chan[0] + 0.7152 * chan[1] + 0.0722 * chan[2];
+  };
+  /*
+   * ⚠️ 往上找底色時，**漸層底要當成「量不了」而不是「透明」**。
+   *
+   *   `.hero` 之類的深色漸層是用 `background: linear-gradient(...)` 畫的，
+   *   它的 `backgroundColor` 是 `rgba(0,0,0,0)`。第一版只看 backgroundColor，
+   *   於是一路往上撿到 `--bg`（淺灰），把「深漸層上的白字」量成
+   *   「淺灰底上的白字 1.08:1」——**31 處假的紅**，而那一區其實是對的。
+   *
+   *   回 `null` 表示「這個節點的底色量不了」，呼叫端要**跳過並計數**，
+   *   不可以安靜忽略（豁免必須看得見，這是這一組系統的既有規則）。
+   */
+  const backdrop = (node) => {
+    let cursor = node;
+    while (cursor && cursor !== document.documentElement) {
+      const style = getComputedStyle(cursor);
+      if (style.backgroundImage && style.backgroundImage !== "none") return null;
+      const bg = style.backgroundColor;
+      const alpha = bg.match(/[\d.]+/g);
+      if (bg && alpha && (alpha.length < 4 || Number(alpha[3]) > 0.9)) return bg;
+      cursor = cursor.parentElement;
+    }
+    return "rgb(255, 255, 255)";
+  };
+  const out = [];
+  let gradientSkipped = 0;
+  const roots = [document.querySelector(".view.active"), document.querySelector("aside")];
+  for (const root of roots) {
+    if (!root) continue;
+    for (const node of root.querySelectorAll("*")) {
+      /* 葉節點才量：容器會把子孫的字一起算進來，底色卻取容器的。 */
+      if (node.children.length) continue;
+      if (node.disabled) continue;
+      const text = (node.textContent || "").trim();
+      if (!text) continue;
+      const rect = node.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      const style = getComputedStyle(node);
+      if (style.visibility === "hidden" || Number(style.opacity) < 0.1) continue;
+      const size = parseFloat(style.fontSize) || 16;
+      const bold = Number(style.fontWeight) >= 700;
+      const large = size >= 24 || (size >= 19 && bold);
+      const ground = backdrop(node);
+      if (ground === null) {
+        gradientSkipped += 1;
+        continue;
+      }
+      const fg = lum(style.color);
+      const bg = lum(ground);
+      const ratio = (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+      out.push({
+        where: root.tagName === "ASIDE" ? "側欄" : "內容",
+        text: text.slice(0, 24),
+        color: style.color,
+        background: ground,
+        ratio: Number(ratio.toFixed(2)),
+        need: large ? 3 : 4.5,
+      });
+    }
+  }
+  return { rows: out, gradientSkipped };
+};
+const fullPage = [];
+let gradientSkipped = 0;
+for (const id of views) {
+  await page.evaluate((v) => document.querySelector(`[data-view="${v}"]`).click(), id);
+  await page.waitForTimeout(220);
+  const probe = await page.evaluate(fullPageProbe);
+  fullPage.push(...probe.rows);
+  gradientSkipped += probe.gradientSkipped;
+}
+{
+  const bad = fullPage.filter((item) => item.ratio < item.need);
+  /*
+   * ⚠️ 前置檢查：量不到東西時不可以算通過。
+   *   第一次寫這一段時判斷式寫錯，量到 0 個節點而整支綠——
+   *   那正是「假的綠」最典型的長相。
+   */
+  ok(
+    `#3 前置：全頁對比掃描真的量到文字節點（實測 ${fullPage.length} 個）`,
+    fullPage.length >= 200,
+    `只量到 ${fullPage.length} 個，判斷式或走頁邏輯壞了嗎？`,
+  );
+  /*
+   * ⚠️ 漸層底上的文字量不了，所以被跳過——這件事一定要印出來。
+   *   安靜跳過就等於一個看不見的豁免清單；而豁免最容易出事
+   *  （這一組系統踩過：新車種徽章 2.45:1 就是靠豁免活下來的）。
+   *   那幾處由 `text-contrast.test.mjs` 的 `ON_COLOR` 逐組釘住前景／背景。
+   */
+  ok(
+    `#3 漸層底上的文字跳過並計數（實測 ${gradientSkipped} 處，由 text-contrast 的 ON_COLOR 釘住）`,
+    gradientSkipped > 0,
+    "一處都沒跳過——漸層底的判斷是不是壞了？那會讓深漸層上的白字被量成淺底 1.08:1",
+  );
+  ok(
+    "#3 側欄也真的掃到了（深底白字那一區）",
+    fullPage.some((item) => item.where === "側欄"),
+    "一個側欄節點都沒量到——深底上用了深字這一類就抓不到",
+  );
+  ok(
+    "#3 全頁每一段文字在它實際的底色上都要過 AA（大字 3:1、其餘 4.5:1）",
+    bad.length === 0,
+    bad
+      .slice(0, 8)
+      .map(
+        (item) =>
+          `${item.where}「${item.text}」${item.ratio}:1（需 ${item.need}；字 ${item.color}／底 ${item.background}）`,
+      )
+      .join("；") + (bad.length > 8 ? `…共 ${bad.length} 處` : ""),
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  #54：側欄的文字也不可以被裁掉（2026-09-29 補）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 既有的裁字掃描只掃 `.view.active` 裡的 `<button>`，**不含 `aside`**。
+ * 側欄的分頁名稱是這一支最長的那幾串字（例如「各路段歷季旅行速率」），
+ * 它被裁掉的話使用者根本不知道那一頁叫什麼。
+ */
+{
+  const clipped = await page.evaluate(() => {
+    const out = [];
+    const aside = document.querySelector("aside");
+    if (!aside) return out;
+    for (const node of aside.querySelectorAll("button, small, span, b")) {
+      if (!node.getClientRects().length) continue;
+      const text = (node.textContent || "").trim();
+      if (!text) continue;
+      const over = node.scrollWidth - node.clientWidth;
+      if (over > 1) out.push(`「${text.slice(0, 20)}」多 ${Math.round(over)}px`);
+    }
+    return out;
+  });
+  ok(
+    "#54 側欄的文字不可以被裁掉",
+    clipped.length === 0,
+    clipped.slice(0, 6).join("；"),
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  #11／#36：同一頁的卡片兩兩不可以互相重疊（2026-09-29 補）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 既有的版面檢查量的是「有沒有被裁」「有沒有橫向溢出」「說明有沒有蓋住圖」，
+ * **沒有任何一支在做兩兩比對**。兩張卡片互相疊上去時，底下那一張的內容
+ * 看不到，而上面每一項檢查都會通過。
+ *
+ * ⚠️ 要在**幾個縮放倍率**下都掃：重疊幾乎都是在 110%／125% 這種
+ *   「寬度不夠但還沒觸發斷點」的區間才出現。
+ * ⚠️ 判準留 2px 容差：相鄰邊框、負邊距這種設計上的貼合不算重疊。
+ * ⚠️ 只比**同一層**的卡片（`parentElement` 相同）。父子本來就包含關係，
+ *   拿它們去比會得到一堆假的紅。
+ */
+{
+  const overlapProbe = () =>
+    page.evaluate(() => {
+      const out = [];
+      const active = document.querySelector(".view.active");
+      if (!active) return out;
+      const cards = [...active.querySelectorAll(".panel")].filter(
+        (el) => el.getClientRects().length,
+      );
+      const label = (el) =>
+        (el.querySelector("h2, h3")?.textContent || el.className || el.id || "（無標題）")
+          .trim()
+          .slice(0, 22);
+      for (let i = 0; i < cards.length; i += 1)
+        for (let j = i + 1; j < cards.length; j += 1) {
+          const a = cards[i];
+          const b = cards[j];
+          if (a.parentElement !== b.parentElement) continue;
+          if (a.contains(b) || b.contains(a)) continue;
+          const ra = a.getBoundingClientRect();
+          const rb = b.getBoundingClientRect();
+          const overlapX = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+          const overlapY = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+          if (overlapX > 2 && overlapY > 2)
+            out.push(
+              `「${label(a)}」與「${label(b)}」重疊 ${Math.round(overlapX)}×${Math.round(overlapY)}px`,
+            );
+        }
+      return out;
+    });
+  const overlaps = [];
+  let probed = 0;
+  for (const zoom of [1, 1.1, 1.25, 1.5]) {
+    await page.evaluate((z) => {
+      document.documentElement.style.zoom = String(z);
+    }, zoom);
+    for (const id of views) {
+      await page.evaluate((v) => document.querySelector(`[data-view="${v}"]`).click(), id);
+      await page.waitForTimeout(160);
+      probed += 1;
+      for (const hit of await overlapProbe())
+        overlaps.push(`縮放 ${Math.round(zoom * 100)}%｜${hit}`);
+    }
+  }
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "";
+  });
+  ok(
+    `#11／#36 前置：真的走過每一頁 × 每一個縮放（實測 ${probed} 次）`,
+    probed >= views.length * 4,
+    `只走了 ${probed} 次，走頁或縮放邏輯壞了嗎？`,
+  );
+  ok(
+    "#11／#36 同一頁的卡片兩兩不可以互相重疊（1／1.1／1.25／1.5 倍）",
+    overlaps.length === 0,
+    overlaps.slice(0, 6).join("；") +
+      (overlaps.length > 6 ? `…共 ${overlaps.length} 處` : ""),
+  );
+}
+
 ok("沒有 JS 例外", errors.length === 0, errors.slice(0, 3).join(" / "));
 
 await browser.close();

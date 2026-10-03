@@ -222,75 +222,213 @@ test("路段名稱只差分隔符時要算出相同的簽章", () => {
   );
 });
 
-const PAIR_WEEKDAY = realFile("14013TS601鳳北路平日");
-const PAIR_HOLIDAY = realFile("14013TS601鳳北路假日");
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  平假日配對：同一站的平日與假日必須算出相同簽章
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * ⚠️ 2026-09-29 改寫：這一條原本釘死在 `14013TS6-01 鳳北路` 那一對上。
+ *   它當天是**綠的**，但它與 M3 那一條是**同一種脆弱**——
+ *   釘死在特定批次的內容，檔案一被修好（或那一批不在手上）就會變成
+ *   假的紅或永遠的略過。M3 那一條當天就真的紅了，紅得不對。
+ *   所以不等它出事，一起改成**性質級**。
+ *
+ * ⚠️ 判準改成：**把 realdata 底下所有「同一站號 × 平日／假日」的配對全部找出來**，
+ *   每一對都必須算出相同簽章。不指名任何一個站號。
+ *
+ * ⚠️ 前置檢查有兩條，缺一不可：
+ *   ① 至少要湊到一對，否則這一條等於什麼都沒驗（真實檔存在卻 0 對 → 紅）。
+ *   ② 至少要有一對**站名本來就寫得不一樣**——全部一模一樣的話，
+ *     「簽章相同」是白給的，把 roadSignature 換成 `x => x` 也會綠。
+ */
+const PAIR_GROUPS = (() => {
+  const groups = new Map();
+  for (const url of REAL_FILES) {
+    const name = decodeURIComponent(url.pathname).split("/").pop();
+    /* 站號＝檔名開頭的「案號TS站-序號」，日別＝檔名裡的平日／假日。 */
+    const station = name.match(/^(\d+TS\d+[-_]?\d*)/);
+    const day = /假日/.test(name) ? "假日" : /平日/.test(name) ? "平日" : null;
+    if (!station || !day) continue;
+    const key = station[1].replace(/[^0-9A-Za-z]/g, "").toLowerCase();
+    const slot = groups.get(key) || {};
+    slot[day] = url;
+    groups.set(key, slot);
+  }
+  return [...groups.entries()]
+    .filter(([, slot]) => slot.平日 && slot.假日)
+    .map(([key, slot]) => [key, slot.平日, slot.假日]);
+})();
+
 test(
-  "真實的平假日配對要算出相同簽章",
-  {
-    skip:
-      PAIR_WEEKDAY && PAIR_HOLIDAY ? false : whySkipped("14013TS601鳳北路"),
-  },
+  "每一對真實的平假日檔案都要算出相同簽章（不指名站號）",
+  { skip: hasRealData ? false : "這台機器上沒有真實調查檔" },
   () => {
-  const F = loadAppFunctions(["roadSignature", "roadFromWorkbook", "normalize",
-                              "stripRoadSuffix", "headerTextsOf", "suspiciousRoadName"]);
-  const read = (url) =>
-    F.roadFromWorkbook(XLSX.read(readFileSync(url), { type: "buffer" }));
-  const weekday = read(PAIR_WEEKDAY);
-  const holiday = read(PAIR_HOLIDAY);
-  assert.notEqual(weekday, holiday, "這兩份真實檔的站名本來就寫得不一樣");
-  assert.equal(
-    F.roadSignature(weekday),
-    F.roadSignature(holiday),
-    "同一站的平日與假日必須算出相同簽章，否則平假日比較整個不成立",
-  );
+    const F = loadAppFunctions([
+      "roadSignature", "roadFromWorkbook", "normalize",
+      "stripRoadSuffix", "headerTextsOf", "suspiciousRoadName",
+    ]);
+    const read = (url) =>
+      F.roadFromWorkbook(XLSX.read(readFileSync(url), { type: "buffer" }));
+    /*
+     * ⚠️ 前置一：真實檔存在卻湊不到任何一對，代表檔名的平假日／站號抓法壞了。
+     *   這時**不可以安靜通過**。
+     */
+    assert.ok(
+      PAIR_GROUPS.length > 0,
+      `有 ${REAL_FILES.length} 份真實檔卻湊不到任何一對「同站號 × 平日／假日」——` +
+        "站號或日別的抓法壞了嗎？",
+    );
+    const mismatched = [];
+    let differentNames = 0;
+    for (const [key, weekdayUrl, holidayUrl] of PAIR_GROUPS) {
+      const weekday = read(weekdayUrl);
+      const holiday = read(holidayUrl);
+      if (weekday !== holiday) differentNames += 1;
+      if (F.roadSignature(weekday) !== F.roadSignature(holiday))
+        mismatched.push(
+          `${key}：平日「${weekday}」→ ${F.roadSignature(weekday)}；` +
+            `假日「${holiday}」→ ${F.roadSignature(holiday)}`,
+        );
+    }
+    assert.deepEqual(
+      mismatched,
+      [],
+      "以下配對的簽章不同，平假日比較會整個不成立：\n- " + mismatched.join("\n- "),
+    );
+    /*
+     * ⚠️ 前置二：**一定要有一對站名本來就寫得不一樣**。
+     *   全部一模一樣的話，「簽章相同」是白給的——
+     *   把 roadSignature 換成 `x => x` 也會綠，那就是一個恆真的守門。
+     */
+    assert.ok(
+      differentNames > 0,
+      `${PAIR_GROUPS.length} 對裡沒有任何一對的站名寫法不同，` +
+        "這一條退化成恆真了（簽章不做任何正規化也會通過）",
+    );
   },
 );
 
 /* ── M3：同一份檔案的矛盾調查日期 ── */
 
-const CONFLICT_FILES = [
-  "11535TS1501",
-  "11535TS1502",
-  "11535TS1503",
-].map((fragment) => [fragment, realFile(fragment)]);
-const CLEAN_FILE = realFile("14013TS601鳳北路平日");
-test(
-  "同一份檔案有兩個不同的調查日期時要指出來",
-  {
-    skip:
-      CONFLICT_FILES.every(([, url]) => url) && CLEAN_FILE
-        ? false
-        : whySkipped(
-            [
-              ...CONFLICT_FILES.filter(([, url]) => !url).map(([name]) => name),
-              CLEAN_FILE ? null : "14013TS601鳳北路平日",
-            ]
-              .filter(Boolean)
-              .join("、"),
-          ),
-  },
-  () => {
-  /*
-   * 實測 11535TS1501／1502／1503 三份真實檔，上午尖峰的表頭寫 115Q1、
-   * 下午尖峰卻還留著上一季的 114Q4（套模板時忘了改）。舊版只看第一個
-   * 有標示的日期，於是回報「調查日期與所選期別相符」——對一份自己前後
-   * 矛盾的檔案發出無保留的通過。
-   */
-  const F = loadAppFunctions(["surveyDateFromWorkbook"]);
-  const check = (url) =>
-    F.surveyDateFromWorkbook(XLSX.read(readFileSync(url), { type: "buffer" }));
-  for (const [name, url] of CONFLICT_FILES) {
-    const found = check(url);
-    assert.ok(found, `${name} 應讀得到調查日期`);
-    assert.ok(
-      found.conflicts?.length,
-      `${name} 有兩個不同的調查日期，必須回報衝突`,
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ *  2026-09-29 改寫：這一條原本釘死在 11535TS15-01／-02／-03 三份真實檔上
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 原本的寫法是「這三份檔案**必須**回報日期衝突」。當時的那一份拷貝確實
+ * 上午尖峰寫 115Q1、下午尖峰還留著上一季（套模板忘了改）。
+ *
+ * ⚠️ 2026-09-29 第一次拿到真實檔之後，這一條**紅了——而且紅得不對**。
+ *   實測使用者現在手上的那三份，每一張工作表的日期都一致
+ *  （`-01 假日` 三處都是 115年01月18日、`-01 平日` 三處都是 115年1月19日…），
+ *   也就是**原始檔已經被修好了**。程式沒有問題：拿一份合成的兩日期檔案餵進
+ *   `surveyDateFromWorkbook()`，它確實回報 `conflicts`（見下面第一段）。
+ *
+ * ⚠️ **釘死在特定批次的內容，就是這種假的紅的來源**：檔案被修好，守門就變紅，
+ *   而訊息會把人帶去懷疑程式。所以改寫成**性質級**：
+ *     ① 正面：合成一份「兩張工作表兩個不同日期」的活頁簿 → 必須回報衝突。
+ *       （合成的，任何機器上都跑得到，不必有真實檔。）
+ *     ② 反面：合成一份只有一個日期的 → 不可以誤報。
+ *     ③ 真實檔（有才跑）：對**每一份**驗「候選日期有兩種以上 ⟺ 回報衝突」，
+ *       **不要求**任何一份真的有衝突——要求那個就是把守門綁回特定資料。
+ */
+
+/** 合成一份活頁簿：每一個工作表各放一個日期（`日    期：…` 的寫法）。 */
+function dateWorkbook(entries) {
+  const wb = XLSX.utils.book_new();
+  entries.forEach(([sheetName, dateText], index) => {
+    const aoa = [[], [], []];
+    aoa[2] = ["", dateText ? "日    期：" + dateText : ""];
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet(aoa),
+      sheetName || "工作表" + (index + 1),
     );
-  }
-  /* 反面：只有一個日期的檔案不可以誤報 */
-  const clean = check(CLEAN_FILE);
-  assert.ok(clean, "應讀得到調查日期");
-  assert.ok(!clean.conflicts, "只有一個日期時不可誤報衝突");
+  });
+  return XLSX.read(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }), {
+    type: "buffer",
+  });
+}
+
+test("① 同一份檔案有兩個不同的調查日期時要指出來（合成檔，不依賴真實批次）", () => {
+  const F = loadAppFunctions(["surveyDateFromWorkbook"]);
+  const found = F.surveyDateFromWorkbook(
+    dateWorkbook([
+      ["統計表 (1)", "115年01月18日(假日)"],
+      ["統計表(2)", "114年10月05日(假日)"],
+    ]),
+  );
+  assert.ok(found, "合成檔應讀得到調查日期");
+  assert.ok(
+    found.conflicts?.length,
+    "兩張工作表寫了兩個不同的日期，必須回報衝突——" +
+      "舊版只看第一個有標示的日期，於是對一份自己前後矛盾的檔案發出無保留的通過",
+  );
+  assert.equal(found.iso, "2026-01-18", "主日期應該是第一個讀到的那一個");
+  assert.ok(
+    (found.candidates || []).length >= 2,
+    `候選日期應該有兩個以上，實際 ${JSON.stringify(found.candidates)}`,
+  );
+});
+
+test("② 只有一個日期時不可以誤報衝突（放寬過頭的反證）", () => {
+  const F = loadAppFunctions(["surveyDateFromWorkbook"]);
+  const found = F.surveyDateFromWorkbook(
+    dateWorkbook([
+      ["統計表 (1)", "115年01月18日(假日)"],
+      ["統計表(2)", "115年01月18日(假日)"],
+      ["工作日誌", ""],
+    ]),
+  );
+  assert.ok(found, "應讀得到調查日期");
+  assert.ok(
+    !found.conflicts,
+    `兩張寫的是同一天，不可以報成衝突，實際 ${JSON.stringify(found.conflicts)}`,
+  );
+});
+
+test(
+  "③ 每一份真實檔：候選日期有兩種以上 ⟺ 回報衝突（不要求任何一份真的有衝突）",
+  { skip: hasRealData ? false : "這台機器上沒有真實調查檔" },
+  () => {
+    const F = loadAppFunctions(["surveyDateFromWorkbook"]);
+    let checked = 0;
+    const wrong = [];
+    for (const url of REAL_FILES) {
+      const name = decodeURIComponent(url.pathname).split("/").pop();
+      let found;
+      try {
+        found = F.surveyDateFromWorkbook(
+          XLSX.read(readFileSync(url), { type: "buffer" }),
+        );
+      } catch {
+        /* 讀不起來的檔案不在這一條的守備範圍（另有一條驗讀得到日期）。 */
+        continue;
+      }
+      if (!found) continue;
+      checked += 1;
+      const many = new Set(found.candidates || []).size >= 2;
+      const reported = Boolean(found.conflicts?.length);
+      if (many !== reported)
+        wrong.push(
+          `${name}：候選 ${JSON.stringify(found.candidates)}、` +
+            `conflicts=${JSON.stringify(found.conflicts)}`,
+        );
+    }
+    /*
+     * ⚠️ 前置檢查：一份都沒驗到就不可以算通過。
+     *   真實檔存在卻 checked 是 0，代表抽函式或讀檔那一段壞了。
+     */
+    assert.ok(
+      checked > 0,
+      `有 ${REAL_FILES.length} 份真實檔卻一份都沒驗到，抽函式或讀檔壞了嗎？`,
+    );
+    assert.deepEqual(
+      wrong,
+      [],
+      "以下真實檔的「候選日期數」與「有沒有回報衝突」對不起來：\n- " +
+        wrong.join("\n- "),
+    );
   },
 );
 

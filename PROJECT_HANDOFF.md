@@ -1,13 +1,20 @@
 # 交通服務水準分析系統工程交接基準
 
-> **目前狀態（2026-09-28 正式發布）**：`v2.20.77` 已由 GPT 完成風險導向複查、必要修正、完整驗證並發布至 GitHub Pages；前一正式版：v2.20.76。
+> **目前狀態（2026-10-03，GPT 發布驗證進行中）**：`v2.20.81` 正依完整高風險規則獨立複查；前一正式版：v2.20.77（GPT 2026-09-28 已發布上線）。本次發布前，未發布的是 **v2.20.78～.80 共 3 個候選**，本包含它們的全部內容。完成狀態以本版驗證報告及 Git／Actions／Pages 證據為準。
+> 本版：混批一律擋死（三支同步）、「方向對應不一致」不再被排版雜訊觸發、表格隔列底色，外加四處對比不足。交通工程計算一律未動。
+>
+> （以下 v2.20.78 的敘述保留為歷史紀錄。）
+> **v2.20.78（2026-09-29，未發布）**：讀取期間整頁擋掉（使用者裁示）、`check-version.mjs` 第 15 項的假略過。內容全部含在本包裡。
+>
+> （以下 v2.20.77 的敘述保留為歷史紀錄。）
+> **v2.20.77（2026-09-28 正式發布）**：已由 GPT 完成風險導向複查、必要修正、完整驗證並發布至 GitHub Pages；前一正式版：v2.20.76。
 > 本包只含 v2.20.76 之後的修正，**沒有未發布候選區間**；v2.20.69～v2.20.75 那七個候選都沒有發布過，相關敘述在下方當歷史紀錄看。
 
 > 本文件是本 Repository 唯一的長期工程交接文件。未來換 GPT 開發對話時更新本檔，不另建 `PROJECT_HANDOFF_2.md` 等編號副本；歷史由 Git 保存。
 
 ## 0. 文件狀態與事實來源
 
-- 本文件建立日期：2026-09-13；最近更新：2026-09-28（Asia/Taipei）。
+- 本文件建立日期：2026-09-13；最近更新：2026-10-03（Asia/Taipei）。
 - 最新功能正式版基準 commit：`bffcae22d49001b0cc1dd869fa158e938150eeec`，訊息為 `Release v2.20.77`。
 - 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `bffcae2...` 作為程式功能基準。
 - 事實優先順序：目前可重現的 Repository／程式碼／Git／測試結果，高於舊聊天、舊交接文字、README 或其他說明。若彼此衝突，必須指出差異；無法驗證者標示「待確認」，不得猜測。
@@ -29,7 +36,7 @@
 | 正式 GitHub Pages | `https://baotoast.github.io/Travel-speed/` |
 | branch | `main` |
 | 功能正式版基準 commit | `bffcae22d49001b0cc1dd869fa158e938150eeec` |
-| 目前程式／正式發布版本 | GPT 已發布 `v2.20.77`（v2.20.69～.75 七個候選都未發布；v2.20.76 已於前一輪發布，v2.20.77 是 Claude 對該正式版複查後的修正版，再經 GPT 獨立驗證與文件日期校正）（版號的唯一來源是 `app.js` 的版本字串，`check-version.mjs` 會把它與 package metadata、README／更新說明／驗證報告／手冊釘在一起） |
+| 目前程式／正式發布版本 | 本包為 `v2.20.81`；發布驗收見 `VALIDATION_v2.20.81.md`。前一正式版：v2.20.77。版號唯一來源是 `app.js` 寫入 `.brand small` 的字面字串；`check-version.mjs` 核對 package、文件及手冊。 |
 | 版本唯一來源 | `app.js` 裡**寫入 `.brand small` 的那一行字面字串**（目前 `app.js:1095`，格式 `正式版 vX.Y.Z`）。⚠️ **沒有 `APP_VERSION` 這個常數**——這一行原本這樣寫，但全專案搜不到那個識別字（2026-09-25 更正）；去新增一個常數會踩到 `check-version.mjs` 第 1 條「全站只有一個地方寫入版本字樣」當年出事的那個雷。`check-version.mjs` 用 `/正式版\s*v(\d+\.\d+(?:\.\d+)?)/` 抓它，再把 HTML 的 16 個 `?v=`、靜態字樣、手冊 PDF 檔名與實體檔、`manuals/` 無殘留、手冊封面戳記、README 首節、驗證報告檔名與標題全部釘在一起 |
 
 本機資料夾名 `repo` 很通用，不能只靠名稱判斷；每次接手都必須同時核對完整路徑、`.git`、origin、branch、`app.js` 版本與 GitHub Repository。三個交通系統不得混用資料夾或規則。
@@ -313,7 +320,7 @@
 
 - CI：Node.js 22。
 - 正式依賴鎖：`package-lock.json`；CI 使用 `npm ci`。
-- `package.json` devDependencies：`docx 9.7.1`、`jszip 3.10.1`、`playwright 1.62.1`、本機 `vendor/xlsx-0.20.3.tgz`。
+- `package.json` devDependencies：`jszip 3.10.1`、`playwright 1.62.1`、本機 `vendor/xlsx-0.20.3.tgz`；沒有 `docx` 相依套件。
 - 此 Repository 是 npm 專案；不要提交不必要的 pnpm lock 或 node_modules。
 - 若本機工具包只有 pnpm，可由 `package-lock.json` 轉出安裝鎖資訊供暫時驗證，但交付與 CI 仍以已提交的 npm lock 為準。
 - 無 TypeScript、無 lint script、無 build script；不能把「不適用」寫成「已通過」。
@@ -328,7 +335,7 @@ node check-version.mjs
 ```
 
 - `npm test`：所有根目錄 `*.test.mjs`，再跑 `check-version.mjs`。
-- `npm run e2e`：直接先產生 6 份匿名測資，再依序跑 59 支 Playwright E2E；不可並行。
+- `npm run e2e`：直接先產生 6 份匿名測資，再依序跑 60 支 Playwright E2E；不可並行。
 - 解析／交通計算變更必須額外驗證：輸入 → Parser → 驗證 → details → summary → UI → CSV／Excel／Project package。
 - OOXML 變更需跑結構檢查，並盡可能用實際舊版 Excel 開啟。
 - 手冊變更需重建 PDF、檢查副本一致、頁面渲染及版本；`manuals/` 只留當版一份 PDF，不再交付 DOCX。
@@ -337,11 +344,24 @@ node check-version.mjs
 
 ### 12.3 最後一次已實際完成的正式驗證
 
+`v2.20.81` 本輪獨立高風險複查證據（2026-10-03）：
+
+- 相對前一正式版完整追查 Parser、混批／覆蓋前日期閘門、資料主鍵、方向文字鍵、讀取安全、LOS／趨勢、草稿與匯出；沒有額外改動交通工程計算口徑。
+- 隔離候選乾淨 npm ci：17 packages audited、0 vulnerabilities；npm test 為 492 項／489 通過／0 失敗／3 項缺真實檔略過，glyph／版本／PDF 守門全綠。
+- 完整序列 npm run e2e：60／60 支退出 0，先重建 6 份匿名 fixtures，沒有並行；額度恢復後只續收原測試，不重做已確認結果。
+- 額外 1536×864 與 1366×768 各 18 分頁，共 36 張匿名資料版面截圖全部檢視，無非預期溢出／重疊；30 頁手冊全部渲染檢視。
+- 實際覆蓋寫入 handler 正反證保存於 `review-evidence/v2.20.81-overwrite-proof.mjs`；移除讀取遮罩造成 3 個 E2E 失敗，恢復後同支全綠；PDF 工具解析失敗會紅、缺工具明確略過，正常 Poppler 實際比對通過。
+- 手冊 30 頁／22,159 字元，SHA-256 `446afb94ba8488daf2ee6f24e1f567e9bfe30471a87d5936b8a5b513c4717599`。本輪不執行或交付試用版 HTML；TypeScript／lint／production build 不適用。
+- 真實調查檔核對及新一輪 Office 人工開啟未完成，不冒稱通過。GPT 校正交接版本、歷史 E2E 支數、依賴、日期／PDF 指紋與一個大小寫註解，未額外改正式執行邏輯，保留 v2.20.81。
+- 最後正式工作區驗證及發布證據見 `VALIDATION_v2.20.81.md`；push／CI／Pages／線上 hash 完成後才記為正式發布。
+
+以下保留前版已驗證歷史，不追改當時結果：
+
 正式發布的 `v2.20.77` 已完成下列驗證：
 
 - 風險：高風險；修正 `save()` 讀取閘門周邊 UI 控制範圍與版本／PDF 守門，且候選距正式版含大量歷史變更，採全專案複查。
 - 完整 `test` script：退出碼 0；Node test 共 388 項，385 通過、0 失敗、3 項因缺少真實調查檔明確略過；glyph guard 與 `check-version.mjs` 同一串全綠。
-- 完整序列 E2E：59 支依 package script 原順序全數退出碼 0，先產生 6 份匿名 fixtures，沒有並行；額度中斷後只續收同一場測試，沒有重跑已確認部分。
+- 完整序列 E2E：當時 59 支依 package script 原順序全數退出碼 0，先產生 6 份匿名 fixtures，沒有並行；額度中斷後只續收同一場測試，沒有重跑已確認部分。v2.20.81 新增第 60 支，不追改舊版證據。
 - 載入閘門：正向 11 項全綠；讀取期間 175 個控制項中可用者為 0。`NEGATIVE_UI_PROOF=1` 產生 6 項失敗，`NEGATIVE_PROOF=1` 重現錯誤成功訊息／資料覆蓋與逾時，證明兩層守門有效且非恆真。
 - 手冊：v2.20.77 PDF 共 30 頁、NFKC 後 22,159 字元，SHA-256 `05bcd444d9aa718336b98303d8c2e464e7f5be4cfd4324323e3b40022c38d25a`；30 頁全部渲染並目視，另以原尺寸確認末兩頁，未見裁切、重疊、缺字或異常空白頁。手冊字數反證改錯 1 時版本守門會紅，還原後全綠。
 - 本輪沒有使用者真實 14013／11535TS 調查檔；相關條件式測試的略過必須與通過分開列示，`verify-against-summary.mjs <檔案>` 未執行。
@@ -496,7 +516,7 @@ GPT 不得因 Claude 宣稱「已完成／已測試」或只改某些檔案，�
 1. 使用本文件第 1 節的完整路徑打開 Repository。
 2. 執行只讀核對：`git status`、`git remote -v`、`git branch --show-current`、`git log -1`、版本檢查。
 3. 完整讀取本文件與**根目錄那一份** `VALIDATION_v*.md`（只會有一份，就是本版），抽查 `app.js` 核心規則和 `.github/workflows/ci.yml`。
-4. 查 GitHub Actions、Pages 與線上 `https://baotoast.github.io/Travel-speed/` 是否仍對應 v2.20.77。
+4. 查 GitHub Actions、Pages 與線上 `https://baotoast.github.io/Travel-speed/` 是否對應本文件目前正式版及功能 commit；不得照抄前版狀態。
 5. 向使用者回報交接驗收；等待使用者明確回覆「交接確認完成」。
 6. 確認後才處理下一份 Claude 候選包或新需求，依第 14 節決定風險並執行。
 

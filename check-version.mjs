@@ -350,11 +350,25 @@ for (const name of [...scripts, "index.html"]) {
    *   這時要求的就不是區間句，而是**寫明前一正式版是哪一版**。
    */
   const RANGE_BASE = 68;
-  const LAST_RELEASED = 76;
+  const LAST_RELEASED = 77;
   const CJK = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
   const patch = Number(String(shown).split(".")[2]);
   const wantTo = patch - 1;
-  const wantCount = wantTo - RANGE_BASE;
+  /*
+   * ⚠️ 2026-09-29：現況句的區間要從 **LAST_RELEASED + 1** 起算，不是從 .69。
+   *
+   *   2026-09-27 那一版只拆了兩個常數，現況句卻還是要求
+   *   「v2.20.69～.N 共 (N − 68) 個」。到了這一輪（LAST_RELEASED = 77、
+   *   本版 .79、未發布的只有 .78 一個）那句話會變成
+   *   「v2.20.69～.78 共 10 個候選未發布」——**而 .76 與 .77 是真的發布上線了**。
+   *   守門逼著文件去寫一句假話，那比沒有守門更糟。
+   *
+   *   正確的算法：未發布候選＝(LAST_RELEASED + 1) ～ (本版 patch − 1)。
+   *   RANGE_BASE 留著不動，它是**歷史句子**（「.69 到 .N 有幾個版本」）的
+   *   算術基準，與現在發布到哪一版無關——改它會讓所有正確的歷史句子變紅。
+   */
+  const currentFrom = LAST_RELEASED + 1;
+  const wantCount = wantTo - LAST_RELEASED;
   let seen = 0;
   const current = new Set();
   for (const name of [
@@ -410,14 +424,35 @@ for (const name of [...scripts, "index.html"]) {
         "現況文件要講清楚這一包是建在哪一個已發布版本之上",
       );
     }
-  } else
-  for (const name of ["README.md", `VALIDATION_v${shown}.md`, "PROJECT_HANDOFF.md"]) {
-    if (!existsSync(join(here, name))) continue;
-    ok(
-      `${name} 有一句把未發布候選區間寫到本版前一版（v2.20.69～.${wantTo}，共 ${wantCount} 個）`,
-      current.has(name),
-      "這一份講的是「目前狀態」，區間停在更早的版本就等於在說舊話",
-    );
+  } else {
+    /*
+     * ⚠️ 現況句的區間是 (LAST_RELEASED + 1) ～ (本版 patch − 1)。
+     *   只有一個候選時區間退化成單一版號，所以兩種寫法都收：
+     *   「v2.20.78～.78 共 1 個」與「v2.20.78 一個候選未發布」。
+     *   逼使用者為了滿足守門去寫「.78～.78」這種怪句子，是本末倒置。
+     */
+    const single = currentFrom === wantTo;
+    const pattern = single
+      ? new RegExp(
+          `v2\\.20\\.${wantTo}[^。\n]{0,12}?([0-9一二三四五六七八九十]+)\\s*個候選`,
+        )
+      : new RegExp(
+          `v2\\.20\\.${currentFrom}\\s*[～~]\\s*(?:v2\\.20)?\\.?${wantTo}[^。\n]{0,8}?([0-9一二三四五六七八九十]+)\\s*個候選`,
+        );
+    for (const name of ["README.md", `VALIDATION_v${shown}.md`, "PROJECT_HANDOFF.md"]) {
+      if (!existsSync(join(here, name))) continue;
+      const hit = read(name).match(pattern);
+      const count = hit ? (CJK[hit[1]] ?? Number(hit[1])) : null;
+      ok(
+        `${name} 有一句寫出現在真的未發布的候選（v2.20.${currentFrom}` +
+          (single ? "" : `～.${wantTo}`) +
+          `，共 ${wantCount} 個）`,
+        Boolean(hit) && count === wantCount,
+        hit
+          ? `寫 ${hit[1]} 個，實際是 ${wantCount} 個`
+          : "這一份講的是「目前狀態」，要寫出現在有哪幾個候選還沒發布",
+      );
+    }
   }
 }
 
@@ -546,6 +581,32 @@ for (const name of [...scripts, "index.html"]) {
     Boolean(claim),
     claim ? claim[0] : "本版那一節裡找不到「**N 頁 / M 字元**」",
   );
+  /*
+   * ⚠️ 2026-09-29 加：【更新說明】的「本版手冊」那一段也要寫同一組數字。
+   *   姊妹系統全日交通量 2026-09-28 加過同一條，本支與路口轉向當時沒跟上——
+   *   驗證報告是給複查者看的，【更新說明】才是使用者手上那一份；
+   *   兩邊只要有一邊沒跟著換，使用者就會拿舊數字去核對新手冊。
+   *   ⚠️ 段落的結束標記抓不到時要直接紅，不可以讓 slice 一路吃到檔尾——
+   *   那會退化成「整檔找得到就算數」，正是本版在修的那種假的綠。
+   */
+  {
+    const notesText = read("【更新說明】請先讀我.txt");
+    const start = notesText.lastIndexOf("本版手冊");
+    const end = notesText.indexOf("部署完成後請確認", start >= 0 ? start : 0);
+    ok(
+      "更新說明找得到「本版手冊」段落與它的結束標記",
+      start >= 0 && end > start,
+      `本版手冊 @${start}、結束標記 @${end}`,
+    );
+    if (start >= 0 && end > start && claim) {
+      const section = notesText.slice(start, end);
+      ok(
+        `更新說明的「本版手冊」段落要寫 ${claim[1]} 頁 / ${claim[2]} 字元`,
+        section.includes(`${claim[1]} 頁 / ${claim[2]} 字元`),
+        "抓到的段落：" + section.replace(/\s+/g, " ").slice(0, 90),
+      );
+    }
+  }
   const pdfDir = join(here, "manuals");
   const pdf = existsSync(pdfDir)
     ? readdirSync(pdfDir).find((n) => n.endsWith(".pdf"))
@@ -571,7 +632,18 @@ for (const name of [...scripts, "index.html"]) {
        *   把數字改成自己那一台的值——這一條守門就是為了擋那件事。
        */
       chars = [...text.replace(/\r\n?/g, "\n").normalize("NFKC")].length;
-    } catch {
+    } catch (error) {
+      /*
+       * ⚠️ 只有「執行檔真的不存在」（ENOENT）才可以略過（2026-09-28 加）。
+       *   原本是不分青紅皂白的 `catch {}`：pdftotext 明明在、但 PDF 損壞或
+       *   解析失敗（非零離開碼、EIO、記憶體不足）時，也會被印成
+       *   「這台機器沒有 poppler-utils」然後安靜放行——訊息本身是錯的，
+       *   而且那是**假的略過**，等於這條守門在最該作用的時候消失。
+       *   實測（放一支必定失敗的假 pdftotext 進 PATH）：修正前離開碼 0、
+       *   「全部通過」；修正後離開碼 1。姊妹系統路口轉向與全日交通量
+       *   2026-09-28 已經各自修過同一個洞，這一支是最後補上的。
+       */
+      if (error?.code !== "ENOENT") throw error;
       tools = false;
     }
     if (!tools) {
@@ -588,6 +660,42 @@ for (const name of [...scripts, "index.html"]) {
       );
     }
   }
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ *  README 的版號標題不可以重複
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 2026-09-29 查到 README 有**兩個 `## v2.20.53`**（同一個版號用了兩次），
+ * 而原本所有的版號稽核都抓不到——它們只比「最新的那一個」，
+ * 不看有沒有重複。重複的版號標題會讓人以為是兩個版本，
+ * 而且用標題去定位某一版的說明時會拿到錯的那一段。
+ *
+ * ⚠️ 判準刻意只看**版號本身**（`## vX.Y.Z` 開頭那一段），不看後面的標題文字：
+ *   那一節的標題是可以不一樣的，重複的是版號。
+ * ⚠️ 加了「（續）」的那一種**不算重複**——那是刻意保留歷史又標明關係的寫法
+ *   （歷史段落不改寫，只加向前指標）。
+ */
+{
+  const readmeSource = read("README.md");
+  const headings = [...readmeSource.matchAll(/^## (v[\d.]+)(（續）)?/gm)];
+  const seen = new Map();
+  const duplicated = [];
+  for (const hit of headings) {
+    if (hit[2]) continue; /* （續）不算重複 */
+    const version = hit[1];
+    if (seen.has(version)) duplicated.push(version);
+    else seen.set(version, true);
+  }
+  ok(
+    "README 沒有重複的版號標題（同一個版號出現兩次會讓人以為是兩個版本）",
+    duplicated.length === 0,
+    duplicated.length
+      ? `重複的版號：${[...new Set(duplicated)].join("、")}——` +
+        "如果是同一版的兩批修正，請把後面那一個標成「（續）」並在該節說明"
+      : `共 ${headings.length} 個版號標題，沒有重複`,
+  );
 }
 
 console.log(

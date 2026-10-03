@@ -69,15 +69,34 @@
   /^(?:往)?(東北|西北|東南|西南|東|西|南|北)(?:上|下|行|向|往|進|側|端|線|方向)?$/;
 
 /**
+ * 方向顯示名稱的**比對鍵**：去掉排版雜訊之後的那一串字。
+ *
+ * ⚠️ 這一支只負責「兩個方向名稱是不是同一個寫法」，不負責判斷方位。
+ *   真實資料裡出現過「北 上」「北－上」這種寫法，它們指的是同一個方向，
+ *   差別純粹是排版——空白、全半形、破折號、頓號、斜線。
+ *
+ * ⚠️ **刻意不轉小寫**。使用者 2026-09-11 的裁示：
+ *     「我建議是判定是不同，因為這不是比對前『正規化』的意思。」
+ *   分界很清楚：空格與全半形是**排版雜訊**，大小寫是**內容**。
+ *   所以「A線」與「a線」是**兩個**不同的名稱。
+ *
+ * ⚠️ 也刻意不吸收方位：「北上」與「南下」去掉雜訊之後仍是兩個不同的鍵，
+ *   該報的異常照樣會報出來。
+ */
+  function directionTextKey(name) {
+  return String(name ?? "")
+    .normalize("NFKC")
+    .replace(/[\s　·．.、,，\-－—–_/／|]/g, "");
+}
+
+/**
  * 從一個方向顯示名稱裡取出方位字；整串不像方位詞就回 `null`。
  *
- * ⚠️ 先做 NFKC 正規化並去掉全部空白與常見分隔符：
+ * ⚠️ 先做 NFKC 正規化並去掉全部空白與常見分隔符（走 directionTextKey）：
  *   真實資料裡出現過「北 上」「北－上」這種寫法，不處理的話會漏判。
  */
   function bearingOf(name) {
-  const text = String(name ?? "")
-    .normalize("NFKC")
-    .replace(/[\s　·．.、,，\-－—–_/／|]/g, "");
+  const text = directionTextKey(name);
   if (!text) return null;
   const hit = BEARING.exec(text);
   return hit ? hit[1] : null;
@@ -118,5 +137,28 @@
   );
 }
 
-  globalThis.DirectionPair = { bearingOf, judgeDirectionPair, directionPairMessage };
+  /*
+   * ⚠️ 2026-09-29：除了掛全域，也要 `module.exports`。
+   *
+   *   `conclusion.js` 起改用 `directionTextKey()` 做方向文字比對，
+   *   而 conclusion.js 在 node 下是被 `require()` 單獨載入的
+   *  （conclusion.test.mjs 等幾支就是這樣測的，刻意測「網站上跑的那一份」）。
+   *   那個環境裡沒有人載過這一支，`globalThis.DirectionPair` 是 undefined，
+   *   於是十條既有的結論草稿測試全部炸在 "Cannot read properties of undefined"。
+   *
+   *   ⚠️ 解法刻意**不是**在 conclusion.js 裡再抄一份正規化——
+   *     那正是這一輪在修的「同一件事兩份實作」。
+   *     這裡改成與 conclusion.js 同一種 UMD 寫法，
+   *     瀏覽器讀全域、node 讀 module.exports，**兩邊是同一份程式碼**。
+   *
+   *   網頁上的載入順序不變（index.html：direction-pair.js 在 conclusion.js 之前）。
+   */
+  var api = {
+    directionTextKey,
+    bearingOf,
+    judgeDirectionPair,
+    directionPairMessage,
+  };
+  globalThis.DirectionPair = api;
+  if (typeof module === "object" && module.exports) module.exports = api;
 })();

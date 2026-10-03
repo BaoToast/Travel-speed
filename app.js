@@ -335,6 +335,48 @@ function setLoadUi(loading) {
     }
   }
   if (loading) $("headProject").textContent = "正在讀取這台電腦上的資料…";
+  setLoadCurtain(loading);
+}
+/*
+ * ══════════════════════════════════════════════════════════════════
+ *  讀取期間把整個主畫面擋住（2026-09-29 使用者裁示）
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * ⚠️ 為什麼停用控制項還不夠：停用只擋得住「按下去」，擋不住「看下去」。
+ *   實測（把 load() 延後 4 秒再截圖）讀取那幾秒的畫面是——
+ *     計畫下拉：「尚未建立計畫」
+ *     首頁四張卡：計畫 0 ／ 尖峰明細 0 ／ 尖峰彙總 0 ／ 最近匯入 —
+ *     下一步：「建立第一個計畫」
+ *   而那台電腦裡其實有 1 個計畫、2 筆明細。使用者看到這個畫面的合理反應
+ *   是「資料不見了」，然後去還原舊備份或重新匯入——存檔閘門擋得住
+ *   「被空白覆蓋」，擋不住「使用者自己動手救」。姊妹系統路口轉向
+ *   2026-09-27 就是因為這個被回報的，它的做法是整頁擋掉。
+ *
+ * ⚠️ 用「蓋上去的遮罩」而不是 replaceChildren()：
+ *   index.html 在 app.js 之後還載入 conclusion.js 與 quality-extension.js，
+ *   那兩支在頂層就會去找主畫面裡的節點。把 DOM 換掉會讓它們拿到 null 而丟例外
+ *  （搶救畫面那一段的註解記錄過這個實測）。遮罩不動 DOM，只蓋在上面。
+ */
+function setLoadCurtain(loading) {
+  const ID = "loadCurtain";
+  const existing = document.getElementById(ID);
+  if (!loading) {
+    if (existing) existing.remove();
+    return;
+  }
+  if (existing) return;
+  if (!document.body) return;
+  const curtain = document.createElement("div");
+  curtain.id = ID;
+  curtain.className = "load-error load-curtain";
+  curtain.setAttribute("role", "status");
+  curtain.innerHTML =
+    '<div class="load-error-card load-curtain-card">' +
+    "<h1>正在讀取這台電腦上的資料</h1>" +
+    "<p>請稍候。讀取完成之前<b>不會顯示空白的主畫面</b>，" +
+    "也不能建立計畫、匯入資料或還原備份。</p>" +
+    "<p>如果第一次開啟較慢，請不要關閉這個分頁。</p></div>";
+  document.body.appendChild(curtain);
 }
 /*
  * 搶救畫面會把整個 .app 換掉，但 index.html 在 app.js 之後還載入了
@@ -1092,7 +1134,7 @@ document
   .querySelectorAll("[data-go]")
   .forEach((b) => (b.onclick = () => gotoView(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.77";
+document.querySelector(".brand small").textContent = "正式版 v2.20.81";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 /*
  * ⚠️ 這裡原本有一顆「列印／另存 PDF」，使用者 2026-09-16 指名移除：
@@ -1128,7 +1170,7 @@ manualLinks.innerHTML =
    *   那種網址裡沒有檔名，使用者拿到的檔案就叫「下載」。
    *   （使用者 2026-09-14 實際回報過，三支都中。）
    */
-  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.77.pdf" download="交通服務水準程式手冊_v2.20.77.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
+  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.81.pdf" download="交通服務水準程式手冊_v2.20.81.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
@@ -1452,7 +1494,7 @@ maintenanceSection.className = "view";
  * ⚠️ 列印時要跟著隱藏：原本它吃的是 `@media print` 裡的 `.title button`，
  *   搬出來之後那條規則就管不到它了（styles.css 已一併補上）。
  */
-maintenanceSection.innerHTML = `<div class="title"><div><span class="eyebrow">MAINTENANCE</span><h2>資料維護</h2><p>匯錯季度可整季刪除重匯；資料異常檢查只列出需要注意的資料。</p></div></div><article class="panel maintenance-run" id="quality-run"><h3>執行資料異常檢查</h3><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：檢查一律掃這個計畫的全部資料——先篩再檢查的話，被篩掉的地方有問題就永遠檢查不到。</p><p class="muted">按下去才會產生下方的「資料異常檢查摘要」與「檢查結果」。匯入時的即時提醒是另一件事（那是寫入前的預防），這一頁看的是目前資料庫裡的現況。修正問題之後再按一次，就能確認異常是不是真的消掉了。</p><button class="primary" id="runHealth">執行資料異常檢查</button></article><div class="two"><article class="panel form" id="maintenance-rename-quarter"><h3>季度改名</h3><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：改的是「整個季度」的名稱，不是畫面上篩出來的那一份。</p><p class="muted">季度是匯入時手打的，打錯不必刪掉重匯。改名會一併更新尖峰明細、匯入紀錄、判定門檻與三段分法的季別覆寫、<b>速限版本的季別區間</b>、調查日期覆寫、報告文字草稿與已人工確認的異常。<b>不會</b>把兩季合併：新名稱如果已經有明細資料，系統會擋下來請你自己決定。另有<b>兩種</b>情形不會被擋，兩種都是「兩份設定落到同一個新名稱底下」：一是新名稱底下沒有明細、卻已經留著零星設定（例如先手動建過的調查日期覆寫）；二是<b>這一次改名有兩份會變成同一個名稱</b>（季別區間的頭尾都會換，例如 114Q1-114Q1 與 114Q1-114Q2 改完都是 114Q2-114Q2）。這兩種都是先遇到的搬走、後面那一份<b>原地保留、不被蓋掉</b>，改完會告訴你有幾項沒搬走，請自行確認要留哪一份。</p><label>要改名的季度<select id="renamePeriod"></select></label><label>新的季度名稱<input id="renamePeriodInput" placeholder="例如115Q2或2026Q2" autocomplete="off"></label><div class="note" id="renameImpact">目前沒有可改名的季度</div><button class="primary full" id="renameQuarter" disabled>儲存新名稱</button></article><article class="panel form" id="maintenance-delete-quarter"><h3>刪除單一季度</h3><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：刪除的是「整個季度」的原始資料，不是畫面上篩出來的那一份。</p><p class="muted">執行前會先下載目前 Project 專案包，刪除後可從匯入紀錄還原。</p><label>選擇季度<select id="deletePeriod"></select></label><div class="note" id="deleteImpact">目前沒有可刪除的季度</div><button class="danger-button full" id="deleteQuarter" disabled>備份後刪除此季度</button></article><article class="panel"><h3>資料異常檢查摘要</h3><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：異常檢查一律掃這個計畫的全部資料——被篩掉的地方有問題就永遠檢查不到。</p><div class="metrics compact"><article><span>異常名稱</span><b id="healthNames">0</b></article><article><span>資料組不完整</span><b id="healthGroups">0</b></article><article><span>數值異常</span><b id="healthValues">0</b></article></div><button class="outline full" id="cleanSuffix" disabled>備份後修正明顯日期尾碼</button></article></div><div class="panel health-panel" id="health-result"><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：檢查結果列的是全部資料裡需要注意的項目，用下方的類型標籤篩選。</p><div class="panel-head"><div><h3>檢查結果</h3><small>只列出需要注意的資料；可用下方標籤依類型篩選。</small></div><span id="healthCount">尚未檢查</span></div><div class="anomaly-chips" id="healthTypeChips"></div><div class="table-wrap"><table><thead><tr><th>類型</th><th>期間</th><th>路段／項目</th><th>說明</th><th>解決方式</th></tr></thead><tbody id="healthRows"><tr><td colspan="5" class="empty">按「執行資料異常檢查」開始</td></tr></tbody></table></div></div>`;
+maintenanceSection.innerHTML = `<div class="title"><div><span class="eyebrow">MAINTENANCE</span><h2>資料維護</h2><p>匯錯季度可整季刪除重匯；資料異常檢查只列出需要注意的資料。</p><p class="no-final-lock" data-testid="no-final-lock">⚠️ <b>本系統沒有「定稿鎖」。</b>姊妹系統「全日交通量」與「路口轉向」有一個把某一季鎖住、擋下重複匯入與刪除的功能，<b>這一支刻意沒有做</b>（2026-09-29 決定，理由是它會牽動匯入、還原、刪除與備份四條路，風險高於好處）。所以這一頁的刪除與重匯<b>不會被任何鎖擋住</b>，請直接看每一顆按鈕自己的說明與確認視窗；要保留某一季的版本，請用「備份與還原」下載專案包。</p></div></div><article class="panel maintenance-run" id="quality-run"><h3>執行資料異常檢查</h3><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：檢查一律掃這個計畫的全部資料——先篩再檢查的話，被篩掉的地方有問題就永遠檢查不到。</p><p class="muted">按下去才會產生下方的「資料異常檢查摘要」與「檢查結果」。匯入時的即時提醒是另一件事（那是寫入前的預防），這一頁看的是目前資料庫裡的現況。修正問題之後再按一次，就能確認異常是不是真的消掉了。</p><button class="primary" id="runHealth">執行資料異常檢查</button></article><div class="two"><article class="panel form" id="maintenance-rename-quarter"><h3>季度改名</h3><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：改的是「整個季度」的名稱，不是畫面上篩出來的那一份。</p><p class="muted">季度是匯入時手打的，打錯不必刪掉重匯。改名會一併更新尖峰明細、匯入紀錄、判定門檻與三段分法的季別覆寫、<b>速限版本的季別區間</b>、調查日期覆寫、報告文字草稿與已人工確認的異常。<b>不會</b>把兩季合併：新名稱如果已經有明細資料，系統會擋下來請你自己決定。另有<b>兩種</b>情形不會被擋，兩種都是「兩份設定落到同一個新名稱底下」：一是新名稱底下沒有明細、卻已經留著零星設定（例如先手動建過的調查日期覆寫）；二是<b>這一次改名有兩份會變成同一個名稱</b>（季別區間的頭尾都會換，例如 114Q1-114Q1 與 114Q1-114Q2 改完都是 114Q2-114Q2）。這兩種都是先遇到的搬走、後面那一份<b>原地保留、不被蓋掉</b>，改完會告訴你有幾項沒搬走，請自行確認要留哪一份。</p><label>要改名的季度<select id="renamePeriod"></select></label><label>新的季度名稱<input id="renamePeriodInput" placeholder="例如115Q2或2026Q2" autocomplete="off"></label><div class="note" id="renameImpact">目前沒有可改名的季度</div><button class="primary full" id="renameQuarter" disabled>儲存新名稱</button></article><article class="panel form" id="maintenance-delete-quarter"><h3>刪除單一季度</h3><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：刪除的是「整個季度」的原始資料，不是畫面上篩出來的那一份。</p><p class="muted">執行前會先下載目前 Project 專案包，刪除後可從匯入紀錄還原。</p><label>選擇季度<select id="deletePeriod"></select></label><div class="note" id="deleteImpact">目前沒有可刪除的季度</div><button class="danger-button full" id="deleteQuarter" disabled>備份後刪除此季度</button></article><article class="panel"><h3>資料異常檢查摘要</h3><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：異常檢查一律掃這個計畫的全部資料——被篩掉的地方有問題就永遠檢查不到。</p><div class="metrics compact"><article><span>異常名稱</span><b id="healthNames">0</b></article><article><span>資料組不完整</span><b id="healthGroups">0</b></article><article><span>數值異常</span><b id="healthValues">0</b></article></div><button class="outline full" id="cleanSuffix" disabled>備份後修正明顯日期尾碼</button></article></div><div class="panel health-panel" id="health-result"><p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：檢查結果列的是全部資料裡需要注意的項目，用下方的類型標籤篩選。</p><div class="panel-head"><div><h3>檢查結果</h3><small>只列出需要注意的資料；可用下方標籤依類型篩選。</small></div><span id="healthCount">尚未檢查</span></div><div class="anomaly-chips" id="healthTypeChips"></div><div class="table-wrap"><table><thead><tr><th>類型</th><th>期間</th><th>路段／項目</th><th>說明</th><th>解決方式</th></tr></thead><tbody id="healthRows"><tr><td colspan="5" class="empty">按「執行資料異常檢查」開始</td></tr></tbody></table></div></div>`;
 document.querySelector("#backup").before(maintenanceSection);
 const policyBox = document.createElement("label");
 /*
@@ -2827,13 +2869,45 @@ function losOf(r, code = state.activeCode, period, road) {
             : "F";
 }
 const losRank = { A: 6, B: 5, C: 4, D: 3, E: 2, F: 1 };
+/**
+ * 工作表名稱的**子字串**退路：純英文的短別名要看字界。
+ *
+ * ⚠️ 2026-09-30 抓到的實際誤判：別名清單裡有 `AM`／`PM` 兩個兩字母縮寫，
+ *   而舊版用的是 `includes()`，於是活頁簿裡只要有一張工作表叫
+ *   `PROGRAM`、`SAMPLE`、`EXAMPLE` 或 `TEAMPM`，
+ *   **上午尖峰那一張就會被認成它**——不是報錯，是安靜讀錯一張表，
+ *   然後照樣算出 LOS。（實測四種都會中。）
+ *
+ * ⚠️ 這踩到的正是這一支自己的原則：「系統不會猜測哪兩個才是調查方向」。
+ *   子字串比對就是在猜，所以純英文別名改成**前後不可以再接英文字母**：
+ *   `AM07-09`、`AM尖峰` 照樣認得，`PROGRAM` 不再被認成上午尖峰。
+ *   小寫 `am` 仍不認得；大小寫行為維持原版，不在這次擴大辨識範圍。
+ *
+ * ⚠️ 含中文的別名（上午尖峰／上午／下午尖峰／下午）**維持原本的子字串比對**——
+ *   真實檔常寫成「上午尖峰(07:00~09:00)」，那個退路必須留。
+ */
+function sheetNameHits(name, target) {
+  if (!target) return false;
+  if (name === target) return true;
+  /* 只要別名裡有一個非英文字元（中文、數字、符號），就沿用舊的子字串比對。 */
+  if (!/^[A-Za-z]+$/.test(target)) return name.includes(target);
+  /*
+   * ⚠️ **刻意不加 `i` 旗標。** 舊版的 `includes()` 是區分大小寫的，
+   *   加上不分大小寫就不只是修掉誤判，而是順手擴大了認得的範圍
+   *   （工作表叫 `am` 的檔案本來讀不到，會變成讀得到）。
+   *   這一次要的是「**不動到任何目前算對的檔案**」，所以只收窄、不放寬；
+   *   真的有人用小寫 `am` 當工作表名稱，那是另一件事，要單獨提出來問。
+   */
+  const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^A-Za-z])${escaped}(?:[^A-Za-z]|$)`).test(name);
+}
 function matrix(wb, names) {
   const targets = (Array.isArray(names) ? names : [names]).map(normalize);
   let found = null;
   for (const target of targets) {
     found =
       wb.SheetNames.find((n) => normalize(n) === target) ||
-      wb.SheetNames.find((n) => normalize(n).includes(target));
+      wb.SheetNames.find((n) => sheetNameHits(normalize(n), target));
     if (found) break;
   }
   return found
@@ -4254,6 +4328,23 @@ renderYearHint();
  * 紅底＝日期與所選季度對不起來（按「確認寫入」時會再問一次）；
  * 黃底＝有檔案讀不到日期（**不阻擋**，提醒使用者自行確認）。
  */
+/**
+ * 這一輪預覽**真的會寫入**的那幾份檔案，構成的混批阻擋訊息。
+ *
+ * ⚠️ 畫面說明、按鈕停用、寫入路徑三處**一律呼叫這一支**，不可以各自算一次。
+ *   三處的範圍一旦分岔，就會出現「畫面說按鈕停用了、按鈕其實按得下去」
+ *   或反過來的情形——而那比沒有擋更糟：使用者不知道該信哪一個。
+ *
+ * ⚠️ 範圍是 `x.ok` 的那幾份，與寫入路徑的 writingFiles 相同。
+ *   讀失敗的檔案本來就不會寫進去，拿它的日期去湊「兩個以上期別」
+ *   會生出一個假的擋——按鈕停用了，而使用者找不到是哪一份檔案造成的。
+ */
+function pendingMixedPeriodBlock() {
+  const okFiles = new Set(pending.filter((x) => x.ok).map((x) => x.file));
+  return globalThis.PeriodDate.mixedPeriodBlock(
+    pendingPeriodChecks.filter((x) => okFiles.has(x.file)),
+  );
+}
 function renderPeriodDateAlert() {
   const box = $("periodDateAlert");
   if (!box) return;
@@ -4268,6 +4359,36 @@ function renderPeriodDateAlert() {
   box.hidden = false;
   box.classList.toggle("period-date-alert-bad", bad.length > 0);
   const period = pendingContext ? `${pendingContext.year}Q${pendingContext.quarter}` : "";
+  /*
+   * ⚠️ 混批與「單純對不上」是**兩種不同的結局**，說明文字不可以共用一句。
+   *
+   *   單純對不上（日期指向同一個別季，或季末跨月）：按確認時再問一次，
+   *     使用者確認無誤就會以他選的季度寫入——他有一個對的選擇可以做。
+   *   混批（指向兩個以上期別）：**沒有任何一個對的選擇**，
+   *     所以按鈕直接停用，畫面要寫「無論寫進哪一季都有一批是錯的」。
+   *
+   *   舊版兩種都印「按確認時會再問一次」——對混批來說那句是錯的，
+   *   它會把人帶去按一顆已經停用的按鈕。
+   */
+  const mixed = pendingMixedPeriodBlock();
+  /*
+   * ⚠️ 這個數字要與 mixedPeriodBlock() 的計票範圍一致：
+   *   「讀得出日期的每一份」，不是只算對不上的那幾份。
+   *   只算 bad 會印出「指向 1 個不同的期別」這種自相矛盾的句子。
+   */
+  const okFilesForMixed = new Set(
+    pending.filter((x) => x.ok).map((x) => x.file),
+  );
+  const mixedLabels = new Set(
+    pendingPeriodChecks
+      .filter(
+        (x) =>
+          okFilesForMixed.has(x.file) &&
+          x.dateLabel &&
+          (x.status === "match" || x.status === "mismatch"),
+      )
+      .map((x) => x.dateLabel),
+  ).size;
   box.innerHTML =
     (bad.length
       ? `<strong>⚠️ 有 ${bad.length} 份檔案的調查日期與你選的「${esc(period)}」不一致</strong><ul>` +
@@ -4277,7 +4398,9 @@ function renderPeriodDateAlert() {
               `<li><b>${esc(x.file)}</b>：檔案裡是 ${esc(x.date)}（屬 ${esc(x.dateLabel)}），你選的是 ${esc(x.periodLabel)}。<small>來源 ${esc(x.source)}「${esc(x.raw)}」</small></li>`,
           )
           .join("") +
-        `</ul><small>按「確認寫入尖峰明細」時會再問一次；確認無誤才會以你選的季度寫入。</small>`
+        (mixed
+          ? `</ul><p class="period-date-mixed" data-testid="period-date-mixed"><b>這一批檔案的調查日期指向 ${mixedLabels} 個不同的期別，「確認寫入尖峰明細」已停用。</b>無論寫進哪一個期別，都一定有一批是錯的，所以這裡沒有「確認無誤」這個選項。請按「取消匯入（清除預覽）」，把它們分成各自的期別分批匯入。</p>`
+          : `</ul><small>按「確認寫入尖峰明細」時會再問一次；確認無誤才會以你選的季度寫入。</small>`)
       : "") +
     (unknownNote ? `<p class="period-date-unknown">${esc(unknownNote)}</p>` : "");
 }
@@ -4395,7 +4518,19 @@ function renderPreview() {
     unchecked = pending.filter((x) => x.ok && x.roadAlert && !x.roadChoice).length,
     dup = duplicateStats();
   $("errorBadge").textContent = unchecked ? `${unchecked} 路段待確認` : `${errors} 錯誤`;
-  $("errorBadge").style.color = errors || unchecked ? "#bd463d" : "#168466";
+  /*
+   * ⚠️ 只在「有錯」時寫 inline 色，沒錯時一律寫回空字串讓 CSS 接手。
+   *
+   *   舊版兩種狀態都寫 inline（綠色寫 #168466），結果是：#errorBadge 在
+   *   styles.css 裡已經為了過 AA 改成 #12735a，畫面上卻永遠是 #168466——
+   *   inline style 贏過樣式表，那次修正**完全沒有生效**，而且看樣式表
+   *   看不出來。#168466 在徽章底色 #e9f6f1 上只有 4.18:1。
+   *
+   *   寫成空字串之後，「沒錯」的顏色只有 styles.css 一個來源，
+   *   對比守門（tests/text-contrast.test.mjs）量到的就是畫面上的那一個。
+   *   紅色 #bd463d 在同一個底色上是 4.61:1，過，維持不動。
+   */
+  $("errorBadge").style.color = errors || unchecked ? "#bd463d" : "";
   $("previewStatus").textContent =
     `成功 ${pending.length - errors}，失敗 ${errors}｜新增 ${dup.added}，重複 ${dup.updated}`;
   renderPeriodDateAlert();
@@ -4425,7 +4560,18 @@ function renderPreview() {
       }),
   );
   renderRoadBatchBar();
-  $("commit").disabled = !pending.some((x) => x.ok) || unchecked > 0;
+  /*
+   * ⚠️ 混批（預覽裡的日期指向兩個以上期別）也要在**按鈕這一層**停用。
+   *
+   *   寫入路徑那一層已經擋了（見 $("commit").onclick），但只擋在那裡的話，
+   *   使用者要按下去才知道不行——而畫面上那顆按鈕看起來是可以按的。
+   *   與路口轉向一致：真的混批 → 按鈕停用 ＋ 紅底說明。
+   *
+   * 範圍與說明文字、寫入路徑共用 pendingMixedPeriodBlock()，見那一支的說明。
+   */
+  const mixedNow = pendingMixedPeriodBlock();
+  $("commit").disabled =
+    !pending.some((x) => x.ok) || unchecked > 0 || Boolean(mixedNow);
   // 只要有預覽結果就可以取消，不論成功或失敗。
   if ($("cancelPreview")) $("cancelPreview").disabled = !pending.length;
 }
@@ -4486,6 +4632,20 @@ $("commit").onclick = async () => {
   const dateProblems = pendingPeriodChecks.filter(
     (x) => x.status === "mismatch" && writingFiles.has(x.file),
   );
+  /*
+   * ── 混批一律擋死，而且要擋在二次確認之前 ────────────────────────
+   *
+   * 使用者 2026-09-29：「混入別季混批不擋，三支程式請同步」。
+   *
+   * ⚠️ 順序不可以顛倒。放在 periodMismatchPrompt 後面的話，使用者會先看到
+   *   「按確定＝我確認無誤，仍要以這個期別匯入」，按了確定才被擋下來——
+   *   那等於讓他先做一個不存在的選擇，再告訴他那個選擇無效。
+   *
+   * ⚠️ 這是 toast 而不是 confirm：混批沒有「確認無誤」這個選項，
+   *   無論寫進哪一季都一定有一批是錯的。詳見 period-date.js 的說明。
+   */
+  const mixedBlock = pendingMixedPeriodBlock();
+  if (mixedBlock) return toast(mixedBlock);
   if (dateProblems.length && !confirm(globalThis.PeriodDate.periodMismatchPrompt(dateProblems)))
     return;
   const all = good.flatMap((x) => x.rows),
@@ -4494,6 +4654,7 @@ $("commit").onclick = async () => {
     batchId = `B${Date.now()}`,
     previous = [],
     addedIds = [],
+    overwriteDateConflicts = [],
     write = [];
   let skipped = 0;
   for (const row of all) {
@@ -4505,6 +4666,66 @@ $("commit").onclick = async () => {
     if (old) previous.push(structuredClone(old));
     else addedIds.push(row.id);
     write.push({ ...row, importBatch: batchId });
+    /*
+     * 要被蓋掉的那一筆，舊資料的調查日期與這一批不一樣時記下來（見下方）。
+     * 用 effectiveSurveyDate() 而不是 row.surveyDate：畫面上顯示的是哪一個，
+     * 這裡就要拿哪一個去比，否則使用者看到的日期和訊息裡的日期會不一致。
+     */
+    if (old)
+      overwriteDateConflicts.push({
+        label: [row.period, row.road, row.day, row.peak, row.direction]
+          .filter(Boolean)
+          .join("・"),
+        oldDate: effectiveSurveyDate(old),
+        newDate: effectiveSurveyDate(row),
+      });
+  }
+  /*
+   * ── 覆蓋前的日期把關（使用者 2026-09-29 的擔心）─────────────────
+   *
+   * 「115Q1 檔案編號 T15-01，115Q4 檔案編號也是 T15-01，後者資料卻覆蓋掉了
+   *   前者，但明明檔案裡面顯示的是不同監測日期」。
+   *
+   * ⚠️ 擋在 upsert() **之前**。放在後面就不是把關，是事後通知。
+   * ⚠️ 判準與文案都在 period-date.js 的 overwriteDateConflictPrompt()，
+   *   三支共用同一套字，這裡只負責把「舊日期 vs 新日期」湊出來。
+   * ⚠️ 同一組（項目・舊日期・新日期）只列一次，最多列 8 行——
+   *   一次覆蓋幾百筆時，逐筆列出來的視窗會長到看不完，
+   *   而看不完的訊息等於沒有訊息。
+   */
+  {
+    /* 先用與 overwriteDateConflictPrompt() 完全相同的判準篩出「真的衝突」，
+     * 再去重、再截斷——順序反過來的話，截到的 8 筆可能全是不衝突的，
+     * 訊息就會在真的有衝突時消失。 */
+    const isConflict = (item) => {
+      const oldDate = String(item?.oldDate ?? "").trim();
+      const newDate = String(item?.newDate ?? "").trim();
+      return Boolean(oldDate) && Boolean(newDate) && oldDate !== newDate;
+    };
+    const seen = new Set();
+    const unique = [];
+    for (const item of overwriteDateConflicts.filter(isConflict)) {
+      const key = [item.label, item.oldDate, item.newDate].join("\u0000");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+    }
+    if (unique.length) {
+      const shown = unique.slice(0, 8);
+      const hidden = unique.length - shown.length;
+      const message = globalThis.PeriodDate.overwriteDateConflictPrompt(
+        shown,
+        "（若仍要蓋掉：被蓋掉的舊資料會記在這一次的匯入批次裡，" +
+          "事後可以到「匯入紀錄」復原這一個批次。）",
+      );
+      if (
+        !confirm(
+          message +
+            (hidden > 0 ? `\n（另外還有 ${hidden} 組同樣的情形沒有列出）` : ""),
+        )
+      )
+        return;
+    }
   }
   upsert(write);
   const now = new Date(),
@@ -8570,10 +8791,44 @@ function mergeSpeedVersions(state, oldKey, newKey) {
  *   一起內嵌，真實站號不可以跟著交出去。）
  * 結果被當成兩條路段，平假日比較整個不成立，而「名稱疑似重複」始終是 0。
  */
+/*
+ * ══════════════════════════════════════════════════════════════════
+ *  路段簽章：同一條路的不同寫法要算出同一個值
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 2026-09-29 封關驗證時，在**解開的交付包**上用 66 份真實調查檔跑出來的：
+ *
+ *   平日檔：「台17線(中門路32巷**至**沿海四路)」
+ *   假日檔：「台17(中門路32巷**-**沿海四路)」
+ *
+ * 兩份是同一條路，卻算出不同的簽章 → 被當成兩條路 → 平假日比較整個不成立。
+ * 兩個計畫各中一次（同一條路的兩季）。
+ *
+ * 舊版已經把 `-` `~` `～` `—` 這一整族符號都拿掉了，漏掉的是兩件事：
+ *   ①「線」原樣留著，所以「台17線」≠「台17」
+ *   ②「至」「到」沒有被當成起訖連接詞（只有符號那一族被當成）
+ *
+ * ⚠️ 兩條規則都刻意**收窄**，因為放寬會製造另一個方向的錯——假合併。
+ *
+ *   ・「至」不可以全部拿掉：**台北有「至善路」**，全部拿掉會變成「善路」。
+ *     所以只在「至」前面是 路／街／道／巷／弄／段／號／線／橋／口 時才拿掉——
+ *     路名裡的「至」出現在詞頭，不會被誤判。
+ *   ・「線」不可以全部拿掉：「中山線」是路名的一部分。
+ *     所以限定成「台／臺／縣／市／鄉／區 ＋ 數字 ＋ 線」。
+ *
+ * ⚠️ 這一支變寬會影響三個呼叫點（匯入時的「疑似同一條路段」建議兩處、
+ *   品質檢查的撞名偵測一處）。反面的兩條守門在
+ *   road-signature-variants.test.mjs，改壞了會紅。
+ */
 function roadSignature(s) {
   return stripRoadSuffix(s)
     .normalize("NFKC")
     .toLowerCase()
+    /* 台17線 → 台17、市道186線 → 市道186（只吃「台／臺／縣／市／鄉／區 ＋ 可有可無的「道」 ＋ 數字 ＋ 線」，不吃「中山線」） */
+    .replace(/([台臺縣市鄉區]道?)(\d+)線/g, "$1$2")
+    /* 「…巷至…路」的「至／到」是起訖連接詞，與 `-` `~` 同一族；
+       前面一定要是路名結尾字，才不會把「至善路」切成「善路」。 */
+    .replace(/([路街道巷弄段號線橋口])[至到]/g, "$1")
     .replace(/[\s　/\\_\-~～〜‐‑‒–—―－.,，、。:：;；()（）\[\]【】]/g, "");
 }
 /*
@@ -8883,6 +9138,40 @@ function inspectHealth() {
   // 不同日別的報告裡把兩個方向的順序對調（調查員換方向起跑很常見），
   // 同一個「方向1」就會對應到兩個相反的實際方向，而數字看起來都很正常。
   // 每一列都記著報告上寫的方向文字，這裡拿來互相比對。
+  /*
+   * ══════════════════════════════════════════════════════════════════
+   *  X-46：比對要用正規化後的鍵，顯示要用原始的字
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 2026-09-29 查到的缺陷：舊寫法拿**原始的**方向文字去數種類，於是
+   * 「北上」「北 上」「北－上」被算成**三種寫法**，報成「方向對應不一致」。
+   * 那三種指的是同一個方向，差別純粹是**排版雜訊**——這是一個假的異常。
+   *
+   * 而且它的出路寫著「如果確認出來兩季真的是相反方向，那就要回去修正原始檔
+   * 並重新匯入」。一個排版雜訊造成的假異常，會把人導向去改**廠商交來的
+   * 原始檔**——改了就與交付檔案不一致。假的紅比沒有檢查更貴。
+   *
+   * ⚠️ 兩個集合的分工不可以混：
+   *   `keys` ── 正規化後的鍵，**只用來判斷要不要報**。
+   *   `set`  ── 原始的字，**只用來顯示**。使用者要看得到差在哪裡才有辦法
+   *             判斷「這是同一個方向的兩種寫法」還是「真的換了方向起跑」。
+   *   只留正規化後的字去顯示，會變成「不同報告把這個方向寫成：北上」——
+   *   一種寫法卻說不一致，畫面自己矛盾。
+   *
+   * ⚠️ 用的是 `DirectionPair.directionTextKey()`，不是這一支的 normalize()。
+   *   兩個理由：
+   *   ① 方向文字的雜訊集合由 direction-pair 那一支定義，而它**三支共用**
+   *     （`bearingOf()` 的檔頭早就寫著「真實資料裡出現過『北 上』『北－上』」）。
+   *     用它才是真的三支同步，不是三支各自寫一份看起來很像的東西。
+   *   ② normalize() 只把破折號**統一**成半形，不會去掉它，所以
+   *     「北－上」與「北上」在 normalize() 之後仍是兩個字串——
+   *     那正是要吸收的雜訊之一。
+   *   兩支都**刻意不轉小寫**（使用者 2026-09-11 裁示：空格與全半形是排版
+   *   雜訊，大小寫是內容），所以「A線」與「a線」照樣算不同。
+   *
+   * ⚠️ 真正要防的那一件完全沒有放寬：「北上」與「南下」正規化後仍是兩個鍵，
+   *   照樣會報出來。這一段只吸收雜訊，不吸收方位。
+   */
   const directionTexts = {};
   for (const d of rows) {
     if (!d.directionText) continue;
@@ -8894,11 +9183,13 @@ function inspectHealth() {
     const hit = (directionTexts[k] ??= Object.assign(new Set(), {
       road: d.road,
       direction: d.direction,
+      keys: new Set(),
     }));
     hit.add(d.directionText);
+    hit.keys.add(globalThis.DirectionPair.directionTextKey(d.directionText));
   }
   for (const set of Object.values(directionTexts))
-    if (set.size > 1) {
+    if (set.keys.size > 1) {
       const road = set.road;
       const direction = set.direction;
       /*
@@ -9789,7 +10080,16 @@ function renderAll() {
           `<option value="${esc(x.code)}" ${x.code === state.activeCode ? "selected" : ""}>${esc(x.code)} ${esc(x.name)}</option>`,
       )
       .join("");
-  projectSwitch.innerHTML = options || '<option value="">尚未建立計畫</option>';
+  /*
+   * ⚠️ 讀取還沒完成時不可以斷定「尚未建立計畫」（2026-09-29）。
+   *   整頁過場已經蓋住畫面，但底下的 DOM 也不該說謊——過場萬一失效，
+   *   使用者第一眼看到的就是這一句。標題列那一行早就這樣處理了，這裡跟上。
+   */
+  projectSwitch.innerHTML =
+    options ||
+    (loadPhase === "loading"
+      ? '<option value="">正在讀取這台電腦上的資料…</option>'
+      : '<option value="">尚未建立計畫</option>');
   $("projectPicker").innerHTML = '<option value="">＋ 建立新計畫</option>' + options;
   $("projectCode").value = p?.code || "";
   $("projectName").value = p?.name || "";
@@ -11769,3 +12069,145 @@ async function downloadSvgAsPng(svg, fileName) {
   const blob = await svgFigureToPngBlob(svg);
   downloadBlob(blob, fileName.replace(/[\\/:*?"<>|]/g, "_"));
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  #48 畫面之間要互相指路：每一頁都要說「更細的在哪一頁」
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 使用者的原話（三支共通）：「畫面之間要互相指路：每一頁都要說
+ * 『更細的在哪一頁』」。
+ *
+ * 2026-09-29 動手前先確認：17 個分頁裡這種句子**一句都沒有**。
+ *
+ * ⚠️ 做成**一份資料 ＋ 一個渲染器**，不是逐頁手寫一段 HTML。
+ *   逐頁手寫的話，下一次新增分頁一定會漏，而且漏掉沒有任何症狀。
+ *   這樣寫之後，「每一頁都有」與「指到的都是真的分頁」兩件事
+ *   都可以用測試守住（見 tests/page-pointer.test.mjs）。
+ *
+ * ⚠️ 指路放在每一頁的**最下面**，不是標題底下：
+ *   這是「看完這一頁之後要去哪」，擺在最上面會把真正的內容往下推，
+ *   而使用者一進來要看的是內容不是導覽。
+ *
+ * ⚠️ 用 go() 直接切分頁，不是 <a href>：這是單頁程式，
+ *   href 會讓整頁重新載入，還沒存檔的預覽就沒了。
+ */
+const PAGE_POINTERS = {
+  home: [
+    ["setup", "還沒有計畫的話從這裡建"],
+    ["import", "計畫建好了就到這裡把調查報告讀進來"],
+    ["guide", "第一次用這套系統，先看這一頁"],
+  ],
+  setup: [
+    ["roadadmin", "路段的名稱、別名與合併在這裡管"],
+    ["speed", "每一條路段的速限在這裡填"],
+    ["import", "計畫建好之後就可以開始匯入了"],
+  ],
+  import: [
+    ["detail", "寫進去之後要逐筆核對，在這裡"],
+    ["importlog", "這一次匯入了哪些檔案、要整批退回，都在這裡"],
+    ["standards", "速限比怎麼換成 LOS，規則在這裡"],
+  ],
+  detail: [
+    ["summary", "同一批資料的彙總結果在這裡"],
+    ["speed", "發現速限不對，到這裡改"],
+    ["importlog", "想把整批退回，到這裡"],
+  ],
+  summary: [
+    ["detail", "想知道這個數字是哪幾筆湊出來的，到這裡"],
+    ["losChart", "同一份資料畫成圖在這裡"],
+    ["conclusion", "要把結果寫成文字，到這裡"],
+  ],
+  roadadmin: [
+    ["speed", "路段的速限在這裡填"],
+    ["detail", "改完名稱之後逐筆確認，到這裡"],
+    ["maintenance", "整批清理與品質總覽在這裡"],
+  ],
+  speed: [
+    ["standards", "速限比要幾成才算 A 級，規則在這裡"],
+    ["summary", "改完速限之後的結果在這裡"],
+    ["losChart", "同一份結果畫成圖在這裡"],
+  ],
+  standards: [
+    ["speed", "每一條路段自己的速限在這裡"],
+    ["summary", "改完標準之後的結果在這裡"],
+    ["guide", "這些名詞是什麼意思，在這裡"],
+  ],
+  losChart: [
+    ["summary", "圖背後的那幾個數字在這裡"],
+    ["speedTrend", "同樣分路段，但畫的是旅行速率"],
+    ["bandChart", "把 A～F 併成順暢／尚可／壅塞三段來看"],
+  ],
+  speedTrend: [
+    ["losChart", "同樣分路段，但畫的是服務水準等級"],
+    ["trendChart", "想自己挑要看哪幾個指標，到這裡"],
+    ["detail", "某一根柱子怪怪的，到這裡找那一筆"],
+  ],
+  trendChart: [
+    ["losChart", "只看服務水準等級的那張圖在這裡"],
+    ["speedTrend", "只看旅行速率的那張圖在這裡"],
+    ["bandChart", "把等級併成三段來看，在這裡"],
+  ],
+  bandChart: [
+    ["standards", "三段的界線是在這裡定的"],
+    ["losChart", "想看逐一等級（A～F）而不是三段，到這裡"],
+    ["summary", "三段背後的逐筆數字在這裡"],
+  ],
+  conclusion: [
+    ["summary", "草稿裡的數字是從這裡來的"],
+    ["losChart", "要一起放進報告的圖在這裡"],
+    ["maintenance", "產生草稿前先看一下資料品質總覽"],
+  ],
+  importlog: [
+    ["import", "要再匯一批，到這裡"],
+    ["detail", "想確認這一批寫進去的是什麼，到這裡"],
+    ["backup", "退回之前先備份一份，在這裡"],
+  ],
+  maintenance: [
+    ["importlog", "某一批要整批退回，到這裡"],
+    ["backup", "清理之前先備份，在這裡"],
+    ["detail", "品質總覽點出來的那幾筆，在這裡找"],
+  ],
+  backup: [
+    ["maintenance", "資料品質總覽與整批清理在這裡"],
+    ["setup", "還原之後要切換計畫，到這裡"],
+    ["importlog", "想只退回某一批而不是整包還原，到這裡"],
+  ],
+  guide: [
+    ["home", "看完就從操作首頁開始"],
+    ["setup", "第一步是建立計畫"],
+    ["import", "第二步是把調查報告讀進來"],
+  ],
+};
+function renderPagePointers() {
+  for (const [viewId, targets] of Object.entries(PAGE_POINTERS)) {
+    const view = document.getElementById(viewId);
+    /*
+     * ⚠️ 找不到分頁時**安靜跳過**是錯的，會變成假的綠：
+     *   分頁 id 改名之後這一頁就再也沒有指路，而畫面上看不出來。
+     *   守門在 tests/page-pointer.test.mjs 逐一比對 titles 與這份資料，
+     *   所以這裡跳過的只會是「測試已經擋下來的情況」。
+     */
+    if (!view || view.querySelector(".page-pointer")) continue;
+    const box = document.createElement("p");
+    box.className = "page-pointer";
+    box.dataset.testid = `page-pointer-${viewId}`;
+    const lead = document.createElement("b");
+    lead.textContent = "更細的在這幾頁：";
+    box.append(lead);
+    targets.forEach(([targetId, why], index) => {
+      if (index) box.append(document.createTextNode("　"));
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "link-button";
+      button.dataset.pointerTarget = targetId;
+      button.textContent = titles[targetId] || targetId;
+      button.onclick = () => go(targetId);
+      box.append(button);
+      const note = document.createElement("small");
+      note.textContent = `（${why}）`;
+      box.append(note);
+    });
+    view.append(box);
+  }
+}
+renderPagePointers();

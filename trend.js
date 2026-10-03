@@ -59,10 +59,27 @@
   }
 
   /** 只給說明文字用的四捨五入；圖上的值一律用原始數字。 */
+  /*
+   * ⚠️ 一定要把 -0 正規化掉（#26，2026-09-30 補）。
+   *
+   *   `Math.round(-0.02 * 10) / 10` 得到的是 **-0**，
+   *   而 `(-0).toLocaleString()` 印出來就是「-0」。
+   *   看報表的人會以為有差額，然後去追一個不存在的問題；
+   *   更糟的是那個值會被匯出到 Excel。
+   *
+   *   姊妹系統「路口轉向」2026-09-10 真的踩過：
+   *   「核對差值 -0 PCU/hr　兩者一致」——判定是對的，錯的是印出來的負號。
+   *
+   * ⚠️ 這一支目前餵進來的值都是非負的（差值都先過 Math.abs），
+   *   所以現在畫面上**還看不到** -0。這一行是**預防**：
+   *   哪一天有人新增一處相減直接丟進來，就不會冒出那個負號。
+   * ⚠️ 只治 -0，不動其他任何值——`+ 0` 之外不做任何運算。
+   */
   function round(value, digits) {
     if (!isNum(value)) return null;
     var factor = Math.pow(10, digits);
-    return Math.round(Number(value) * factor) / factor;
+    var rounded = Math.round(Number(value) * factor) / factor;
+    return rounded === 0 ? 0 : rounded;
   }
 
   /**

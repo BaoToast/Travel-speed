@@ -114,7 +114,7 @@
     priority.className = "panel extension-panel";
     priority.id = "priorityPanel";
     priority.innerHTML =
-      '<p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：它依這個計畫的全部資料自動排出需要優先檢視的路段，用途正是「先看哪一條」——跟著畫面上的篩選走就失去意義了。</p><div class="panel-head"><div><h3>重點路段總覽</h3><small>依目前計畫自動排列需優先檢視的路段——<b>這是排序，不是待辦清單</b>：它每次都重新計算、只看每條路段<b>最新一季與前一季</b>的變化，<b>不需要也沒有「已確認」</b>，下一季不再惡化就會自己從榜上消失，不會累積。</small></div><button class="outline" id="refreshPriority">重新分析</button></div><p class="rule-note priority-why">上榜條件（門檻可在「異常提醒門檻」調整）：旅行速率下降、總延滯增加、服務水準下降、連續數季惡化、目前服務水準 E 或 F。建議欄寫「優先查核原始資料與現地狀況」表示同時踩到多項，「持續觀察」表示只踩到一項。</p><div class="table-wrap"><table><thead><tr><th>優先度</th><th>路段／日別</th><th>最近期間</th><th>變化原因</th><th>建議</th></tr></thead><tbody id="priorityRows"></tbody></table></div>';
+      '<p class="chart-inapplicable" data-testid="chart-inapplicable" data-inapplicable="all" data-inapplicable-always="1">這一塊不受主工具列條件影響：它依這個計畫的全部資料自動排出需要優先檢視的路段，用途正是「先看哪一條」——跟著畫面上的篩選走就失去意義了。</p><div class="panel-head"><div><h3>重點路段總覽</h3><small>依目前計畫自動排列需優先檢視的路段——<b>這是排序，不是待辦清單</b>：它每次都重新計算、只看每條路段<b>最新一季與前一季</b>的變化，<b>不需要也沒有「已確認」</b>，下一季不再惡化就會自己從榜上消失，不會累積。</small></div><button class="outline" id="refreshPriority">重新分析</button></div><p class="rule-note">上榜條件（門檻可在「異常提醒門檻」調整）：旅行速率下降、總延滯增加、服務水準下降、連續數季惡化、目前服務水準 E 或 F。建議欄寫「優先查核原始資料與現地狀況」表示同時踩到多項，「持續觀察」表示只踩到一項。</p><div class="table-wrap"><table><thead><tr><th>優先度</th><th>路段／日別</th><th>最近期間</th><th>變化原因</th><th>建議</th></tr></thead><tbody id="priorityRows"></tbody></table></div>';
     q("maintenance").append(priority);
 
     const deliveryButton = document.createElement("button");
@@ -2490,7 +2490,25 @@
       const name = String(q("conclusionTemplateName").value || "").trim();
       if (!name) return toast("請先輸入範本名稱");
       const templates = conclusionTemplates();
-      const existing = templates.findIndex((t) => t.name === name);
+      /*
+       * ⚠️ 2026-09-29：同名覆寫的比對要正規化，不可以比原字串。
+       *
+       *   舊寫法是 `t.name === name`。使用者存範本時多打一個空白、
+       *   或把括號打成全形，就會**多出一個看起來一模一樣的範本**，
+       *   而他以為自己是在覆寫舊的那一個——清單上兩列長得完全相同，
+       *   分不出哪一個是新的。
+       *
+       *   這與姊妹系統路口轉向修過的「假分裂」是同一類。
+       *   用這一支既有的 normalize()（NFKC → 去掉全部空白 → 統一括號、
+       *   破折號、逗號、句點、冒號、分號、斜線）。
+       *   ⚠️ **大小寫刻意不吸收**（使用者 2026-09-11 對姊妹系統的裁示：
+       *     空格與全半形是排版雜訊，大小寫是內容），所以
+       *     「Q1範本」與「q1範本」仍然是兩個不同的範本。
+       *   ⚠️ 儲存的 name 仍是**使用者打的原字串**，只有比對用正規化——
+       *     把使用者的字改掉是另一件事，而且他會發現名字被動過。
+       */
+      const nameKey = normalize(name);
+      const existing = templates.findIndex((t) => normalize(t.name) === nameKey);
       const entry = {
         id: "CT-" + Date.now(),
         name,

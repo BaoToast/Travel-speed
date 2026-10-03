@@ -235,10 +235,21 @@ test("六、重點路段總覽要在畫面上說明它不需確認、不會累�
     new URL("./quality-extension.js", import.meta.url),
     "utf8",
   );
-  const at = ext.indexOf("重點路段總覽");
-  assert.notEqual(at, -1, "quality-extension.js 找不到「重點路段總覽」");
-  /* 只看這一塊的抬頭附近，不要掃到整份檔案而變成恆真。 */
-  const block = ext.slice(at, at + 1200);
+  /*
+   * ⚠️ 2026-09-30（#33）：原本拿標題文字「重點路段總覽」定位。
+   *   改成釘那一塊自己的 DOM id——`priority.id = "priorityPanel"` 是它的宣告，
+   *   標題怎麼改都不影響定位。
+   *
+   * ⚠️ 第一版我改成釘 `id="refreshPriority"` 然後往後取 1200 個字元，
+   *   當場就紅了：那顆按鈕在 HTML 裡排在說明文字**後面**，往後取抓不到說明。
+   *   教訓：換錨點的時候，要順便確認**方向**也還是對的。
+   */
+  const at = ext.indexOf('priority.id = "priorityPanel"');
+  assert.notEqual(at, -1, 'quality-extension.js 找不到 priorityPanel 的宣告');
+  /* 只看這一塊自己的 innerHTML，不要掃到整份檔案而變成恆真。 */
+  const blockEnd = ext.indexOf('q("maintenance").append(priority)', at);
+  assert.ok(blockEnd > at, "找不到 priorityPanel 那一段的結尾");
+  const block = ext.slice(at, blockEnd);
   for (const [needle, why] of [
     ["不是待辦清單", "沒有講清楚它是排序不是清單"],
     ["最新一季", "沒有講清楚它只比最新一季與前一季"],
@@ -283,16 +294,33 @@ test("七、方向名稱不成對要進異常檢查，而且可以人工確認",
 });
 
 test("八、匯入時的方向提醒必須在寫入完成之後，而且不是擋路的視窗", () => {
-  const writeAt = app.indexOf("toast(`寫入完成：新增");
-  assert.notEqual(writeAt, -1, "找不到匯入寫入完成那一段");
-  const remindAt = app.indexOf("提醒（不影響這次匯入）", writeAt);
+  /*
+   * ⚠️ 2026-09-30（#33）：這一條原本拿**畫面文案**當錨點
+   *   （`app.indexOf("toast(\`寫入完成：新增")` 與 `indexOf("提醒（不影響這次匯入）")`）。
+   *
+   *   那是錯的定位方式，而且錯的方向很討厭：改一個字（例如把「略過」
+   *   換成「跳過」）就會讓這一條**紅**，而程式其實一點問題都沒有。
+   *   紅了又不是真的壞掉，下一個人只會把錯的那個字串改成新的文案，
+   *   於是這一條變成「文案的複本」，永遠測不到它本來要測的事。
+   *
+   *   改成釘**結構**：
+   *     ・寫入這件事＝ `state.imports.unshift(batch)` ＋ `await save()`
+   *     ・提醒這件事＝ 呼叫三支共用的 `DirectionPair.judgeDirectionPair(`
+   *   兩個都是程式結構，改文案不會動到它們；而真的把提醒搬到寫入之前，
+   *   或把它改成擋路的確認視窗，這一條就會紅——那正是它該紅的時候。
+   */
+  const writeAt = app.indexOf("state.imports.unshift(batch)");
+  assert.notEqual(writeAt, -1, "找不到把這一批寫進匯入紀錄的那一行");
+  const savedAt = app.indexOf("await save();", writeAt);
+  assert.notEqual(savedAt, -1, "寫入之後沒有存檔");
+  const remindAt = app.indexOf("DirectionPair.judgeDirectionPair(", savedAt);
   assert.notEqual(remindAt, -1, "匯入完成之後沒有方向名稱提醒");
   assert.ok(
-    remindAt > writeAt,
-    "提醒排在寫入之前——那等於變相阻擋匯入",
+    remindAt > savedAt,
+    "提醒排在存檔之前——那等於變相阻擋匯入",
   );
   /* 那一段裡不可以出現會擋路的東西。 */
-  const block = app.slice(writeAt, remindAt + 900);
+  const block = app.slice(savedAt, remindAt + 900);
   for (const blocker of ["confirm(", "return;", "throw "])
     assert.ok(
       !block.includes(blocker),
@@ -302,5 +330,93 @@ test("八、匯入時的方向提醒必須在寫入完成之後，而且不是�
   assert.ok(
     block.includes("pending.map((r) => r.road)"),
     "提醒掃的不是這一批寫進去的路段——使用者每匯一次都會被提醒早就看過的那幾條",
+  );
+});
+
+test("⚠️ #33：守門不可以再拿畫面文案當定位錨點", async () => {
+  /*
+   * 這一條是上面那一件的**制度化**：不是修好一處就算了，而是擋住同一種寫法再出現。
+   *
+   * 判準：`indexOf(...)`／`slice(...indexOf(...))` 這類**定位**用的字串，
+   * 不可以是「看得到的中文句子」。定位要釘結構（函式名、變數名、共用模組的呼叫）。
+   *
+   * ⚠️ 只擋**定位**，不擋斷言。`assert.ok(app.includes("某句話"))`
+   *   ——「畫面上必須有這句話」——是完全正當的，而且這一支系統有一堆
+   *   手冊與畫面一致性的守門就是那樣寫的。兩者的差別是
+   *   「拿它找位置」與「檢查它在不在」。
+   *
+   * 判斷「是不是畫面文案」的方式：字串裡有中文，而且**不是**程式結構的一部分
+   *（函式／變數宣告、屬性存取、共用模組呼叫都允許中文以外的形式）。
+   *   實務上的規則：`indexOf("…")` 的內容含中文就不允許，除非它同時含有
+   *   `function `／`const `／`state.`／`.` 這類結構線索。
+   */
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { join } = await import("node:path");
+  const here = fileURLToPath(new URL("./", import.meta.url));
+  const files = readdirSync(here).filter((name) => name.endsWith(".test.mjs"));
+  /* 前置：真的掃到一批測試檔，否則這一條恆綠。 */
+  assert.ok(files.length >= 20, `只掃到 ${files.length} 個測試檔——掃描範圍壞了`);
+  /*
+   * ⚠️ 唯一的例外，而且必須寫出理由。
+   *
+   *   `page-pointer-and-w-items.test.mjs` 釘的是 README 裡一句**歷史原文**：
+   *   規矩是「歷史段落要加向前指標，不是改掉」，所以那一句**依規定不可以被改寫**，
+   *   而那一條守門要驗的正是「那一句還在，而且後面接著向前指標」。
+   *   那個字串就是它的**測試對象**，不是拿來找位置的替代品——
+   *   它如果紅了，代表歷史段落真的被改寫了，那正是該紅的時候。
+   *
+   * ⚠️ 例外清單本身也要被檢查（見下面）：清單裡的東西如果已經不存在，
+   *   就要從清單移除，否則過期的豁免會愈積愈多，最後變成一張沒人看得懂的白名單。
+   */
+  const ALLOWED = new Map([
+    [
+      "page-pointer-and-w-items.test.mjs",
+      "網站「新手說明」頁可下載 PDF 與可編輯 Word。",
+    ],
+  ]);
+  const offenders = [];
+  const allowedSeen = new Set();
+  let checkedAnchors = 0;
+  for (const name of files) {
+    const source = readFileSync(join(here, name), "utf8");
+    /* 去掉註解：註解裡會寫著「以前這裡是 indexOf("寫入完成…")」這種說明。 */
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    for (const match of code.matchAll(/indexOf\(\s*"([^"]*)"/g)) {
+      const text = match[1];
+      if (!/[一-鿿]/.test(text)) continue;
+      checkedAnchors += 1;
+      const structural = /function |const |let |var |state\.|globalThis\.|\w\.\w/.test(
+        text,
+      );
+      if (ALLOWED.get(name) === text) {
+        allowedSeen.add(name);
+        continue;
+      }
+      if (!structural) offenders.push(`${name}｜indexOf("${text.slice(0, 30)}")`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "這幾處拿畫面文案當定位錨點（改一個字就會紅，而程式沒問題）：\n  " +
+      offenders.join("\n  "),
+  );
+  /*
+   * ⚠️ 前置：這個掃描真的看得到含中文的 indexOf。看不到的話，
+   *   它有可能是因為正規式壞了而恆綠——而不是因為真的沒有人這樣寫。
+   *   （目前這一支系統裡有含中文的定位錨點，但它們都帶結構線索。）
+   */
+  assert.ok(
+    checkedAnchors >= 1,
+    "整個專案掃不到任何含中文的 indexOf——正規式是不是壞了？",
+  );
+  /* ⚠️ 過期的豁免要清掉，否則白名單會愈積愈多。 */
+  assert.deepEqual(
+    [...ALLOWED.keys()].filter((name) => !allowedSeen.has(name)),
+    [],
+    "例外清單裡有已經不存在的項目，請從 ALLOWED 移除",
   );
 });

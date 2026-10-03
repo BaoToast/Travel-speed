@@ -231,6 +231,116 @@ ok(
 );
 ok("C 讀不到日期照樣匯得進去（不阻擋）", (await writtenCount()) > beforeC, `${beforeC} → ?`);
 
+/* ── E：混批（一批檔案的日期指向兩個以上期別）一律擋死 ──────────────
+ *
+ * 使用者 2026-09-29 裁示「混入別季混批不擋，三支程式請同步」。
+ * 路口轉向本來就擋死，這一支原本只有一個 confirm()，按確定就寫進去。
+ *
+ * ⚠️ 兩邊都要驗：
+ *   E-1 混批 → 按鈕**停用**、畫面寫明原因、寫不進去。
+ *   E-2 同一批全部同一個期別 → 按鈕**要按得下去**（放寬過頭的反證）。
+ *   少了 E-2 的話，把按鈕改成「永遠停用」也會綠——那是半個守門。
+ */
+async function previewMany(files, quarterIndex = 0) {
+  await page.evaluate(() => document.querySelector('[data-view="import"]').click());
+  await page.fill("#rocYear", "115");
+  await page.selectOption("#quarter", { index: quarterIndex });
+  await page.setInputFiles(
+    "#files",
+    files.map((file) => ({
+      name: file.name,
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: makeFile(file.dateText, file.offset),
+    })),
+  );
+  await page.click("#preview");
+  await page.waitForTimeout(3200);
+  await resolveRoads();
+}
+const commitDisabled = () =>
+  page.evaluate(() => document.getElementById("commit")?.disabled !== false);
+
+/* E-1：甲檔 1 月（落在所選的 115Q1）、乙檔 8 月（115Q3）——真的混批。 */
+const beforeE = await writtenCount();
+await previewMany(
+  [
+    {
+      name: "E1_1月_混批測試甲路(甲路～乙路)-平日.xlsx",
+      dateText: "日　　期：115年01月26日(平日)",
+      offset: 5,
+    },
+    {
+      name: "E2_8月_混批測試乙路(丙路～丁路)-平日.xlsx",
+      dateText: "日　　期：115年08月05日(平日)",
+      offset: 6,
+    },
+  ],
+  0,
+);
+const eAlert = await alertText();
+ok(
+  "E-1 混批時預覽就寫出「指向 2 個不同的期別」",
+  /指向 2 個不同的期別/.test(eAlert),
+  eAlert.slice(0, 260),
+);
+ok(
+  "E-1 而且寫明「確認寫入尖峰明細」已停用",
+  /「確認寫入尖峰明細」已停用/.test(eAlert),
+  eAlert.slice(0, 260),
+);
+ok(
+  "E-1 說明要講清楚為什麼沒有「確認無誤」這條路",
+  /無論寫進哪一個期別，都一定有一批是錯的/.test(eAlert) &&
+    /沒有「確認無誤」這個選項/.test(eAlert),
+  eAlert.slice(0, 300),
+);
+ok(
+  "E-1 混批時不可以再印「按確認寫入時會再問一次」（那句對混批是錯的）",
+  !/會再問一次/.test(eAlert),
+  eAlert.slice(0, 260),
+);
+ok("E-1 「確認寫入尖峰明細」真的停用了", (await commitDisabled()) === true);
+dialogs.length = 0;
+dialogMode = "accept";
+const clicked = await clickCommit();
+await page.waitForTimeout(1500);
+ok("E-1 按不下去，所以不會跳任何確認框", clicked === false && dialogs.length === 0, dialogs.join(" | ").slice(0, 120));
+ok("E-1 一筆都沒有寫進去", (await writtenCount()) === beforeE, `${beforeE} 筆`);
+
+/* E-2：同一批兩份都是 1 月（同一個期別）——按鈕一定要按得下去。 */
+await page.evaluate(() => document.querySelector('[data-view="import"]').click());
+await page.click("#cancelPreview");
+await page.waitForTimeout(400);
+await previewMany(
+  [
+    {
+      name: "E3_1月_同批測試丙路(戊路～己路)-平日.xlsx",
+      dateText: "日　　期：115年01月12日(平日)",
+      offset: 7,
+    },
+    {
+      name: "E4_1月_同批測試丁路(庚路～辛路)-平日.xlsx",
+      dateText: "日　　期：115年01月19日(平日)",
+      offset: 8,
+    },
+  ],
+  0,
+);
+const e2Alert = await alertText();
+ok(
+  "E-2 同一批同一個期別時不可以出現混批的說明",
+  !/指向 \d+ 個不同的期別/.test(e2Alert),
+  e2Alert.slice(0, 200),
+);
+ok("E-2 「確認寫入尖峰明細」要按得下去", (await commitDisabled()) === false);
+const beforeE2 = await writtenCount();
+await page.evaluate(() => document.querySelector('[data-view="import"]').click());
+dialogs.length = 0;
+await clickCommit();
+await page.waitForTimeout(2200);
+ok("E-2 而且真的寫得進去", (await writtenCount()) > beforeE2, `${beforeE2} → ?`);
+
 /* ── D：期別顯示切換 ── */
 await preview("D_3月_第四測試路段(戊路～己路)-平日.xlsx", "日　　期：115年03月09日(平日)", 3);
 dialogMode = "accept";

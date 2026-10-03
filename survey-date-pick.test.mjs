@@ -258,10 +258,18 @@ test("指定的調查日期要跟著兩種備份走，還原時舊備份不可�
     single.includes("surveyDateOverrides"),
     "專案包沒有收 surveyDateOverrides——換電腦之後日期會變成另一天",
   );
-  const portfolio = app.slice(
-    app.indexOf('kind: "TLM_PORTFOLIO_PACKAGE"'),
-    app.indexOf("交通服務水準_個人全部計畫包.json"),
-  );
+  /*
+   * ⚠️ 2026-09-30（#33）：結尾原本釘在**下載檔名**那個字串上。
+   *   檔名是使用者看得到的東西，改檔名就會讓這一條紅——而它要測的是
+   *   「個人全部計畫包有沒有收 surveyDateOverrides」，與檔名無關。
+   *   改成釘結構：從那個 kind 開始，到下一個 `download(` 呼叫為止
+   *  （那是「這一包組好了、要送出去」的分界）。
+   */
+  const portfolioStart = app.indexOf('kind: "TLM_PORTFOLIO_PACKAGE"');
+  assert.notEqual(portfolioStart, -1, "找不到個人全部計畫包的 kind");
+  const portfolioEnd = app.indexOf("download(", portfolioStart);
+  assert.ok(portfolioEnd > portfolioStart, "個人全部計畫包後面找不到下載那一步");
+  const portfolio = app.slice(portfolioStart, portfolioEnd);
   assert.ok(portfolio.includes("surveyDateOverrides"), "個人全部計畫包沒有收");
   assert.match(
     app,
