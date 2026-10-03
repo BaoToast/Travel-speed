@@ -25,10 +25,39 @@ GPT 於 2026-10-03 校正正式日期並使用專案產生器重建手冊。原�
 - 正式日期由作者的 2026-09-30 校正為預定 release commit 日期 2026-10-03（台北），相應更新 README、驗證報告、更新說明、手冊封面／頁尾，重建 PDF 並重算 hash／字數。若實際 commit 跨日，須再依 Git 日期校正，不能保留預定日期當事實。
 - 30 頁 PDF 全部渲染並逐頁看過，另放大第 29、30 頁，未見新增裁切、重疊或缺字。原本封面說明跨頁導致第 2 頁及末頁較疏，不自行重排未變的手冊正文。
 - production build／TypeScript／lint 不適用：純靜態專案沒有這些 scripts。未建立／執行／交付試用版 HTML。Excel 匯出實作逐位元未變，完整 E2E 含 OOXML 與原生圖表驗證；本輪未宣稱重新用真實 Office 人工開啟。
-- GPT 沒有額外修改正式執行邏輯；另更正 `sheetNameHits` 註解誤稱小寫 `am` 可接受（實作及測試刻意保留大小寫，仍不接受）。本輪增補可重現複查反證、註解與文件／手冊校正，保留 v2.20.81。正式發布證據待所有閘門通過後補入。
+- GPT 沒有額外修改正式執行邏輯；另更正 `sheetNameHits` 註解誤稱小寫 `am` 可接受（實作及測試刻意保留大小寫，仍不接受）。本輪增補可重現複查反證、註解與文件／手冊校正，保留 v2.20.81。正式發布證據見下節。
 - 額外版面驗收：使用匿名 fixture 的 60 筆明細／15 筆彙總／3 季資料，在 1536×864 與 1366×768 各走 18 個分頁，共 36 張截圖，全部檢視；未見文字重疊、圖表超出容器或非預期截表，document 沒有水平溢出且無 JS 錯誤。窄表使用原設計的容器捲動，截圖僅顯示 viewport，不把畫面外內容宣稱已在單張截圖完整可見。另放大 LOS、旅行速率、資料維護與彙總頁核對。
 - 讀取遮罩獨立反證：`NEGATIVE_CURTAIN_PROOF=1 node e2e-load-pending.mjs` 退出 1，實際抓到缺少全頁 fixed 遮罩、遮罩訊息缺失及讀取中露出「尚無資料／建立第一個計畫」共 3 項失敗；恢復正常後同支 E2E 退出 0、全綠。save／異動閘門的正向驗證仍成立，沒有把只有畫面文字的檢查當成資料安全驗證。
 - 同步至指定正式工作區後，確認執行檔內容（統一 CRLF／LF 後）逐檔等於已完整 E2E 的候選；正式工作區另以 npm ci 乾淨安裝並重跑完整 npm test，退出 0、仍為 492 項／489 通過／0 失敗／3 缺真實檔略過，覆蓋 handler 正反證亦退出 0。git diff --check 通過；沒有加入真實調查 Excel、截圖、node_modules 或新部署 workflow。
+
+### GPT 正式發布證據（2026-10-03）
+
+- 功能 commit：`7a1821960f69acc66b5ae70fbbbb96de8b7bf179`（`Release v2.20.81`），Git 日期 `2026-10-03T11:53:13+08:00`，與文件／手冊當版日期一致；push main 成功。
+- GitHub [建置與測試 37094681533](https://github.com/BaoToast/Travel-speed/actions/runs/37094681533) 與 [Pages 37094680911](https://github.com/BaoToast/Travel-speed/actions/runs/37094680911) 都 completed / success，head_sha 均為上述功能 commit。
+- 正式網址：https://baotoast.github.io/Travel-speed/ 。以不共用快取的請求驗 20 個公開檔案，全部 HTTP 200／逐位元 SHA-256 等於正式 Repository；舊 `manuals/交通服務水準程式手冊_v2.20.77.pdf` HTTP 404。目前舊版 PDF 與舊驗證報告已由當版檔案取代，歷史可由 Git 回復。
+- 下表是本版不再改動的 runtime／PDF 指紋；報告與交接文件稍後會加入本節，不能自我包含最終 hash，最終文件 commit、CI／Pages 與完整 20 檔指紋由交付給 Claude 的說明及校驗清單記錄。最後文件 commit 只補證據，不變更程式邏輯。
+
+| 公開檔案 | SHA-256 |
+| --- | --- |
+| `index.html` | `7a2bd9745cee8b8d1b8efb999cd7bdfba2c4ae7949681f7d2836f8a7dd7e6095` |
+| `styles.css` | `2797be23a0df8f523be8d562cd720fc4f6773c8d94b89cb39d5b4a5fb0541ef0` |
+| `vendor/xlsx.full.min.js` | `cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41` |
+| `vendor/jszip.min.js` | `acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e` |
+| `excel-export.js` | `832751af3883da422eaa18f57dc5c293ef0a2efd60b2ac0099c32bafee8eacc4` |
+| `period-date.js` | `08a0483cbcaa7af79d969963268f1d6c7d77dece648b1cb795076f8689d79961` |
+| `direction-pair.js` | `faeaa81a7835e974dd4ac86eee95346558a8d4f52573b0241da62ebd26b72a39` |
+| `chart-levels.js` | `7bb75f86973847264b1b8914dc1937013ba1c756152b08a82a91055d64c582f3` |
+| `los-rule-scope.js` | `433af7f43a796be320138679bdf138f765eb9df4756ed339f00b21e6e1b83c71` |
+| `main-filters.js` | `71b0234bf228a84c032d5560fe232124e984f05b6e29be0ad087ea0ac83b38fd` |
+| `main-toolbar.js` | `741393d06754490e7c67c0a2794bc0e54bc0daba8d0f9a8001c6fb5f8030dc52` |
+| `column-filter.js` | `83ba40422ef89b00265c22437e729fa0ecd3020dd94dde00c3d2b4644b3582b0` |
+| `trend.js` | `d21c44e85255c20aa3ac1372aa8310f017f9ba04a89941620930ac23c9ffe51b` |
+| `trend-excel.js` | `fae9af3fbc462be1521a4534b7c7935d04915265190b9870a0490c9e9b05f0e4` |
+| `app.js` | `956632aec0eb42a5e14a46362961df8d279bf433f80f029af87c8a9301f3672c` |
+| `conclusion.js` | `da61898ff3d19ed873c59bf5c7f5137f3649095682af8a7933a57e3d2faff869` |
+| `quality-extension.js` | `87c7254a2ca0ef57df4a57d0d9342042112e7e24cf1c0b4940beb16c824aaf19` |
+| `manuals/交通服務水準程式手冊_v2.20.81.pdf` | `446afb94ba8488daf2ee6f24e1f567e9bfe30471a87d5936b8a5b513c4717599` |
+
 
 | 修正 | 反證 |
 | --- | --- |

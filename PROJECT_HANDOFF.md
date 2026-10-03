@@ -1,6 +1,6 @@
 # 交通服務水準分析系統工程交接基準
 
-> **目前狀態（2026-10-03，GPT 發布驗證進行中）**：`v2.20.81` 正依完整高風險規則獨立複查；前一正式版：v2.20.77（GPT 2026-09-28 已發布上線）。本次發布前，未發布的是 **v2.20.78～.80 共 3 個候選**，本包含它們的全部內容。完成狀態以本版驗證報告及 Git／Actions／Pages 證據為準。
+> **目前狀態（2026-10-03 正式發布）**：`v2.20.81` 已完成 GPT 全專案高風險複查、必要校正與完整驗證，發布至 GitHub Pages。前一正式版：v2.20.77（GPT 2026-09-28 已發布上線）。本次發布前，未發布的是 **v2.20.78～.80 共 3 個候選**，本版包含它們的全部內容。發布證據見 `VALIDATION_v2.20.81.md`。
 > 本版：混批一律擋死（三支同步）、「方向對應不一致」不再被排版雜訊觸發、表格隔列底色，外加四處對比不足。交通工程計算一律未動。
 >
 > （以下 v2.20.78 的敘述保留為歷史紀錄。）
@@ -15,8 +15,8 @@
 ## 0. 文件狀態與事實來源
 
 - 本文件建立日期：2026-09-13；最近更新：2026-10-03（Asia/Taipei）。
-- 最新功能正式版基準 commit：`bffcae22d49001b0cc1dd869fa158e938150eeec`，訊息為 `Release v2.20.77`。
-- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `bffcae2...` 作為程式功能基準。
+- 最新功能正式版基準 commit：`7a1821960f69acc66b5ae70fbbbb96de8b7bf179`，訊息為 `Release v2.20.81`，Git 日期 `2026-10-03T11:53:13+08:00`。
+- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `7a18219...` 作為程式功能基準。
 - 事實優先順序：目前可重現的 Repository／程式碼／Git／測試結果，高於舊聊天、舊交接文字、README 或其他說明。若彼此衝突，必須指出差異；無法驗證者標示「待確認」，不得猜測。
 
 ## 1. 正確程式與 Repository 身分
@@ -35,7 +35,7 @@
 | Git origin（fetch／push） | `https://github.com/BaoToast/Travel-speed.git` |
 | 正式 GitHub Pages | `https://baotoast.github.io/Travel-speed/` |
 | branch | `main` |
-| 功能正式版基準 commit | `bffcae22d49001b0cc1dd869fa158e938150eeec` |
+| 功能正式版基準 commit | `7a1821960f69acc66b5ae70fbbbb96de8b7bf179` |
 | 目前程式／正式發布版本 | 本包為 `v2.20.81`；發布驗收見 `VALIDATION_v2.20.81.md`。前一正式版：v2.20.77。版號唯一來源是 `app.js` 寫入 `.brand small` 的字面字串；`check-version.mjs` 核對 package、文件及手冊。 |
 | 版本唯一來源 | `app.js` 裡**寫入 `.brand small` 的那一行字面字串**（目前 `app.js:1095`，格式 `正式版 vX.Y.Z`）。⚠️ **沒有 `APP_VERSION` 這個常數**——這一行原本這樣寫，但全專案搜不到那個識別字（2026-09-25 更正）；去新增一個常數會踩到 `check-version.mjs` 第 1 條「全站只有一個地方寫入版本字樣」當年出事的那個雷。`check-version.mjs` 用 `/正式版\s*v(\d+\.\d+(?:\.\d+)?)/` 抓它，再把 HTML 的 16 個 `?v=`、靜態字樣、手冊 PDF 檔名與實體檔、`manuals/` 無殘留、手冊封面戳記、README 首節、驗證報告檔名與標題全部釘在一起 |
 
@@ -353,7 +353,8 @@ node check-version.mjs
 - 實際覆蓋寫入 handler 正反證保存於 `review-evidence/v2.20.81-overwrite-proof.mjs`；移除讀取遮罩造成 3 個 E2E 失敗，恢復後同支全綠；PDF 工具解析失敗會紅、缺工具明確略過，正常 Poppler 實際比對通過。
 - 手冊 30 頁／22,159 字元，SHA-256 `446afb94ba8488daf2ee6f24e1f567e9bfe30471a87d5936b8a5b513c4717599`。本輪不執行或交付試用版 HTML；TypeScript／lint／production build 不適用。
 - 真實調查檔核對及新一輪 Office 人工開啟未完成，不冒稱通過。GPT 校正交接版本、歷史 E2E 支數、依賴、日期／PDF 指紋與一個大小寫註解，未額外改正式執行邏輯，保留 v2.20.81。
-- 最後正式工作區驗證及發布證據見 `VALIDATION_v2.20.81.md`；push／CI／Pages／線上 hash 完成後才記為正式發布。
+- 最後正式工作區 npm ci／npm test／覆蓋 handler 反證全綠，通過與略過數仍相同。功能 commit `7a1821960f69acc66b5ae70fbbbb96de8b7bf179` 已 push；CI run `37094681533` 與 Pages run `37094680911` 均成功。
+- 線上首頁、全部直接載入資產、手冊、驗證報告、交接文件，共 20 個 URL 為 HTTP 200 且 SHA-256 逐檔等於正式工作區；舊 v2.20.77 PDF 為 404。完整發布證據及不可冒稱通過的範圍見 `VALIDATION_v2.20.81.md`。之後的文件證據 commit 不變更 runtime；交付包另記最終 HEAD 的 CI／Pages 與 hash 確認。
 
 以下保留前版已驗證歷史，不追改當時結果：
 
