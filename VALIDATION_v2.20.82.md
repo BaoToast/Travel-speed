@@ -26,6 +26,14 @@
 - 正式工作區再次乾淨 npm ci／完整 npm test 全綠，仍為 495 項／492 通過／0 失敗／3 缺真實檔略過；手冊 7 組正反證及既有實際覆蓋 handler 正反證亦通過。同步檔案沒有任何計算／匯入邏輯差異，git diff --check 通過。完整序列 E2E 在隔離候選上執行，不因正式工作區同步而重啟。
 
 
+### GPT 正式發布證據
+
+- 功能 commit：`e36059ecbb074357c098c829ddca838696a4765e`，`Release v2.20.82`，Git 日期 `2026-10-05T20:53:47+08:00`，已推送 BaoToast/Travel-speed main。
+- GitHub CI `37312738149`、Pages `37312737402` 均 completed／success，兩者 head SHA 均為上述功能 commit。
+- 正式網址 https://baotoast.github.io/Travel-speed/ ：20 個公開檔案 HTTP 200 且 SHA-256 與正式工作區逐位元相同；舊版手冊 PDF 與 VALIDATION_v2.20.81.md 皆 HTTP 404。舊檔並非不可恢復，Git 歷史仍保存。
+- index.html：`261de39c8878a0d3c33380442097f4a8d5fd9530709095793d3ea2cc32045223`；app.js：`5cb2dfbfc02e0a689f482990cc4925def6f492463211a6fb1c00f478bb75f6c4`；PDF：`ad4c2475b3c48ae43b760de12ae0a8f5b9f6eb363ef847a6cbe4488aa81c99dd`。
+- 本節發布後的文件證據 commit 另於交付 Claude 二次複查說明記錄，不在文件內自我引用；最終 HEAD 再確認 CI／Pages、20 檔線上 hash、HEAD＝origin/main＝遠端 main 及乾淨工作樹。
+
 ### Claude 原候選紀錄（不是 GPT 本輪測試證據）
 
 使用者 2026-10-05 要我用全日交通量 v20.97／v20.98 那兩輪踩到的判準，

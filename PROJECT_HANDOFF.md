@@ -1,6 +1,6 @@
 # 交通服務水準分析系統工程交接基準
 
-> **v2.20.82（2026-10-05，GPT 複查全綠，正式發布驗證中）**
+> **v2.20.82（2026-10-05，GPT 複查全綠，正式發布且線上驗證完成）**
 > 前一正式版：v2.20.81（GPT 2026-10-03 已發布上線）。
 >
 > 手冊 `manual-src/manual.html` 的 `<title>` 與產出 PDF 的內部 metadata Title
@@ -26,8 +26,8 @@
 ## 0. 文件狀態與事實來源
 
 - 本文件建立日期：2026-09-13；最近更新：2026-10-05（Asia/Taipei）。
-- 最新功能正式版基準 commit：`7a1821960f69acc66b5ae70fbbbb96de8b7bf179`，訊息為 `Release v2.20.81`，Git 日期 `2026-10-03T11:53:13+08:00`。
-- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `7a18219...` 作為程式功能基準。
+- 最新功能正式版基準 commit：`e36059ecbb074357c098c829ddca838696a4765e`，訊息為 `Release v2.20.82`，Git 日期 `2026-10-05T20:53:47+08:00`。
+- 本交接文件本身的 commit 無法在 commit 建立前自我引用；新接手者應以 `git log -1 --oneline` 取得包含本文件的最新 HEAD，並以本節的 `e36059e...` 作為程式功能基準。
 - 事實優先順序：目前可重現的 Repository／程式碼／Git／測試結果，高於舊聊天、舊交接文字、README 或其他說明。若彼此衝突，必須指出差異；無法驗證者標示「待確認」，不得猜測。
 
 ## 1. 正確程式與 Repository 身分
@@ -46,8 +46,8 @@
 | Git origin（fetch／push） | `https://github.com/BaoToast/Travel-speed.git` |
 | 正式 GitHub Pages | `https://baotoast.github.io/Travel-speed/` |
 | branch | `main` |
-| 功能正式版基準 commit | `7a1821960f69acc66b5ae70fbbbb96de8b7bf179` |
-| 目前程式／正式發布版本 | 本包候選為 `v2.20.82`；發布驗收見 `VALIDATION_v2.20.82.md`。前一正式版：v2.20.81。版號唯一來源是 `app.js` 寫入 `.brand small` 的字面字串；`check-version.mjs` 核對 package、文件及手冊。 |
+| 功能正式版基準 commit | `e36059ecbb074357c098c829ddca838696a4765e` |
+| 目前程式／正式發布版本 | GPT 已正式發布 `v2.20.82`；發布驗收見 `VALIDATION_v2.20.82.md`。前一正式版：v2.20.81。版號唯一來源是 `app.js` 寫入 `.brand small` 的字面字串；`check-version.mjs` 核對 package、文件及手冊。 |
 | 版本唯一來源 | `app.js` 裡**寫入 `.brand small` 的那一行字面字串**（以 `.brand small` 的寫入敘述定位，格式 `正式版 vX.Y.Z`；行號會隨版本改變）。⚠️ **沒有 `APP_VERSION` 這個常數**——這一行原本這樣寫，但全專案搜不到那個識別字（2026-09-25 更正）；去新增一個常數會踩到 `check-version.mjs` 第 1 條「全站只有一個地方寫入版本字樣」當年出事的那個雷。`check-version.mjs` 用 `/正式版\s*v(\d+\.\d+(?:\.\d+)?)/` 抓它，再把 HTML 的 16 個 `?v=`、靜態字樣、手冊 PDF 檔名與實體檔、`manuals/` 無殘留、手冊封面戳記、README 首節、驗證報告檔名與標題全部釘在一起 |
 
 本機資料夾名 `repo` 很通用，不能只靠名稱判斷；每次接手都必須同時核對完整路徑、`.git`、origin、branch、`app.js` 版本與 GitHub Repository。三個交通系統不得混用資料夾或規則。
@@ -355,7 +355,7 @@ node check-version.mjs
 
 ### 12.3 最後一次已實際完成的正式驗證
 
-v2.20.82 本輪複查（2026-10-05，發布閘門驗證中）：
+v2.20.82 本輪複查（2026-10-05，正式發布完成）：
 
 - 低風險：只有手冊 HTML／PDF Title 修正、版本／連結／快取同步及發布基準常數更新。正式計算、Parser、共享資料、儲存／備份、樣式、匯出與依賴都未變。
 - 乾淨 npm ci／完整 npm test：495 項／492 通過／0 失敗／3 項缺真實調查檔略過，glyph／版本／PDF 全綠；正式工作區重跑結果相同。
@@ -363,6 +363,9 @@ v2.20.82 本輪複查（2026-10-05，發布閘門驗證中）：
 - 原附件 PDF 本機量 30 頁／22,116 字元、非空白 19,720，SHA-256 `ad4c2475b3c48ae43b760de12ae0a8f5b9f6eb363ef847a6cbe4488aa81c99dd`，Title v2.20.82，版本／日期／頁尾一致。全部 30 頁渲染檢視、另放大第 2／4／30 頁，無新增裁切／重疊／缺字；保留已驗過附件，不無故重新產生 PDF。
 - 候選報告／交接仍有過時版本身分及錯誤「沒有正規式測試計數／54 份檔案」宣稱，GPT 更正為實際 check-version 第 13 項及 55 份測試檔；沒有改 AST／套件或削弱守門，歷史記錄保留。
 - 完整 npm run e2e 60／60 支按原順序全數退出 0，先重建 6 份匿名 fixtures，未並行／未重啟已完成部分；最後季度改名 160 個數字逐格相同。發布證據見 `VALIDATION_v2.20.82.md`。真實調查附件及新一輪 Office 人工開啟仍未驗；TypeScript／lint／production build 不適用；不產生或執行試用版 HTML。
+
+- 功能 commit `e36059ecbb074357c098c829ddca838696a4765e` 已 push；CI `37312738149`、Pages `37312737402` 均 completed／success 且 head SHA 相符。20 個公開檔案 HTTP 200 與正式工作區 SHA-256 全部相同；前版 PDF／報告網址均 404，舊檔可由 Git 歷史取回。最終文件 HEAD 的 CI／Pages／線上再次核對結果另隨交付二次複查說明保存，避免文件自我引用 commit。
+- `LAST_RELEASED=81` 是本版 v82 複查時的前一正式版基準，不是聲稱現在線上仍為 v81；下一輪候選再依實際前版更新。
 
 以下 v2.20.81 為前版歷史證據：
 
