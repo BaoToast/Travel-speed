@@ -350,7 +350,14 @@ for (const name of [...scripts, "index.html"]) {
    *   這時要求的就不是區間句，而是**寫明前一正式版是哪一版**。
    */
   const RANGE_BASE = 68;
-  const LAST_RELEASED = 77;
+  /*
+   * ⚠️ 2026-10-05：基準線又動了。GPT 已於 2026-10-03 把 **v2.20.81** 正式發布上線，
+   *   所以這裡要從 77 改成 81；不改的話，下面會逼著三份現況文件去寫
+   *   「v2.20.78～.81 共 4 個候選未發布」會混淆現況：.78～.80 未獨立發布，
+   *   其內容已隨正式 .81 發布；.81 本身是已發布版。
+   *   RANGE_BASE 不動（它是歷史句子的算術基準，與現在發布到哪一版無關）。
+   */
+  const LAST_RELEASED = 81;
   const CJK = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
   const patch = Number(String(shown).split(".")[2]);
   const wantTo = patch - 1;

@@ -1134,7 +1134,7 @@ document
   .querySelectorAll("[data-go]")
   .forEach((b) => (b.onclick = () => gotoView(b.dataset.go)));
 $("menu").onclick = () => document.querySelector("aside").classList.toggle("open");
-document.querySelector(".brand small").textContent = "正式版 v2.20.81";
+document.querySelector(".brand small").textContent = "正式版 v2.20.82";
 document.querySelector(".blank-badge").textContent = "瀏覽器本機資料庫";
 /*
  * ⚠️ 這裡原本有一顆「列印／另存 PDF」，使用者 2026-09-16 指名移除：
@@ -1170,7 +1170,7 @@ manualLinks.innerHTML =
    *   那種網址裡沒有檔名，使用者拿到的檔案就叫「下載」。
    *   （使用者 2026-09-14 實際回報過，三支都中。）
    */
-  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.81.pdf" download="交通服務水準程式手冊_v2.20.81.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
+  '<a class="primary" href="./manuals/交通服務水準程式手冊_v2.20.82.pdf" download="交通服務水準程式手冊_v2.20.82.pdf" title="手冊是獨立的 PDF，要與本檔放在同一個資料夾">下載新手手冊</a>';
 document.querySelector("#guide .title").append(manualLinks);
 const manual = document.createElement("div");
 manual.className = "manual";
