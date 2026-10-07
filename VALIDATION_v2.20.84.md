@@ -24,6 +24,11 @@
 ### GitHub 首次 CI 發現的文件守門問題
 - release commit de5d1cfbad11b5fccdee78b4cfa9cd325f0f4761 的 CI 37578568639 失敗，Pages 37578567765 成功。CI 唯一失敗為 guard-e2e-count.test.mjs：報告把續跑批次寫成多個「N 支 E2E」，既有守門認作不同總數。實際沒有新增測試失敗或少跑；將批次改寫為「項」，總數仍明示60支，不改守門。相關3項本機重新驗證全部通過。CI初輪515項：510通過／1文件失敗／4略過（Ubuntu缺PDF工具比本機多1項）；其失敗log保留，不當成成功證據。
 
+### 正式發布證據（2026-10-07）
+- 功能 commit de5d1cfbad11b5fccdee78b4cfa9cd325f0f4761（13:53:19 +08:00）。文件用字修正 e035afc9d7331d2dcb22c98724eb24676a68ddf5 的 CI 37578779765、Pages 37578779331 均 completed／success，head SHA 相符。
+- 20個公開檔案cache-busted下載HTTP200，與正式工作區SHA-256全部相同；v82／v83的PDF／報告4個網址404。index SHA-256 f15215b670fbe24e48874c3af791f48e7b917eb775517e1762150179435f39eb；app SHA-256 c83da4a0c01cd821e7e887cb5c0b161bf0d442a84ffb18521b1698671a290a7a；PDF SHA見上。本文件、交接文件在新增發布證據後會改hash，最終HEAD／CI／Pages及文件hash另隨Claude二次複查說明和log提供，避免commit自我引用。
+- 移除正式根目錄旧v82報告與PDF（由Git歷史可恢復）；所有原Claude附件及使用者旧交付保持不動。
+
 ## Claude v2.20.83 原候選紀錄（歷史，未發布；非 GPT 通過證據）
 下列作者結果保留追溯，與上方 GPT 證據分開；其聲稱已完成二次複查或其他系統結果並非本輪獨立驗證。
 
