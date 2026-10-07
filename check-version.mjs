@@ -15,6 +15,7 @@
  * 用法：node check-version.mjs
  */
 import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { countTestCalls } from "./test-call-count.mjs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -351,13 +352,15 @@ for (const name of [...scripts, "index.html"]) {
    */
   const RANGE_BASE = 68;
   /*
-   * ⚠️ 2026-10-05：基準線又動了。GPT 已於 2026-10-03 把 **v2.20.81** 正式發布上線，
-   *   所以這裡要從 77 改成 81；不改的話，下面會逼著三份現況文件去寫
-   *   「v2.20.78～.81 共 4 個候選未發布」會混淆現況：.78～.80 未獨立發布，
+   * ⚠️ 2026-10-05：基準線動了一次。GPT 已於 2026-10-03 把 **v2.20.81** 正式發布上線，
+   *   所以當時從 77 改成 81；不改的話會逼著三份現況文件去寫
+   *   「v2.20.78～.81 共 4 個候選未發布」而混淆現況：.78～.80 未獨立發布，
    *   其內容已隨正式 .81 發布；.81 本身是已發布版。
+   * ⚠️ 2026-10-06（v2.20.83）**再動一次**：GPT 已於 2026-10-05 把 **v2.20.82** 發布上線
+   *   （Claude 當天也做完二次複查並備存），所以這裡 81 → 82。
    *   RANGE_BASE 不動（它是歷史句子的算術基準，與現在發布到哪一版無關）。
    */
-  const LAST_RELEASED = 81;
+  const LAST_RELEASED = 82;
   const CJK = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
   const patch = Number(String(shown).split(".")[2]);
   const wantTo = patch - 1;
@@ -498,11 +501,15 @@ for (const name of [...scripts, "index.html"]) {
         ok(`${name} 提到的 ${file} 在包裡找得到`, false, "找不到這個檔案");
         continue;
       }
-      /* 只數真的會跑的 test(...)：註解裡寫到 test( 的不算。 */
-      const body = readFileSync(join(here, file), "utf8")
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^[ \t]*\/\/[^\n]*$/gm, "");
-      const real = (body.match(/^\s*test\(/gm) || []).length;
+      /*
+       * v2.20.84：計數本專案既定語法位置的裸 test(...) 宣告，不是執行次數。
+       * v2.20.83 的初版掃描器有插值／除法／return 正規式誤算，GPT 已修正；
+       * 原正規式刪註解確會誤吃 manual-names 字串間 2 行／54 字元。
+       * 既有測試檔宣告數不變；新反證檔的 8 條不能照舊數成 3 條。
+       * 詞彙掃描器無新增依賴，不宣稱 AST／別名解析／完整 JS 語法驗證。
+       * 永久回歸及反證見 test-call-count-regression.test.mjs 與 review-evidence。
+       */
+      const real = countTestCalls(readFileSync(join(here, file), "utf8"), file);
       seen += 1;
       ok(
         `${name} 寫的「${file}（${raw} 條）」與實際條數相符`,
